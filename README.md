@@ -3,13 +3,12 @@
 A full-stack event management and booking platform built with **Java 21
 and Spring Boot**, with React planned for the frontend.
 
-The project is designed as a practical **Senior Java portfolio and
-learning project**, with a strong focus on reactive Java development,
+The project is designed as a practical **Senior Java portfolio project**, with a strong focus on reactive Java development,
 Domain-Driven Design (DDD), Hexagonal Architecture and modern full-stack
 development.
 
 The application is being developed incrementally. Technologies and
-architectural patterns are introduced during the course when they are
+architectural patterns are introduced when they are
 needed, and the documentation is updated only after they have been
 studied and implemented.
 
@@ -34,11 +33,15 @@ Currently introduced:
 -   Value Objects
 -   Aggregate Root
 -   Domain invariants
-
-Planned in the project roadmap:
-
 -   Hexagonal Architecture
 -   Ports and Adapters
+-   Application layer / use cases
+-   Inbound and outbound ports
+-   Dependency Inversion
+-   Dependency Injection / Spring IoC wiring
+-   Output adapter
+
+Planned in the project roadmap:
 -   Modular Monolith
 -   Reactive Architecture
 -   Event-Driven Architecture
@@ -90,8 +93,9 @@ as each topic is actually studied.
 
 Topic                     Documentation
   ------------------------- -------------------------------
-Course/project progress   [ROADMAP.md](docs/ROADMAP.md)
+Project progress          [ROADMAP.md](docs/ROADMAP.md)
 Domain-Driven Design      [DDD.md](docs/DDD.md)
+Hexagonal Architecture    [DDD.md](docs/DDD.md#23-ddd-and-hexagonal-architecture)
 
 Additional documentation will be created when the corresponding topics
 are reached in the course.
@@ -127,7 +131,13 @@ Pure domain unit tests             ✅
         ↓
 DDD documentation                  ✅
         ↓
-Hexagonal Architecture             ⏳ NEXT
+Hexagonal Architecture             🚧 IN PROGRESS
+        ↓
+Application / Ports / Output Adapter ✅
+        ↓
+Spring IoC wiring                    ✅
+        ↓
+Reactive Programming                ⏳ NEXT
 ```
 
 For the complete project plan, check [ROADMAP.md](docs/ROADMAP.md).
@@ -136,42 +146,54 @@ For the complete project plan, check [ROADMAP.md](docs/ROADMAP.md).
 
 # 🏗️ Technical Picture
 
-The project currently contains a Spring Boot application with a
-framework-independent Event domain.
+The project now contains a framework-independent domain, an application layer with explicit ports, an in-memory output adapter and Spring IoC configuration for dependency wiring.
+
+``` text
+External input adapter                       ⏳ WebFlux later
+        │
+        ▼
+CreateEventUseCase                           PORT IN
+        ▲
+        │ implements
+CreateEventService                           APPLICATION
+        │
+        ├────────────► Event                 DOMAIN
+        │
+        ▼
+EventRepository                              PORT OUT
+        ▲
+        │ implements
+InMemoryEventRepository                      OUTPUT ADAPTER
+
+Spring EventConfiguration                    IoC / WIRING
+```
+
+Current source structure:
 
 ``` text
 eventhub-reactive
 │
-├── pom.xml
+├── src/main/java/com/rubenmarin/eventhub/event/
+│   ├── domain/model/
+│   ├── application/
+│   │   ├── port/in/
+│   │   ├── port/out/
+│   │   └── service/
+│   └── infrastructure/
+│       ├── adapter/out/persistence/
+│       └── config/
 │
-├── src/
-│   ├── main/
-│   │   └── java/com/rubenmarin/eventhub/
-│   │       └── event/
-│   │           └── domain/
-│   │               └── model/
-│   │                   ├── Event.java
-│   │                   ├── EventId.java
-│   │                   ├── EventName.java
-│   │                   ├── EventStatus.java
-│   │                   ├── Capacity.java
-│   │                   └── Money.java
-│   │
-│   └── test/
-│       └── java/com/rubenmarin/eventhub/
-│           └── event/
-│               └── domain/
-│                   └── model/
-│                       ├── CapacityTest.java
-│                       └── EventTest.java
+├── src/test/java/com/rubenmarin/eventhub/event/
+│   ├── domain/model/
+│   ├── application/service/
+│   └── infrastructure/
 │
 └── docs/
     ├── DDD.md
     └── ROADMAP.md
 ```
 
-The domain currently has no dependency on Spring infrastructure,
-persistence or reactive frameworks.
+The domain and application service remain independent of Spring. Spring-specific wiring and the current output adapter live in infrastructure.
 
 ------------------------------------------------------------------------
 
@@ -216,16 +238,9 @@ Detailed notes and examples are available in [DDD.md](docs/DDD.md).
 
 # 🧪 Testing
 
-The current tests are pure domain unit tests.
+The project now contains pure domain unit tests, an application-service test using a fake repository port, an output-adapter test and a Spring ApplicationContext wiring test.
 
-They require:
-
-``` text
-NO Spring ApplicationContext
-NO database
-NO Docker
-NO HTTP server
-```
+Domain and application unit tests require no Spring ApplicationContext, database, Docker or HTTP server. The dedicated configuration test intentionally starts a Spring ApplicationContext to validate IoC wiring.
 
 Current tested behaviour includes:
 
@@ -292,4 +307,4 @@ explored in this project:
 
 `Java 21` · `Spring Boot 4.1` · `Maven` · `JUnit 5` · `DDD` · `Entity` ·
 `Value Objects` · `Aggregate Root` · `Domain Invariants` ·
-`Rich Domain Model`
+`Rich Domain Model` · `Hexagonal Architecture` · `Ports & Adapters` · `Dependency Inversion` · `Dependency Injection` · `Spring IoC`

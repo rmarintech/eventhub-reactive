@@ -67,23 +67,23 @@ implemented and validated.
 
 # 3. Hexagonal Architecture
 
--   [ ] DDD vs Hexagonal Architecture
--   [ ] Dependency direction
--   [ ] Application layer
--   [ ] Use cases
--   [ ] Commands
--   [ ] Inbound ports
--   [ ] Application services
--   [ ] Outbound ports
--   [ ] Repository port
+-   [x] DDD vs Hexagonal Architecture
+-   [x] Dependency direction
+-   [x] Application layer
+-   [x] Use cases
+-   [x] Commands
+-   [x] Inbound ports
+-   [x] Application services
+-   [x] Outbound ports
+-   [x] Repository port
 -   [ ] Input adapters
--   [ ] Output adapters
--   [ ] Spring composition root / dependency wiring
--   [ ] Architecture package structure
+-   [x] Output adapters
+-   [x] Spring composition root / dependency wiring
+-   [x] Architecture package structure
 -   [ ] Architecture tests
 -   [ ] Hexagonal Architecture documentation
 
-**Status:** NEXT
+**Status:** IN PROGRESS — input adapter and dedicated architecture tests remain pending
 
 ------------------------------------------------------------------------
 
@@ -522,9 +522,9 @@ Pure Domain Tests                   ✅
         ↓
 DDD Documentation                   ✅
         ↓
-Hexagonal Architecture              🚧 NEXT
+Hexagonal Architecture              🚧 IN PROGRESS
         ↓
-Reactive Programming                ⏳
+Reactive Programming                ⏳ NEXT
         ↓
 Spring WebFlux                      ⏳
         ↓

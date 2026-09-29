@@ -843,3 +843,291 @@ This is the current stopping point of the DDD documentation.
 
 The document will be extended only after additional DDD concepts have
 been studied and implemented in the course.
+
+------------------------------------------------------------------------
+
+# 23. DDD and Hexagonal Architecture
+
+The project now combines the domain model with a Hexagonal Architecture boundary.
+
+The distinction studied so far is:
+
+``` text
+DDD
+  ↓
+models the business and its rules
+
+Hexagonal Architecture
+  ↓
+isolates the application and domain from external technical details
+```
+
+The Event domain remains pure Java. The application layer coordinates use cases around that domain, while ports define the boundaries through which external adapters interact with the application.
+
+Current dependency direction:
+
+``` text
+Infrastructure
+      ↓
+Application
+      ↓
+Domain
+```
+
+The domain does not depend on the application or infrastructure layers.
+
+------------------------------------------------------------------------
+
+# 24. Application Layer and Create Event Use Case
+
+The first application use case is Create Event.
+
+The inbound command is:
+
+``` java
+public record CreateEventCommand(
+        String name,
+        String description,
+        LocalDateTime startDate,
+        int capacity,
+        BigDecimal price
+) {
+}
+```
+
+The inbound port is:
+
+``` java
+public interface CreateEventUseCase {
+    Event createEvent(CreateEventCommand command);
+}
+```
+
+`CreateEventService` implements this port. It converts the command values into domain Value Objects, creates the Event Aggregate and delegates persistence through an outbound port.
+
+``` text
+CreateEventCommand
+        ↓
+CreateEventUseCase
+        ↑
+CreateEventService
+        ↓
+Event.create(...)
+```
+
+The application service orchestrates the use case; domain validation remains inside the domain objects rather than being duplicated in the service.
+
+------------------------------------------------------------------------
+
+# 25. Outbound Port
+
+The application needs to persist Events but does not depend on a concrete persistence technology.
+
+The outbound port is:
+
+``` java
+public interface EventRepository {
+    Event save(Event event);
+}
+```
+
+This expresses what the application needs from the outside world without mentioning a database, R2DBC or PostgreSQL.
+
+------------------------------------------------------------------------
+
+# 26. Output Adapter
+
+The first output adapter is an in-memory implementation:
+
+``` java
+@Repository
+public class InMemoryEventRepository implements EventRepository {
+
+    private final Map<EventId, Event> events = new HashMap<>();
+
+    @Override
+    public Event save(Event event) {
+        events.put(event.id(), event);
+        return event;
+    }
+}
+```
+
+The relationship is:
+
+``` text
+CreateEventService
+       ↓
+ EventRepository              PORT OUT
+       ↑
+       │ implements
+       │
+InMemoryEventRepository       OUTPUT ADAPTER
+```
+
+A future persistence adapter can implement the same port without changing `CreateEventService`.
+
+------------------------------------------------------------------------
+
+# 27. Dependency Inversion
+
+Without Dependency Inversion, the application service could depend directly on a technical repository implementation.
+
+``` text
+CreateEventService
+       ↓
+Concrete technical repository
+```
+
+Instead, EventHub currently uses:
+
+``` text
+CreateEventService ─────► EventRepository ◄──── InMemoryEventRepository
+   Application               Port                  Infrastructure
+```
+
+`CreateEventService` depends on the abstraction `EventRepository`, while the infrastructure adapter implements that application-owned contract.
+
+The application therefore does not need to adapt itself to a persistence implementation. The infrastructure adapter adapts itself to the port required by the application.
+
+------------------------------------------------------------------------
+
+# 28. Dependency Injection and IoC
+
+`CreateEventService` receives its repository through constructor injection:
+
+``` java
+public CreateEventService(EventRepository eventRepository) {
+    this.eventRepository = eventRepository;
+}
+```
+
+The service does not create its own repository dependency.
+
+This is Dependency Injection: the dependency is supplied from outside the object.
+
+Manual wiring would look like:
+
+``` java
+EventRepository repository =
+        new InMemoryEventRepository();
+
+CreateEventUseCase useCase =
+        new CreateEventService(repository);
+```
+
+Spring IoC now performs the application wiring instead.
+
+The infrastructure configuration defines the application bean:
+
+``` java
+@Configuration
+public class EventConfiguration {
+
+    @Bean
+    public CreateEventUseCase createEventUseCase(
+            EventRepository eventRepository
+    ) {
+        return new CreateEventService(eventRepository);
+    }
+}
+```
+
+`InMemoryEventRepository` is discovered as a Spring repository bean, while `CreateEventService` remains free of Spring annotations.
+
+The distinction studied is:
+
+``` text
+Dependency Inversion
+    → What does the service depend on?
+      An abstraction / port.
+
+Dependency Injection
+    → How does the service receive that dependency?
+      From outside.
+
+Inversion of Control
+    → Who controls object creation and wiring?
+      The Spring IoC Container.
+```
+
+------------------------------------------------------------------------
+
+# 29. Application and Infrastructure Tests
+
+The application service is tested without Spring using a fake implementation of `EventRepository`.
+
+This verifies the orchestration:
+
+``` text
+Command
+   ↓
+CreateEventService
+   ↓
+Event.create(...)
+   ↓
+EventRepository.save(...)
+```
+
+The infrastructure adapter also has its own test.
+
+A Spring context test verifies that Spring can provide both:
+
+``` text
+CreateEventUseCase
+EventRepository
+```
+
+and therefore validates the current IoC wiring.
+
+The project now contains tests at three conceptual levels:
+
+``` text
+DOMAIN
+  → business rules
+
+APPLICATION
+  → use-case orchestration with a fake port
+
+INFRASTRUCTURE / SPRING
+  → adapter behaviour and IoC wiring
+```
+
+------------------------------------------------------------------------
+
+# 30. Current Architecture Structure
+
+``` text
+com.rubenmarin.eventhub.event
+│
+├── domain
+│   └── model
+│       ├── Event.java
+│       ├── EventId.java
+│       ├── EventName.java
+│       ├── EventStatus.java
+│       ├── Capacity.java
+│       └── Money.java
+│
+├── application
+│   ├── port
+│   │   ├── in
+│   │   │   ├── CreateEventCommand.java
+│   │   │   └── CreateEventUseCase.java
+│   │   └── out
+│   │       └── EventRepository.java
+│   └── service
+│       └── CreateEventService.java
+│
+└── infrastructure
+    ├── adapter
+    │   └── out
+    │       └── persistence
+    │           └── InMemoryEventRepository.java
+    └── config
+        └── EventConfiguration.java
+```
+
+The input adapter has deliberately not been implemented yet. The planned HTTP input adapter will be introduced only after Reactive Programming and Spring WebFlux have been studied.
+
+This is the current stopping point of the architecture documentation. Future concepts are documented only after they are studied, implemented and validated.
