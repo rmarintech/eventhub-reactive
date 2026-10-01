@@ -100,39 +100,39 @@ implemented and validated.
 
 # 5. Reactive Programming Fundamentals
 
--   [ ] Imperative vs reactive programming
--   [ ] Blocking vs non-blocking
--   [ ] Synchronous vs asynchronous
--   [ ] Reactive Streams specification
--   [ ] Publisher
--   [ ] Subscriber
--   [ ] Subscription
--   [ ] Backpressure
--   [ ] Project Reactor
--   [ ] `Mono`
--   [ ] `Flux`
--   [ ] Subscription and lazy execution
--   [ ] Cold publishers
--   [ ] Hot publishers
--   [ ] `map`
--   [ ] `flatMap`
--   [ ] `filter`
--   [ ] `switchIfEmpty`
--   [ ] `zip`
--   [ ] `concatMap`
--   [ ] `doOnNext`
--   [ ] `doOnError`
--   [ ] `onErrorResume`
--   [ ] `retry`
--   [ ] `timeout`
--   [ ] Reactive error propagation
--   [ ] Reactor schedulers
--   [ ] `boundedElastic`
--   [ ] `parallel`
--   [ ] Thread model experiments
--   [ ] Why `block()` breaks the reactive model
--   [ ] Reactor testing with `StepVerifier`
--   [ ] Reactive Programming documentation
+-   [x] Imperative vs reactive programming
+-   [x] Blocking vs non-blocking
+-   [x] Synchronous vs asynchronous
+-   [x] Reactive Streams specification
+-   [x] Publisher
+-   [x] Subscriber
+-   [x] Subscription
+-   [x] Backpressure
+-   [x] Project Reactor
+-   [x] `Mono`
+-   [x] `Flux`
+-   [x] Subscription and lazy execution
+-   [x] Cold publishers
+-   [x] Hot publishers
+-   [x] `map`
+-   [x] `flatMap`
+-   [x] `filter`
+-   [x] `switchIfEmpty`
+-   [x] `zip`
+-   [x] `concatMap`
+-   [x] `doOnNext`
+-   [x] `doOnError`
+-   [x] `onErrorResume`
+-   [x] `retry`
+-   [x] `timeout`
+-   [x] Reactive error propagation
+-   [x] Reactor schedulers
+-   [x] `boundedElastic`
+-   [x] `parallel`
+-   [x] Thread model experiments
+-   [x] Why `block()` breaks the reactive model
+-   [x] Reactor testing with `StepVerifier`
+-   [x] Reactive Programming documentation
 
 ------------------------------------------------------------------------
 
@@ -144,8 +144,8 @@ implemented and validated.
 -   [ ] Event Loop
 -   [ ] Reactive HTTP request lifecycle
 -   [ ] Reactive REST controllers
--   [ ] `Mono` HTTP responses
--   [ ] `Flux` HTTP responses
+-   [x] `Mono` HTTP responses
+-   [x] `Flux` HTTP responses
 -   [ ] Request validation
 -   [ ] Reactive exception handling
 -   [ ] Reactive DTO mapping
@@ -400,7 +400,7 @@ implemented and validated.
 -   [ ] Latency
 -   [ ] Tail latency
 -   [ ] Saturation
--   [ ] Backpressure under load
+-   [x] Backpressure under load
 -   [ ] Event Loop blocking experiment
 -   [ ] Blocking-call detection
 -   [ ] Thread analysis
@@ -495,7 +495,7 @@ implemented and validated.
 -   [ ] DDD interview questions
 -   [ ] Hexagonal Architecture interview questions
 -   [ ] Reactive Programming interview questions
--   [ ] Project Reactor interview questions
+-   [x] Project Reactor interview questions
 -   [ ] Spring WebFlux interview questions
 -   [ ] R2DBC interview questions
 -   [ ] Kafka interview questions
@@ -524,9 +524,9 @@ DDD Documentation                   ✅
         ↓
 Hexagonal Architecture              🚧 IN PROGRESS
         ↓
-Reactive Programming                ⏳ NEXT
+Reactive Programming Fundamentals   ✅
         ↓
-Spring WebFlux                      ⏳
+Spring WebFlux                      🚧 NEXT
         ↓
 R2DBC / PostgreSQL                  ⏳
         ↓

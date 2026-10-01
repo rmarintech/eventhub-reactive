@@ -22,6 +22,8 @@ studied and implemented.
 -   Spring Boot 4.1
 -   Maven
 -   JUnit 5
+-   Project Reactor
+-   Reactor Test / StepVerifier
 
 ## Architecture
 
@@ -40,10 +42,16 @@ Currently introduced:
 -   Dependency Inversion
 -   Dependency Injection / Spring IoC wiring
 -   Output adapter
+-   Reactive Programming fundamentals
+-   Reactive Streams concepts
+-   Mono / Flux
+-   Reactive error handling
+-   Cold and hot publishers
+-   Reactor schedulers and threading fundamentals
+-   Blocking vs non-blocking execution
 
 Planned in the project roadmap:
 -   Modular Monolith
--   Reactive Architecture
 -   Event-Driven Architecture
 
 ## Frontend
@@ -96,6 +104,7 @@ Topic                     Documentation
 Project progress          [ROADMAP.md](docs/ROADMAP.md)
 Domain-Driven Design      [DDD.md](docs/DDD.md)
 Hexagonal Architecture    [DDD.md](docs/DDD.md#23-ddd-and-hexagonal-architecture)
+Reactive Programming      [REACTIVE.md](docs/REACTIVE.md)
 
 Additional documentation will be created when the corresponding topics
 are reached in the course.
@@ -137,7 +146,9 @@ Application / Ports / Output Adapter ✅
         ↓
 Spring IoC wiring                    ✅
         ↓
-Reactive Programming                ⏳ NEXT
+Reactive Programming Fundamentals   ✅
+        ↓
+Spring WebFlux                      🚧 NEXT
 ```
 
 For the complete project plan, check [ROADMAP.md](docs/ROADMAP.md).
@@ -188,8 +199,12 @@ eventhub-reactive
 │   ├── application/service/
 │   └── infrastructure/
 │
+├── src/test/java/com/rubenmarin/eventhub/reactive/
+│   └── ReactorBasicsTest.java
+│
 └── docs/
     ├── DDD.md
+    ├── REACTIVE.md
     └── ROADMAP.md
 ```
 
@@ -238,7 +253,7 @@ Detailed notes and examples are available in [DDD.md](docs/DDD.md).
 
 # 🧪 Testing
 
-The project now contains pure domain unit tests, an application-service test using a fake repository port, an output-adapter test and a Spring ApplicationContext wiring test.
+The project now contains pure domain unit tests, an application-service test using a fake repository port, an output-adapter test, a Spring ApplicationContext wiring test and focused Reactor learning tests.
 
 Domain and application unit tests require no Spring ApplicationContext, database, Docker or HTTP server. The dedicated configuration test intentionally starts a Spring ApplicationContext to validate IoC wiring.
 
@@ -255,6 +270,14 @@ Current tested behaviour includes:
 -   reservation for PUBLISHED Events
 -   rejection of reservations exceeding available capacity
 -   Money creation and validation
+-   Mono and Flux creation and signals
+-   lazy execution and subscription
+-   map, filter, flatMap, concatMap, switchIfEmpty and zip
+-   reactive error propagation, retry and timeout
+-   cold and hot publisher behaviour
+-   StepVerifier-based reactive testing
+-   subscribeOn and publishOn thread switching
+-   parallel and boundedElastic scheduler fundamentals
 
 The current build can be verified with:
 
@@ -307,4 +330,6 @@ explored in this project:
 
 `Java 21` · `Spring Boot 4.1` · `Maven` · `JUnit 5` · `DDD` · `Entity` ·
 `Value Objects` · `Aggregate Root` · `Domain Invariants` ·
-`Rich Domain Model` · `Hexagonal Architecture` · `Ports & Adapters` · `Dependency Inversion` · `Dependency Injection` · `Spring IoC`
+`Rich Domain Model` · `Hexagonal Architecture` · `Ports & Adapters` ·
+`Dependency Inversion` · `Dependency Injection` · `Spring IoC` ·
+`Project Reactor` · `Mono` · `Flux` · `StepVerifier` · `Reactor Schedulers`
