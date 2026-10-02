@@ -9,9 +9,13 @@ import com.rubenmarin.eventhub.event.domain.model.Money;
 import com.rubenmarin.eventhub.event.infrastructure.adapter.out.persistence.InMemoryEventRepository;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
+import reactor.core.publisher.Mono;
+import reactor.test.StepVerifier;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 
 class InMemoryEventRepositoryTest {
 
@@ -25,13 +29,22 @@ class InMemoryEventRepositoryTest {
                 Money.euros(new BigDecimal("49.99"))
 
         );
-
         InMemoryEventRepository repository = new InMemoryEventRepository();
 
 
-        Event savedEvent =  repository.save(event);
+        Mono<Event> savedEvent =  repository.save(event);
 
-        Assertions.assertSame(event, savedEvent);
+//        List< Event> events = new ArrayList<>();
+//        savedEvent.subscribe( value -> events.add(value) );
+//         Assertions.assertSame(event, events.getFirst());
+
+
+        StepVerifier.create(savedEvent)
+                .expectNext(event)
+                .verifyComplete();
+
+
+
 
     }
 

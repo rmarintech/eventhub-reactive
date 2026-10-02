@@ -1,6 +1,7 @@
 package com.rubenmarin.eventhub.event.application.port.in;
 
 import com.rubenmarin.eventhub.event.domain.model.Event;
+import reactor.core.publisher.Mono;
 
 /**
  * Inbound port for the Create Event use case.
@@ -10,5 +11,5 @@ import com.rubenmarin.eventhub.event.domain.model.Event;
  */
 public interface CreateEventUseCase {
 
-    Event createEvent(CreateEventCommand command);
+    Mono<Event> createEvent(CreateEventCommand command);
 }

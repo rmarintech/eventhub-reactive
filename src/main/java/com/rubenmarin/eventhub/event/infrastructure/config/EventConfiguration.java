@@ -1,8 +1,10 @@
 package com.rubenmarin.eventhub.event.infrastructure.config;
 
 import com.rubenmarin.eventhub.event.application.port.in.CreateEventUseCase;
+import com.rubenmarin.eventhub.event.application.port.in.EventQueryUseCase;
 import com.rubenmarin.eventhub.event.application.port.out.EventRepository;
 import com.rubenmarin.eventhub.event.application.service.CreateEventService;
+import com.rubenmarin.eventhub.event.application.service.EventQueryService;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -12,5 +14,10 @@ public class EventConfiguration {
     @Bean
     public CreateEventUseCase createEventUseCase(EventRepository eventRepository) {
         return new CreateEventService(eventRepository);
+    }
+
+    @Bean
+    public EventQueryUseCase eventQueryUseCase(EventRepository eventRepository) {
+        return new EventQueryService(eventRepository);
     }
 }
