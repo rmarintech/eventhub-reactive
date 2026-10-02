@@ -878,226 +878,283 @@ The domain does not depend on the application or infrastructure layers.
 
 ------------------------------------------------------------------------
 
-# 24. Application Layer and Create Event Use Case
+# 24. Reactive Application Layer and Create Event Use Case
 
-The first application use case is Create Event.
+The application boundary is now reactive while the domain remains synchronous and framework-independent.
 
-The inbound command is:
+The inbound command currently contains the HTTP-independent values required to create an Event, including its currency.
 
-``` java
-public record CreateEventCommand(
-        String name,
-        String description,
-        LocalDateTime startDate,
-        int capacity,
-        BigDecimal price
-) {
-}
-```
+The inbound port returns a reactive result:
 
-The inbound port is:
-
-``` java
+```java
 public interface CreateEventUseCase {
-    Event createEvent(CreateEventCommand command);
+    Mono<Event> createEvent(CreateEventCommand command);
 }
 ```
 
-`CreateEventService` implements this port. It converts the command values into domain Value Objects, creates the Event Aggregate and delegates persistence through an outbound port.
+`CreateEventService` creates the domain Aggregate synchronously and delegates persistence through the reactive repository port:
 
-``` text
+```text
 CreateEventCommand
         ↓
 CreateEventUseCase
         ↑
 CreateEventService
         ↓
-Event.create(...)
+Event.create(...)          synchronous domain logic
+        ↓
+EventRepository.save(...)
+        ↓
+Mono<Event>
 ```
 
-The application service orchestrates the use case; domain validation remains inside the domain objects rather than being duplicated in the service.
+Reactive types are used at the application boundary and infrastructure interaction; `Event`, `Capacity`, `Money` and the other domain types still contain no `Mono` or `Flux`.
 
 ------------------------------------------------------------------------
 
-# 25. Outbound Port
+# 25. Reactive Outbound Port
 
-The application needs to persist Events but does not depend on a concrete persistence technology.
+The repository port now expresses reactive persistence/query contracts:
 
-The outbound port is:
-
-``` java
+```java
 public interface EventRepository {
-    Event save(Event event);
+    Mono<Event> save(Event event);
+    Mono<Event> findById(EventId id);
+    Flux<Event> findAll();
 }
 ```
 
-This expresses what the application needs from the outside world without mentioning a database, R2DBC or PostgreSQL.
+The cardinality is explicit:
+
+```text
+save(...)      → 0..1 result → Mono<Event>
+findById(...)  → 0..1 result → Mono<Event>
+findAll()      → 0..N results → Flux<Event>
+```
+
+A missing Event is represented by an empty `Mono`, rather than by `Mono<Optional<Event>>`.
 
 ------------------------------------------------------------------------
 
-# 26. Output Adapter
+# 26. Reactive Output Adapter and Lazy Execution
 
-The first output adapter is an in-memory implementation:
+The current output adapter is still in memory, but its operations now preserve lazy reactive execution.
 
-``` java
-@Repository
-public class InMemoryEventRepository implements EventRepository {
+`save()` uses `Mono.fromSupplier(...)` because the subscription lazily produces a value while performing the in-memory save.
 
-    private final Map<EventId, Event> events = new HashMap<>();
+`findById()` and `findAll()` use deferred publisher creation so the current contents of the map are inspected at subscription time.
 
-    @Override
-    public Event save(Event event) {
-        events.put(event.id(), event);
-        return event;
-    }
+The distinction studied is:
+
+```text
+fromSupplier → lazy VALUE
+
+defer        → lazy PUBLISHER
+```
+
+The adapter remains an infrastructure implementation of the application-owned `EventRepository` port.
+
+------------------------------------------------------------------------
+
+# 27. Query Input Port and Application Service
+
+Read operations are grouped in one query-oriented inbound port rather than creating one interface per simple query:
+
+```java
+public interface EventQueryUseCase {
+    Mono<Event> findById(EventId id);
+    Flux<Event> findAll();
 }
 ```
 
-The relationship is:
+`EventQueryService` implements this port and delegates to `EventRepository`.
 
-``` text
-CreateEventService
-       ↓
- EventRepository              PORT OUT
-       ↑
-       │ implements
-       │
-InMemoryEventRepository       OUTPUT ADAPTER
+```text
+EventQueryUseCase
+        ↑
+EventQueryService
+        ↓
+EventRepository
+   ├── findById(...)
+   └── findAll()
 ```
 
-A future persistence adapter can implement the same port without changing `CreateEventService`.
+This is an organization of application responsibilities; CQRS has not been introduced.
 
 ------------------------------------------------------------------------
 
-# 27. Dependency Inversion
+# 28. Dependency Inversion, Injection and Spring IoC
 
-Without Dependency Inversion, the application service could depend directly on a technical repository implementation.
+The application services depend on `EventRepository`, an abstraction owned by the application boundary. Infrastructure implements that abstraction.
 
-``` text
-CreateEventService
-       ↓
-Concrete technical repository
-```
+Both application services receive the repository through constructor injection and remain free of Spring annotations.
 
-Instead, EventHub currently uses:
+Spring wiring lives in infrastructure:
 
-``` text
-CreateEventService ─────► EventRepository ◄──── InMemoryEventRepository
-   Application               Port                  Infrastructure
-```
-
-`CreateEventService` depends on the abstraction `EventRepository`, while the infrastructure adapter implements that application-owned contract.
-
-The application therefore does not need to adapt itself to a persistence implementation. The infrastructure adapter adapts itself to the port required by the application.
-
-------------------------------------------------------------------------
-
-# 28. Dependency Injection and IoC
-
-`CreateEventService` receives its repository through constructor injection:
-
-``` java
-public CreateEventService(EventRepository eventRepository) {
-    this.eventRepository = eventRepository;
-}
-```
-
-The service does not create its own repository dependency.
-
-This is Dependency Injection: the dependency is supplied from outside the object.
-
-Manual wiring would look like:
-
-``` java
-EventRepository repository =
-        new InMemoryEventRepository();
-
-CreateEventUseCase useCase =
-        new CreateEventService(repository);
-```
-
-Spring IoC now performs the application wiring instead.
-
-The infrastructure configuration defines the application bean:
-
-``` java
+```java
 @Configuration
 public class EventConfiguration {
 
     @Bean
-    public CreateEventUseCase createEventUseCase(
-            EventRepository eventRepository
-    ) {
+    public CreateEventUseCase createEventUseCase(EventRepository eventRepository) {
         return new CreateEventService(eventRepository);
+    }
+
+    @Bean
+    public EventQueryUseCase eventQueryUseCase(EventRepository eventRepository) {
+        return new EventQueryService(eventRepository);
     }
 }
 ```
 
-`InMemoryEventRepository` is discovered as a Spring repository bean, while `CreateEventService` remains free of Spring annotations.
+The distinction studied remains:
+
+```text
+Dependency Inversion
+    → depend on an abstraction / port
+
+Dependency Injection
+    → receive the dependency from outside
+
+Inversion of Control
+    → Spring controls object creation and wiring
+```
+
+------------------------------------------------------------------------
+
+# 29. HTTP Input Adapter with Spring WebFlux
+
+The HTTP input adapter has now been implemented with Spring WebFlux.
+
+The current controller exposes:
+
+```text
+POST /events       → create Event
+GET  /events       → list Events
+GET  /events/{id}  → find Event by id
+```
+
+HTTP-specific DTOs are kept in infrastructure:
+
+```text
+HTTP JSON
+    ↓
+CreateEventRequest          infrastructure input DTO
+    ↓
+CreateEventCommand          application command
+    ↓
+CreateEventUseCase
+    ↓
+Event                       domain Aggregate
+    ↓ map(...)
+EventResponse               infrastructure output DTO
+    ↓
+HTTP JSON
+```
+
+This prevents the HTTP contract from becoming the domain model.
+
+The controller uses `map()` for the synchronous transformation from `Event` to `EventResponse`; it does not call `subscribe()` manually. WebFlux performs the subscription at the HTTP boundary.
+
+------------------------------------------------------------------------
+
+# 30. HTTP Contract Studied So Far
+
+The create endpoint explicitly consumes and produces JSON and returns `201 Created`:
+
+```text
+POST /events
+
+Request
+Content-Type: application/json
+Accept: application/json
+
+Response
+201 Created
+Content-Type: application/json
+```
 
 The distinction studied is:
 
-``` text
-Dependency Inversion
-    → What does the service depend on?
-      An abstraction / port.
-
-Dependency Injection
-    → How does the service receive that dependency?
-      From outside.
-
-Inversion of Control
-    → Who controls object creation and wiring?
-      The Spring IoC Container.
+```text
+Content-Type → format of the body being sent
+Accept       → format the client wants to receive
+consumes     → formats accepted by the endpoint
+produces     → formats produced by the endpoint
 ```
+
+Sending an unsupported request media type was tested and WebFlux returned `415 Unsupported Media Type` before entering the controller.
+
+The GET endpoints currently cover the successful path:
+
+```text
+GET /events       → 200 OK + JSON collection
+GET /events/{id}  → 200 OK + JSON EventResponse when the Event exists
+```
+
+Not-found and invalid-UUID error handling have not been implemented yet.
 
 ------------------------------------------------------------------------
 
-# 29. Application and Infrastructure Tests
+# 31. Reactive HTTP and Repository Flow
 
-The application service is tested without Spring using a fake implementation of `EventRepository`.
+The current vertical slice is:
 
-This verifies the orchestration:
-
-``` text
-Command
-   ↓
-CreateEventService
-   ↓
-Event.create(...)
-   ↓
-EventRepository.save(...)
+```text
+HTTP request
+    ↓
+EventController                         INPUT ADAPTER
+    ↓
+CreateEventUseCase / EventQueryUseCase  INPUT PORTS
+    ↓
+Application Service
+    ↓
+Event                                   DOMAIN
+    ↓
+EventRepository                         OUTPUT PORT
+    ↓
+InMemoryEventRepository                 OUTPUT ADAPTER
+    ↓
+Mono<Event> / Flux<Event>
+    ↓
+map(Event → EventResponse)
+    ↓
+Mono<EventResponse> / Flux<EventResponse>
+    ↓
+WebFlux subscribes and serializes JSON
 ```
 
-The infrastructure adapter also has its own test.
+The domain itself remains synchronous pure Java.
 
-A Spring context test verifies that Spring can provide both:
+------------------------------------------------------------------------
 
-``` text
-CreateEventUseCase
-EventRepository
-```
+# 32. Tests at the Current Architecture Boundary
 
-and therefore validates the current IoC wiring.
+The project now tests the architecture at several levels:
 
-The project now contains tests at three conceptual levels:
-
-``` text
+```text
 DOMAIN
-  → business rules
+  → pure business-rule unit tests
 
 APPLICATION
-  → use-case orchestration with a fake port
+  → use-case tests with a fake EventRepository
 
-INFRASTRUCTURE / SPRING
-  → adapter behaviour and IoC wiring
+OUTPUT ADAPTER
+  → in-memory repository behaviour
+
+SPRING / HTTP INPUT ADAPTER
+  → WebTestClient integration tests
 ```
+
+The fake repository was updated to preserve the semantics of the reactive port: lazy save/query execution, empty results when appropriate, and ID-aware `findById()` behaviour.
+
+`WebTestClient` tests currently verify the successful create/list/find flows. The find-by-id test creates an Event through `POST /events`, captures the generated UUID from the response, and then retrieves that same resource through `GET /events/{id}`.
 
 ------------------------------------------------------------------------
 
-# 30. Current Architecture Structure
+# 33. Current Architecture Structure
 
-``` text
+```text
 com.rubenmarin.eventhub.event
 │
 ├── domain
@@ -1113,21 +1170,24 @@ com.rubenmarin.eventhub.event
 │   ├── port
 │   │   ├── in
 │   │   │   ├── CreateEventCommand.java
-│   │   │   └── CreateEventUseCase.java
+│   │   │   ├── CreateEventUseCase.java
+│   │   │   └── EventQueryUseCase.java
 │   │   └── out
 │   │       └── EventRepository.java
 │   └── service
-│       └── CreateEventService.java
+│       ├── CreateEventService.java
+│       └── EventQueryService.java
 │
 └── infrastructure
     ├── adapter
-    │   └── out
-    │       └── persistence
-    │           └── InMemoryEventRepository.java
+    │   ├── in/web
+    │   │   ├── EventController.java
+    │   │   ├── CreateEventRequest.java
+    │   │   └── EventResponse.java
+    │   └── out/persistence
+    │       └── InMemoryEventRepository.java
     └── config
         └── EventConfiguration.java
 ```
 
-The input adapter has deliberately not been implemented yet. The planned HTTP input adapter will be introduced only after Reactive Programming and Spring WebFlux have been studied.
-
-This is the current stopping point of the architecture documentation. Future concepts are documented only after they are studied, implemented and validated.
+This is the current stopping point of the architecture documentation. Error handling, validation and reactive database persistence remain future course steps.

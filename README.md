@@ -24,6 +24,8 @@ studied and implemented.
 -   JUnit 5
 -   Project Reactor
 -   Reactor Test / StepVerifier
+-   Spring WebFlux
+-   WebTestClient
 
 ## Architecture
 
@@ -41,7 +43,8 @@ Currently introduced:
 -   Inbound and outbound ports
 -   Dependency Inversion
 -   Dependency Injection / Spring IoC wiring
--   Output adapter
+-   Input and output adapters
+-   Reactive HTTP input adapter
 -   Reactive Programming fundamentals
 -   Reactive Streams concepts
 -   Mono / Flux
@@ -49,6 +52,8 @@ Currently introduced:
 -   Cold and hot publishers
 -   Reactor schedulers and threading fundamentals
 -   Blocking vs non-blocking execution
+-   Reactive application/repository ports
+-   HTTP request/response DTO mapping
 
 Planned in the project roadmap:
 -   Modular Monolith
@@ -113,42 +118,28 @@ are reached in the course.
 
 # 🗺️ Current Position
 
-``` text
-Project initialization             ✅
+```text
+Project initialization              ✅
         ↓
-Java 21                            ✅
+DDD fundamentals / Event Aggregate  ✅
         ↓
-Spring Boot 4.1                    ✅
+Hexagonal Architecture              🚧 IN PROGRESS
         ↓
-Maven / Maven Wrapper              ✅
-        ↓
-DDD fundamentals                   ✅
-        ↓
-Event domain                       ✅
-        ↓
-Entity / Value Objects             ✅
-        ↓
-Strongly Typed EventId             ✅
-        ↓
-Domain invariants                  ✅
-        ↓
-Rich Domain Model                  ✅
-        ↓
-Event Aggregate Root               ✅
-        ↓
-Pure domain unit tests             ✅
-        ↓
-DDD documentation                  ✅
-        ↓
-Hexagonal Architecture             🚧 IN PROGRESS
-        ↓
-Application / Ports / Output Adapter ✅
-        ↓
-Spring IoC wiring                    ✅
+Application / Ports / Adapters      ✅
         ↓
 Reactive Programming Fundamentals   ✅
         ↓
-Spring WebFlux                      🚧 NEXT
+Spring WebFlux                      🚧 IN PROGRESS
+        ↓
+Reactive HTTP input adapter         ✅
+        ↓
+POST /events                        ✅
+GET  /events                        ✅
+GET  /events/{id}                   ✅ happy path
+        ↓
+HTTP error handling / validation    🚧 NEXT
+        ↓
+R2DBC / PostgreSQL                  ⏳
 ```
 
 For the complete project plan, check [ROADMAP.md](docs/ROADMAP.md).
@@ -157,31 +148,43 @@ For the complete project plan, check [ROADMAP.md](docs/ROADMAP.md).
 
 # 🏗️ Technical Picture
 
-The project now contains a framework-independent domain, an application layer with explicit ports, an in-memory output adapter and Spring IoC configuration for dependency wiring.
+The project now contains a framework-independent domain, reactive application ports, an in-memory reactive output adapter, a Spring WebFlux HTTP input adapter and Spring IoC configuration for dependency wiring.
 
-``` text
-External input adapter                       ⏳ WebFlux later
-        │
-        ▼
-CreateEventUseCase                           PORT IN
-        ▲
-        │ implements
-CreateEventService                           APPLICATION
-        │
-        ├────────────► Event                 DOMAIN
-        │
-        ▼
-EventRepository                              PORT OUT
-        ▲
-        │ implements
+```text
+HTTP Client
+    ↓
+EventController                              INPUT ADAPTER
+    ↓
+CreateEventUseCase / EventQueryUseCase       INPUT PORTS
+    ↓
+CreateEventService / EventQueryService       APPLICATION
+    ↓
+Event                                        DOMAIN
+    ↓
+EventRepository                              OUTPUT PORT
+    ↓
 InMemoryEventRepository                      OUTPUT ADAPTER
+    ↓
+Mono<Event> / Flux<Event>
+    ↓
+EventResponse
+    ↓
+HTTP JSON
 
 Spring EventConfiguration                    IoC / WIRING
 ```
 
+Current HTTP API:
+
+```text
+POST /events       → 201 Created
+GET  /events       → 200 OK
+GET  /events/{id}  → 200 OK when the Event exists
+```
+
 Current source structure:
 
-``` text
+```text
 eventhub-reactive
 │
 ├── src/main/java/com/rubenmarin/eventhub/event/
@@ -191,6 +194,7 @@ eventhub-reactive
 │   │   ├── port/out/
 │   │   └── service/
 │   └── infrastructure/
+│       ├── adapter/in/web/
 │       ├── adapter/out/persistence/
 │       └── config/
 │
@@ -208,7 +212,7 @@ eventhub-reactive
     └── ROADMAP.md
 ```
 
-The domain and application service remain independent of Spring. Spring-specific wiring and the current output adapter live in infrastructure.
+The domain remains independent of Spring and Reactor. Spring-specific HTTP, persistence adapters and dependency wiring live in infrastructure.
 
 ------------------------------------------------------------------------
 
@@ -253,7 +257,7 @@ Detailed notes and examples are available in [DDD.md](docs/DDD.md).
 
 # 🧪 Testing
 
-The project now contains pure domain unit tests, an application-service test using a fake repository port, an output-adapter test, a Spring ApplicationContext wiring test and focused Reactor learning tests.
+The project now contains pure domain unit tests, application-service tests using a fake reactive repository port, output-adapter tests, Spring wiring tests, focused Reactor learning tests and WebFlux HTTP integration tests with `WebTestClient`.
 
 Domain and application unit tests require no Spring ApplicationContext, database, Docker or HTTP server. The dedicated configuration test intentionally starts a Spring ApplicationContext to validate IoC wiring.
 
@@ -278,6 +282,10 @@ Current tested behaviour includes:
 -   StepVerifier-based reactive testing
 -   subscribeOn and publishOn thread switching
 -   parallel and boundedElastic scheduler fundamentals
+-   reactive Event creation through `POST /events`
+-   Event listing through `GET /events`
+-   Event lookup through `GET /events/{id}` using the UUID returned by the create request
+-   JSON request/response media types and `415 Unsupported Media Type` behaviour
 
 The current build can be verified with:
 
@@ -332,4 +340,5 @@ explored in this project:
 `Value Objects` · `Aggregate Root` · `Domain Invariants` ·
 `Rich Domain Model` · `Hexagonal Architecture` · `Ports & Adapters` ·
 `Dependency Inversion` · `Dependency Injection` · `Spring IoC` ·
-`Project Reactor` · `Mono` · `Flux` · `StepVerifier` · `Reactor Schedulers`
+`Project Reactor` · `Mono` · `Flux` · `StepVerifier` · `Reactor Schedulers` ·
+`Spring WebFlux` · `WebTestClient` · `Reactive HTTP`

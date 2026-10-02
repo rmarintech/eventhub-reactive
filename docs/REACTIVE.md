@@ -167,16 +167,121 @@ R2DBC itself has not yet been implemented in EventHub.
 
 `ReactorBasicsTest` currently covers Mono/Flux creation, Consumer and signals, lazy execution, map/filter, flatMap/concatMap, `switchIfEmpty`, `zip`, error propagation, retry/timeout/fallback, cold/hot publishers, StepVerifier, default threading, subscribeOn, publishOn, parallel and boundedElastic.
 
-## 13. Current position
+## 13. Spring WebFlux fundamentals
+
+Spring WebFlux has now been added to EventHub. Project Reactor provides the reactive programming model (`Mono`, `Flux`, operators, schedulers), while Spring WebFlux provides the reactive HTTP/web layer.
+
+The servlet-style and reactive models were compared conceptually:
+
+```text
+Traditional blocking style
+request → thread → blocking I/O → response
+
+Reactive WebFlux style
+request → event-loop processing → non-blocking I/O → continuation → response
+```
+
+Wrapping blocking JDBC work in `Mono.just(...)` does not make it non-blocking because the JDBC call is evaluated before the `Mono` is created. When unavoidable blocking work must be isolated, the studied pattern is `fromCallable(...).subscribeOn(boundedElastic())`; the target persistence stack for EventHub remains R2DBC.
+
+## 14. Reactive application boundary
+
+The EventHub application ports now expose reactive results:
+
+```text
+CreateEventUseCase.createEvent(...) → Mono<Event>
+EventQueryUseCase.findById(...)      → Mono<Event>
+EventQueryUseCase.findAll()          → Flux<Event>
+
+EventRepository.save(...)            → Mono<Event>
+EventRepository.findById(...)        → Mono<Event>
+EventRepository.findAll()            → Flux<Event>
+```
+
+The domain remains synchronous. `Event.create(...)` and domain behaviour do not return `Mono` or `Flux`.
+
+## 15. `fromSupplier` vs `defer` in the repository
+
+The in-memory repository was used to reinforce lazy execution:
+
+```text
+fromSupplier → execute lazily and produce a VALUE
+
+defer        → execute lazily and produce/select a PUBLISHER
+```
+
+`Mono.justOrEmpty(...)` was also used to model a possibly absent value without emitting `null`. Reactor publishers do not emit `null` values.
+
+## 16. WebFlux HTTP input adapter
+
+The first reactive HTTP input adapter is implemented with `EventController`.
+
+Current endpoints:
+
+```text
+POST /events
+GET  /events
+GET  /events/{id}
+```
+
+The create flow is:
+
+```text
+JSON
+ ↓
+CreateEventRequest
+ ↓
+CreateEventCommand
+ ↓
+CreateEventUseCase
+ ↓
+Mono<Event>
+ ↓ map(Event → EventResponse)
+Mono<EventResponse>
+ ↓
+JSON
+```
+
+`map()` is used because `Event → EventResponse` is a synchronous transformation. The controller does not call `subscribe()`; WebFlux subscribes at the HTTP boundary.
+
+## 17. HTTP media types
+
+The following HTTP concepts have been tested:
+
+```text
+Content-Type → format of the body being sent
+Accept       → format requested for the response
+consumes     → media types accepted by the endpoint
+produces     → media types produced by the endpoint
+```
+
+The create endpoint consumes and produces JSON and returns `201 Created`. Sending an unsupported request `Content-Type` produced `415 Unsupported Media Type`.
+
+## 18. WebTestClient
+
+`WebTestClient` is now used for Spring WebFlux HTTP integration tests.
+
+The tests currently verify:
+
+```text
+POST /events       → 201 Created + JSON EventResponse
+GET /events        → 200 OK + JSON list
+GET /events/{id}   → 200 OK + JSON EventResponse
+```
+
+The find-by-id test creates an Event first, captures the generated ID from the POST response and uses it in the following GET request.
+
+## 19. Current position
 
 ```text
 Reactive Programming Fundamentals   ✅
         ↓
-Spring WebFlux                      🚧 NEXT
+Spring WebFlux fundamentals          ✅ CURRENT
         ↓
-Reactive HTTP input adapter         ⏳
+Reactive HTTP input adapter          ✅
         ↓
-R2DBC / PostgreSQL                  ⏳
+HTTP error handling / validation     🚧 NEXT
+        ↓
+R2DBC / PostgreSQL                   ⏳
 ```
 
-The next step is to introduce Spring WebFlux and connect the first real HTTP input adapter to the existing EventHub application boundary.
+The next step is to study the unsuccessful HTTP paths, starting with an existing UUID that does not identify an Event and the mapping of an empty `Mono` to an appropriate HTTP response.

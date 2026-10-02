@@ -76,14 +76,14 @@ implemented and validated.
 -   [x] Application services
 -   [x] Outbound ports
 -   [x] Repository port
--   [ ] Input adapters
+-   [x] Input adapters
 -   [x] Output adapters
 -   [x] Spring composition root / dependency wiring
 -   [x] Architecture package structure
 -   [ ] Architecture tests
 -   [ ] Hexagonal Architecture documentation
 
-**Status:** IN PROGRESS — input adapter and dedicated architecture tests remain pending
+**Status:** IN PROGRESS — HTTP input adapter is implemented; dedicated architecture tests remain pending
 
 ------------------------------------------------------------------------
 
@@ -138,19 +138,19 @@ implemented and validated.
 
 # 6. Spring WebFlux
 
--   [ ] Add Spring WebFlux
--   [ ] Servlet model vs reactive model
+-   [x] Add Spring WebFlux
+-   [x] Servlet model vs reactive model
 -   [ ] Netty
--   [ ] Event Loop
--   [ ] Reactive HTTP request lifecycle
--   [ ] Reactive REST controllers
+-   [x] Event Loop
+-   [x] Reactive HTTP request lifecycle
+-   [x] Reactive REST controllers
 -   [x] `Mono` HTTP responses
 -   [x] `Flux` HTTP responses
 -   [ ] Request validation
 -   [ ] Reactive exception handling
--   [ ] Reactive DTO mapping
--   [ ] `WebTestClient`
--   [ ] WebFlux integration tests
+-   [x] Reactive DTO mapping
+-   [x] `WebTestClient`
+-   [x] WebFlux integration tests
 -   [ ] WebFlux documentation
 
 ------------------------------------------------------------------------
@@ -177,13 +177,13 @@ implemented and validated.
 
 # 8. Event API
 
--   [ ] Create Event use case
--   [ ] Find Event use case
--   [ ] List Events use case
+-   [x] Create Event use case
+-   [x] Find Event use case
+-   [x] List Events use case
 -   [ ] Publish Event use case
 -   [ ] Cancel Event use case
--   [ ] Reactive Event REST API
--   [ ] Request / response DTOs
+-   [x] Reactive Event REST API
+-   [x] Request / response DTOs
 -   [ ] Validation
 -   [ ] Error responses
 -   [ ] API integration tests
@@ -322,15 +322,15 @@ implemented and validated.
 # 16. Testing
 
 -   [ ] Complete domain unit-test suite
--   [ ] Application tests with fake ports
+-   [x] Application tests with fake ports
 -   [ ] Mockito
--   [ ] Reactor `StepVerifier`
--   [ ] WebFlux `WebTestClient`
+-   [x] Reactor `StepVerifier`
+-   [x] WebFlux `WebTestClient`
 -   [ ] R2DBC integration tests
 -   [ ] Testcontainers
 -   [ ] Kafka integration tests
 -   [ ] Security tests
--   [ ] Full backend HTTP integration tests
+-   [x] Full backend HTTP integration tests
 -   [ ] Frontend tests
 -   [ ] End-to-end tests
 -   [ ] Architecture tests
@@ -401,7 +401,7 @@ implemented and validated.
 -   [ ] Tail latency
 -   [ ] Saturation
 -   [x] Backpressure under load
--   [ ] Event Loop blocking experiment
+-   [x] Event Loop blocking experiment
 -   [ ] Blocking-call detection
 -   [ ] Thread analysis
 -   [ ] Connection-pool behaviour
@@ -526,7 +526,11 @@ Hexagonal Architecture              🚧 IN PROGRESS
         ↓
 Reactive Programming Fundamentals   ✅
         ↓
-Spring WebFlux                      🚧 NEXT
+Spring WebFlux                      🚧 IN PROGRESS
+        ↓
+Reactive HTTP input adapter         ✅
+        ↓
+HTTP error handling / validation    🚧 NEXT
         ↓
 R2DBC / PostgreSQL                  ⏳
         ↓
