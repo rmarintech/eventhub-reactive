@@ -263,25 +263,66 @@ The create endpoint consumes and produces JSON and returns `201 Created`. Sendin
 The tests currently verify:
 
 ```text
-POST /events       → 201 Created + JSON EventResponse
-GET /events        → 200 OK + JSON list
-GET /events/{id}   → 200 OK + JSON EventResponse
+POST /events                       → 201 Created + JSON EventResponse
+GET /events                        → 200 OK + JSON list
+GET /events/{existing-id}          → 200 OK + JSON EventResponse
+GET /events/{missing-valid-id}     → 404 Not Found
+GET /events/{invalid-id-format}    → 400 Bad Request
 ```
 
 The find-by-id test creates an Event first, captures the generated ID from the POST response and uses it in the following GET request.
 
-## 19. Current position
+## 19. Empty publishers and HTTP not-found semantics
+
+The unsuccessful query path has now been studied. `EventRepository.findById(...)` represents absence with `Mono.empty()`. An empty publisher is a completion signal, not an error signal, so it does not automatically express HTTP `404 Not Found`.
+
+The application service converts the empty result into an application error:
+
+```text
+Mono.empty()
+    ↓
+switchIfEmpty(Mono.error(new EventNotFoundException(...)))
+    ↓
+onError
+```
+
+The WebFlux exception handler then translates that application error to HTTP 404. This keeps HTTP semantics out of the repository and application exception itself.
+
+## 20. WebFlux exception translation
+
+`@RestControllerAdvice` provides shared exception handling for the web layer, while `@ExceptionHandler` selects the exception type handled by each method.
+
+The mappings implemented and tested are:
+
+```text
+EventNotFoundException   → 404 Not Found
+InvalidEventIdException  → 400 Bad Request
+```
+
+The malformed-ID path is translated at the HTTP input adapter boundary. `parseEventId(String)` converts the path variable to `EventId`; an invalid UUID representation becomes `InvalidEventIdException`.
+
+A generic handler for every `IllegalArgumentException` was tested and then narrowed. Domain invariants also use `IllegalArgumentException`, so globally translating the base exception to HTTP 400 would be too broad.
+
+## 21. Integration-test state
+
+The Spring `InMemoryEventRepository` is a singleton in the test `ApplicationContext`, so its map may retain Events created by other integration-test methods. The list test therefore does not assert that exactly one Event exists or rely on list order. It captures the Event ID created by the current POST, finds that Event in the GET result using `filter(...).findFirst().orElseThrow()`, and verifies its fields.
+
+This keeps the test focused on its actual requirement while leaving the production repository scope unchanged.
+
+## 22. Current position
 
 ```text
 Reactive Programming Fundamentals   ✅
         ↓
-Spring WebFlux fundamentals          ✅ CURRENT
+Spring WebFlux fundamentals          ✅
         ↓
 Reactive HTTP input adapter          ✅
         ↓
-HTTP error handling / validation     🚧 NEXT
+HTTP error handling                  ✅ CURRENT
+        ↓
+Request validation                   🚧 NEXT
         ↓
 R2DBC / PostgreSQL                   ⏳
 ```
 
-The next step is to study the unsuccessful HTTP paths, starting with an existing UUID that does not identify an Event and the mapping of an empty `Mono` to an appropriate HTTP response.
+The next step is request validation. Reactive database persistence has not yet been implemented.

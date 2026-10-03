@@ -147,7 +147,7 @@ implemented and validated.
 -   [x] `Mono` HTTP responses
 -   [x] `Flux` HTTP responses
 -   [ ] Request validation
--   [ ] Reactive exception handling
+-   [x] Reactive exception handling
 -   [x] Reactive DTO mapping
 -   [x] `WebTestClient`
 -   [x] WebFlux integration tests
@@ -185,7 +185,7 @@ implemented and validated.
 -   [x] Reactive Event REST API
 -   [x] Request / response DTOs
 -   [ ] Validation
--   [ ] Error responses
+-   [x] Error responses
 -   [ ] API integration tests
 
 ------------------------------------------------------------------------
@@ -530,7 +530,9 @@ Spring WebFlux                      🚧 IN PROGRESS
         ↓
 Reactive HTTP input adapter         ✅
         ↓
-HTTP error handling / validation    🚧 NEXT
+HTTP error handling                 ✅
+        ↓
+Request validation                  🚧 NEXT
         ↓
 R2DBC / PostgreSQL                  ⏳
         ↓

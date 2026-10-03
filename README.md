@@ -54,6 +54,7 @@ Currently introduced:
 -   Blocking vs non-blocking execution
 -   Reactive application/repository ports
 -   HTTP request/response DTO mapping
+-   WebFlux exception handling
 
 Planned in the project roadmap:
 -   Modular Monolith
@@ -135,9 +136,11 @@ Reactive HTTP input adapter         ✅
         ↓
 POST /events                        ✅
 GET  /events                        ✅
-GET  /events/{id}                   ✅ happy path
+GET  /events/{id}                   ✅
         ↓
-HTTP error handling / validation    🚧 NEXT
+HTTP error handling                 ✅
+        ↓
+Request validation                  🚧 NEXT
         ↓
 R2DBC / PostgreSQL                  ⏳
 ```
@@ -177,9 +180,11 @@ Spring EventConfiguration                    IoC / WIRING
 Current HTTP API:
 
 ```text
-POST /events       → 201 Created
-GET  /events       → 200 OK
-GET  /events/{id}  → 200 OK when the Event exists
+POST /events                       → 201 Created
+GET  /events                        → 200 OK
+GET  /events/{existing-id}          → 200 OK
+GET  /events/{missing-valid-id}     → 404 Not Found
+GET  /events/{invalid-id-format}    → 400 Bad Request
 ```
 
 Current source structure:
@@ -285,6 +290,9 @@ Current tested behaviour includes:
 -   reactive Event creation through `POST /events`
 -   Event listing through `GET /events`
 -   Event lookup through `GET /events/{id}` using the UUID returned by the create request
+-   missing Event lookup returning `404 Not Found`
+-   malformed Event ID returning `400 Bad Request`
+-   WebFlux exception translation with `@RestControllerAdvice` and `@ExceptionHandler`
 -   JSON request/response media types and `415 Unsupported Media Type` behaviour
 
 The current build can be verified with:

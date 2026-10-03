@@ -1,10 +1,13 @@
 package com.rubenmarin.eventhub.event.application.service;
 
+import com.rubenmarin.eventhub.event.application.exception.EventNotFoundException;
 import com.rubenmarin.eventhub.event.application.port.in.EventQueryUseCase;
 import com.rubenmarin.eventhub.event.application.port.out.EventRepository;
 import com.rubenmarin.eventhub.event.domain.model.*;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+
+import java.util.NoSuchElementException;
 
 public class EventQueryService implements EventQueryUseCase {
 
@@ -17,7 +20,12 @@ public class EventQueryService implements EventQueryUseCase {
 
     @Override
     public Mono<Event> findById(EventId id) {
-        Mono<Event> event = eventRepository.findById(id);
+        Mono<Event> event = eventRepository.findById(id)
+                .switchIfEmpty(
+                        Mono.error(
+                                new EventNotFoundException("Event not found")
+                        )
+                );
         return event;
     }
 

@@ -1,5 +1,7 @@
 package com.rubenmarin.eventhub.infrastructure.adapter.in.web;
 
+import com.rubenmarin.eventhub.event.application.exception.EventNotFoundException;
+import com.rubenmarin.eventhub.event.domain.model.Event;
 import com.rubenmarin.eventhub.event.infrastructure.adapter.in.web.CreateEventRequest;
 import com.rubenmarin.eventhub.event.infrastructure.adapter.in.web.EventResponse;
 import org.junit.jupiter.api.Assertions;
@@ -13,6 +15,7 @@ import org.springframework.test.web.reactive.server.WebTestClient;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.UUID;
 
 @SpringBootTest
 @AutoConfigureWebTestClient
@@ -67,7 +70,7 @@ class EventControllerTest {
     @Test
     void shouldFindAllEvents() {
 
-        CreateEventRequest request = new CreateEventRequest(
+        CreateEventRequest createEventRq = new CreateEventRequest(
                 "Reactive Java Workshop",
                 "Introduction to Project Reactor",
                 LocalDateTime.now().plusDays(30),
@@ -82,36 +85,41 @@ class EventControllerTest {
                 .contentType(MediaType.APPLICATION_JSON)
                 /** el contentype que quiero que me conteste el server */
                 .accept(MediaType.APPLICATION_JSON)
-                .bodyValue(request)
+                .bodyValue(createEventRq)
+
                 .exchange()
 
-                .expectStatus().isCreated();
+                .expectStatus().isCreated()
+                .expectBody(EventResponse.class)
+                .consumeWith(postResponse -> {
 
-        webTestClient.get()
-                .uri("/events")
-                /** el contentype que quiero que me conteste el server */
-                .accept(MediaType.APPLICATION_JSON)
-                .exchange()
+                    webTestClient.get()
+                            .uri("/events")
+                            /** el contentype que quiero que me conteste el server */
+                            .accept(MediaType.APPLICATION_JSON)
+                            .exchange()
 
-                .expectStatus().isOk()
-                .expectBodyList(EventResponse.class)
+                            .expectStatus().isOk()
+                            .expectBodyList(EventResponse.class)
+                            .consumeWith(getResponse -> {
 
+                                List<EventResponse> events = getResponse.getResponseBody();
 
-                .consumeWith(response -> {
+                                EventResponse eventPosted = postResponse.getResponseBody();
 
-                    List<EventResponse> events = response.getResponseBody();
-                    Assertions.assertNotNull(events);
-                    Assertions.assertEquals(1, events.size());
-                    EventResponse event1st = events.getFirst();
-                    Assertions.assertNotNull(event1st);
-                    Assertions.assertNotNull(event1st.id());
+                                Assertions.assertNotNull(events);
 
-                    Assertions.assertEquals("Reactive Java Workshop", event1st.name());
-                    Assertions.assertEquals("Introduction to Project Reactor", event1st.description());
-                    Assertions.assertNotNull(event1st.startDate());
-                    Assertions.assertEquals(20, event1st.capacity());
-                    Assertions.assertEquals(new BigDecimal("49.99"), event1st.price());
-                    Assertions.assertEquals("EUR", event1st.currency());
+                                EventResponse eventFound = events.stream().filter(value -> value.id().equals(eventPosted.id())).findFirst().orElseThrow();
+
+                                Assertions.assertNotNull(eventFound.id());
+                                Assertions.assertEquals(eventPosted.id(),eventFound.id());
+                                Assertions.assertEquals("Reactive Java Workshop", eventFound.name());
+                                Assertions.assertEquals("Introduction to Project Reactor", eventFound.description());
+                                Assertions.assertNotNull(eventFound.startDate());
+                                Assertions.assertEquals(20, eventFound.capacity());
+                                Assertions.assertEquals(new BigDecimal("49.99"), eventFound.price());
+                                Assertions.assertEquals("EUR", eventFound.currency());
+                            });
                 });
     }
 
@@ -146,6 +154,7 @@ class EventControllerTest {
 
                     webTestClient.get()
                             .uri("/events/" + postResponseEventId)
+
                             /** el contentype que quiero que me conteste el server */
                             .accept(MediaType.APPLICATION_JSON)
                             .exchange()
@@ -168,6 +177,29 @@ class EventControllerTest {
                 });
 
 
+    }
+
+
+    @Test
+    void shouldNotFindEvent() {
+        webTestClient.get()
+                .uri("/events/" + UUID.randomUUID())
+                /** el contentype que quiero que me conteste el server */
+                .accept(MediaType.APPLICATION_JSON)
+                .exchange()
+
+                .expectStatus().isNotFound();
+    }
+
+    @Test
+    void shouldReturnBadRequestWhenEventIdIsInvalid() {
+        webTestClient.get()
+                .uri("/events/" + "Not_AN_UUID")
+                /** el contentype que quiero que me conteste el server */
+                .accept(MediaType.APPLICATION_JSON)
+                .exchange()
+
+                .expectStatus().isBadRequest();
     }
 
 }

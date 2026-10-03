@@ -1092,7 +1092,13 @@ GET /events       → 200 OK + JSON collection
 GET /events/{id}  → 200 OK + JSON EventResponse when the Event exists
 ```
 
-Not-found and invalid-UUID error handling have not been implemented yet.
+The unsuccessful find-by-id paths have now also been implemented and tested:
+
+```text
+GET /events/{valid-existing-id}     → 200 OK
+GET /events/{valid-missing-id}      → 404 Not Found
+GET /events/{invalid-id-format}     → 400 Bad Request
+```
 
 ------------------------------------------------------------------------
 
@@ -1190,4 +1196,94 @@ com.rubenmarin.eventhub.event
         └── EventConfiguration.java
 ```
 
-This is the current stopping point of the architecture documentation. Error handling, validation and reactive database persistence remain future course steps.
+# 34. HTTP Error Handling
+
+A repository lookup that does not find an Event is represented by `Mono.empty()`. The repository does not decide HTTP semantics.
+
+`EventQueryService` translates that absence into an application-specific error using the Reactor operator already studied:
+
+```text
+EventRepository.findById(...)
+        ↓
+Mono.empty()
+        ↓
+switchIfEmpty(Mono.error(...))
+        ↓
+EventNotFoundException
+```
+
+`EventNotFoundException` belongs to the application layer because the application decides that a missing Event is an error for this use case. It contains no HTTP knowledge.
+
+The WebFlux input adapter translates application/web exceptions into HTTP responses through `@RestControllerAdvice` and `@ExceptionHandler`:
+
+```text
+EventNotFoundException
+        ↓
+GlobalExceptionHandler
+        ↓
+404 Not Found
+```
+
+A malformed Event identifier is different. The controller receives a `String` from HTTP and must translate it into an `EventId`. The conversion is isolated in `parseEventId(String id)`.
+
+```text
+HTTP String
+    ↓
+parseEventId(...)
+    ↓
+UUID.fromString(...)
+    ├── valid   → EventId
+    └── invalid → InvalidEventIdException
+                     ↓
+               GlobalExceptionHandler
+                     ↓
+               400 Bad Request
+```
+
+`InvalidEventIdException` is kept in the web input adapter because the failure currently belongs to translation of HTTP input into the type required by the application.
+
+A generic `@ExceptionHandler(IllegalArgumentException.class)` was deliberately avoided after testing it, because domain code also uses `IllegalArgumentException` for invariants. Mapping every such exception to HTTP 400 could incorrectly classify an unrelated application or programming error as a client error.
+
+The resulting distinction is:
+
+```text
+valid EventId + Event exists       → 200 OK
+valid EventId + Event missing      → 404 Not Found
+invalid EventId representation     → 400 Bad Request
+```
+
+------------------------------------------------------------------------
+
+# 35. HTTP Integration Test Isolation
+
+The WebFlux integration tests also exposed the lifecycle of the in-memory repository. `InMemoryEventRepository` is a Spring `@Repository` and therefore a singleton by default inside the reused test `ApplicationContext`. Its internal map can consequently contain Events created by earlier test methods.
+
+The list test was changed so it no longer assumes:
+
+```text
+events.size() == 1
+```
+
+or that the Event created by the current test is the first element. Instead, it captures the ID returned by `POST /events`, performs `GET /events`, filters the returned collection by that ID, and verifies the matching Event.
+
+```text
+POST Event X
+    ↓
+capture X.id
+    ↓
+GET /events
+    ↓
+filter(event.id == X.id)
+    ↓
+findFirst().orElseThrow()
+    ↓
+verify Event X
+```
+
+This makes the assertion independent of unrelated Events already stored in the singleton in-memory adapter without changing production scope only for testing.
+
+The current WebTestClient suite now covers successful create/list/find flows, a valid but missing Event ID returning 404, and a malformed Event ID returning 400. The full test suite is green.
+
+------------------------------------------------------------------------
+
+This is the current stopping point of the architecture documentation. Request validation and reactive database persistence remain future course steps.

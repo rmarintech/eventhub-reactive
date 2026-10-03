@@ -5,6 +5,7 @@ import com.rubenmarin.eventhub.event.application.port.in.CreateEventUseCase;
 import com.rubenmarin.eventhub.event.application.port.in.EventQueryUseCase;
 import com.rubenmarin.eventhub.event.domain.model.Event;
 import com.rubenmarin.eventhub.event.domain.model.EventId;
+import com.rubenmarin.eventhub.event.infrastructure.adapter.in.web.exception.InvalidEventIdException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.*;
@@ -20,10 +21,10 @@ public class EventController {
 
 
     private final CreateEventUseCase createEventUseCase;
-    private final EventQueryUseCase  eventQueryUseCase;
+    private final EventQueryUseCase eventQueryUseCase;
 
     public EventController(CreateEventUseCase createEventUseCase,
-                           EventQueryUseCase  eventQueryUseCase) {
+                           EventQueryUseCase eventQueryUseCase) {
         this.createEventUseCase = createEventUseCase;
         this.eventQueryUseCase = eventQueryUseCase;
     }
@@ -52,7 +53,7 @@ public class EventController {
     @GetMapping("/{id}")
     public Mono<EventResponse> getEventById(@PathVariable String id) {
 
-        Mono<Event> event = eventQueryUseCase.findById(new EventId(UUID.fromString(id)));
+        Mono<Event> event = eventQueryUseCase.findById(parseEventId(id));
         Mono<EventResponse> response = event.map(value -> toResponse(value));
         return response;
     }
@@ -79,5 +80,13 @@ public class EventController {
                 event.price().amount(),
                 event.price().currency().getCurrencyCode()
         );
+    }
+
+    private EventId parseEventId(String id) {
+        try {
+            return new EventId(UUID.fromString(id));
+        } catch (IllegalArgumentException e) {
+            throw new InvalidEventIdException("Not a valid uuid: " + id);
+        }
     }
 }
