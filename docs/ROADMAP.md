@@ -146,7 +146,7 @@ implemented and validated.
 -   [x] Reactive REST controllers
 -   [x] `Mono` HTTP responses
 -   [x] `Flux` HTTP responses
--   [ ] Request validation
+-   [x] Request validation
 -   [x] Reactive exception handling
 -   [x] Reactive DTO mapping
 -   [x] `WebTestClient`
@@ -184,7 +184,7 @@ implemented and validated.
 -   [ ] Cancel Event use case
 -   [x] Reactive Event REST API
 -   [x] Request / response DTOs
--   [ ] Validation
+-   [x] Validation
 -   [x] Error responses
 -   [ ] API integration tests
 
@@ -192,18 +192,18 @@ implemented and validated.
 
 # 9. Booking Domain
 
--   [ ] Booking domain analysis
--   [ ] Booking Aggregate
--   [ ] `BookingId`
--   [ ] `CustomerId`
--   [ ] Booking status
--   [ ] Booking invariants
--   [ ] Create Booking
--   [ ] Cancel Booking
--   [ ] Booking domain tests
--   [ ] Booking application layer
--   [ ] Booking ports
--   [ ] Booking adapters
+-   [x] Booking domain analysis
+-   [x] Booking Aggregate
+-   [x] `BookingId`
+-   [x] `CustomerId`
+-   [x] Booking status
+-   [x] Booking invariants
+-   [x] Create Booking
+-   [x] Cancel Booking
+-   [x] Booking domain tests
+-   [x] Booking application layer
+-   [x] Booking ports
+-   [x] Booking adapters
 -   [ ] Booking persistence
 -   [ ] Booking REST API
 
@@ -211,7 +211,7 @@ implemented and validated.
 
 # 10. Capacity & Concurrency
 
--   [ ] Booking vs Event capacity coordination
+-   [x] Booking vs Event capacity coordination
 -   [ ] Concurrent booking scenario
 -   [ ] Overselling problem
 -   [ ] Reproduce race condition
@@ -532,11 +532,13 @@ Reactive HTTP input adapter         ✅
         ↓
 HTTP error handling                 ✅
         ↓
-Request validation                  🚧 NEXT
+Request validation                  ✅
+        ↓
+Booking Domain / application flow   ✅
+        ↓
+Booking HTTP API                    🚧 NEXT
         ↓
 R2DBC / PostgreSQL                  ⏳
-        ↓
-Booking Domain                      ⏳
         ↓
 Concurrency                         ⏳
         ↓

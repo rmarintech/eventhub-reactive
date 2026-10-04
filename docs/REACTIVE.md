@@ -326,3 +326,51 @@ R2DBC / PostgreSQL                   ⏳
 ```
 
 The next step is request validation. Reactive database persistence has not yet been implemented.
+
+## 23. Reactive coordination between Event and Booking
+
+The Booking application flow has now provided a practical use of `flatMap()` across application use cases.
+
+```text
+reserveEventPlaces(...)
+        ↓
+Mono<Event>
+        ↓ flatMap
+bookingRepository.save(...)
+        ↓
+Mono<Booking>
+```
+
+The studied rule is:
+
+```text
+lambda returns a normal value       → map
+lambda returns Mono / Flux          → flatMap
+ordered Flux async composition      → concatMap when sequential ordering is required
+```
+
+During implementation, an important lazy-composition mistake was tested and corrected: calling a reactive repository method without returning/composing its `Mono` means that operation is not part of the subscribed pipeline.
+
+`StepVerifier` is now also used in Booking application tests. The tests verify a successful `Mono<Booking>` and verify an `IllegalStateException` error signal when the requested number of places exceeds Event capacity.
+
+JUnit 5 `@BeforeEach` is used to recreate the stateful in-memory fake repositories and application services before each test.
+
+## 24. Current position
+
+```text
+Reactive Programming Fundamentals   ✅
+        ↓
+Spring WebFlux fundamentals          ✅
+        ↓
+Reactive HTTP input adapter          ✅
+        ↓
+HTTP error handling                  ✅
+        ↓
+Request validation                   ✅
+        ↓
+Booking reactive application flow    ✅ CURRENT
+        ↓
+Booking HTTP API                     🚧 NEXT
+        ↓
+R2DBC / PostgreSQL                   ⏳
+```

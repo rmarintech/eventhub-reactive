@@ -1287,3 +1287,125 @@ The current WebTestClient suite now covers successful create/list/find flows, a 
 ------------------------------------------------------------------------
 
 This is the current stopping point of the architecture documentation. Request validation and reactive database persistence remain future course steps.
+
+------------------------------------------------------------------------
+
+# 36. Request Validation at the HTTP Boundary
+
+Event creation now validates HTTP input before it reaches the application use case.
+
+`CreateEventRequest` uses Jakarta Bean Validation constraints for the rules studied so far, including required text fields, maximum Event name length, positive capacity, non-negative price and required start date/currency.
+
+The request flow is:
+
+```text
+HTTP JSON
+    ↓
+Jackson deserialization
+    ↓
+CreateEventRequest
+    ↓
+@Valid / Bean Validation
+    ├── valid   → CreateEventCommand → application
+    └── invalid → WebExchangeBindException → 400 Bad Request
+```
+
+This reinforces the distinction between boundary validation and domain invariants. HTTP validation rejects malformed or incomplete request data early, while the domain still protects its own business rules independently.
+
+Validation errors are translated by the WebFlux exception handler into a `ValidationErrorResponse` containing a timestamp, HTTP status, message and field-error map.
+
+------------------------------------------------------------------------
+
+# 37. Booking Domain and Aggregate
+
+A second business module, `booking`, has now been introduced.
+
+The Booking model studied so far contains:
+
+```text
+Booking
+│
+├── BookingId
+├── CustomerId
+├── EventId
+├── places
+└── BookingStatus
+```
+
+A Booking is created through its factory method with a generated `BookingId` and starts in `CONFIRMED` status. The number of places must be greater than zero.
+
+The lifecycle currently studied is intentionally small:
+
+```text
+CONFIRMED
+    │
+    │ cancel()
+    ▼
+CANCELLED
+```
+
+Trying to cancel an already cancelled Booking is rejected with `IllegalStateException`.
+
+Booking domain tests cover successful creation, cancellation, repeated cancellation rejection and invalid place counts. A JUnit 5 parameterized test with `@ParameterizedTest` and `@ValueSource` was introduced to test multiple invalid place values.
+
+------------------------------------------------------------------------
+
+# 38. Cross-Module Coordination Through an Input Port
+
+Creating a Booking requires reserving capacity in an Event. The Booking application layer does not access `EventRepository` directly.
+
+Instead, the Event module exposes an application input port:
+
+```text
+ReserveEventPlacesUseCase
+```
+
+The dependency direction is:
+
+```text
+Booking application
+        ↓
+ReserveEventPlacesUseCase       Event application API
+        ↑
+ReserveEventPlacesService
+        ↓
+EventRepository
+        ↓
+Event Aggregate
+```
+
+This preserves the module boundary: another module communicates with Event through its application API rather than reaching into Event persistence.
+
+Inside the Event module, `ReserveEventPlacesService` loads the Event through `EventRepository`, converts an empty result into `EventNotFoundException`, tells the Aggregate to reserve the requested places and saves the updated Event.
+
+The domain remains responsible for the actual reservation rules: the Event must be published and enough capacity must be available.
+
+------------------------------------------------------------------------
+
+# 39. Reactive Booking Creation Flow
+
+`CreateBookingService` coordinates the two operations studied so far:
+
+```text
+CreateBookingCommand
+        ↓
+reserve Event places
+        ↓
+Mono<Event>
+        ↓ flatMap
+create/save Booking
+        ↓
+Mono<Booking>
+```
+
+`flatMap()` is required because reserving Event places returns a Publisher and the next operation, saving the Booking, also returns a Publisher.
+
+An important Reactor rule was reinforced while implementing this flow: operators create new Publishers. Calling a reactive method and ignoring the returned `Mono` does not add that operation to the subscribed pipeline.
+
+The application tests use `StepVerifier` and in-memory fake repositories. They currently verify successful Booking creation and propagation of an insufficient-capacity error. The success scenario also verifies the generated Booking data and the Event association.
+
+Common test dependencies are recreated before every test using JUnit 5 `@BeforeEach`, keeping the stateful fake repositories isolated between test methods.
+
+------------------------------------------------------------------------
+
+This is the current stopping point of the DDD and architecture documentation. The Booking HTTP adapter and reactive database persistence have not yet been implemented.

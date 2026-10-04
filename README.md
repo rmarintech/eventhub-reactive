@@ -55,6 +55,9 @@ Currently introduced:
 -   Reactive application/repository ports
 -   HTTP request/response DTO mapping
 -   WebFlux exception handling
+-   Jakarta Bean Validation / request validation
+-   Booking Aggregate and Booking application flow
+-   Cross-module coordination through application ports
 
 Planned in the project roadmap:
 -   Modular Monolith
@@ -140,7 +143,11 @@ GET  /events/{id}                   ✅
         ↓
 HTTP error handling                 ✅
         ↓
-Request validation                  🚧 NEXT
+Request validation                  ✅
+        ↓
+Booking domain / application flow   ✅
+        ↓
+Booking HTTP API                    🚧 NEXT
         ↓
 R2DBC / PostgreSQL                  ⏳
 ```
@@ -151,7 +158,7 @@ For the complete project plan, check [ROADMAP.md](docs/ROADMAP.md).
 
 # 🏗️ Technical Picture
 
-The project now contains a framework-independent domain, reactive application ports, an in-memory reactive output adapter, a Spring WebFlux HTTP input adapter and Spring IoC configuration for dependency wiring.
+The project now contains framework-independent Event and Booking domain models, reactive application ports, in-memory reactive output adapters, a Spring WebFlux Event HTTP input adapter and Spring IoC configuration for dependency wiring. Booking creation now coordinates Event capacity through an Event application input port rather than accessing Event persistence directly.
 
 ```text
 HTTP Client
@@ -223,7 +230,7 @@ The domain remains independent of Spring and Reactor. Spring-specific HTTP, pers
 
 # 🏛️ Current Domain Model
 
-The first domain model implemented in EventHub is the Event aggregate.
+EventHub currently contains the Event aggregate and the first Booking aggregate implementation.
 
 ``` text
                   Event
@@ -294,6 +301,13 @@ Current tested behaviour includes:
 -   malformed Event ID returning `400 Bad Request`
 -   WebFlux exception translation with `@RestControllerAdvice` and `@ExceptionHandler`
 -   JSON request/response media types and `415 Unsupported Media Type` behaviour
+-   request validation with Bean Validation and `400 Bad Request` validation responses
+-   Booking creation and cancellation domain rules
+-   parameterized Booking invariant tests
+-   reactive Event-capacity reservation through `ReserveEventPlacesUseCase`
+-   Booking creation with `CreateBookingService` and `StepVerifier`
+-   insufficient Event capacity propagated as a reactive error
+-   isolated application-test setup with JUnit 5 `@BeforeEach`
 
 The current build can be verified with:
 
