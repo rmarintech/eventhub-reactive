@@ -1,8 +1,6 @@
 package com.rubenmarin.eventhub.event.infrastructure.adapter.in.web;
 
-
-import com.rubenmarin.eventhub.event.application.port.in.CreateEventCommand;
-
+import jakarta.validation.constraints.*;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
@@ -17,11 +15,17 @@ import java.time.LocalDateTime;
 
 
 public record CreateEventRequest(
+        @NotBlank @Size(max = 100)
         String name,
+        @NotBlank @Size(max = 100)
         String description,
+        @NotNull
         LocalDateTime startDate,
+        @Positive
         int capacity,
+        @NotNull@PositiveOrZero
         BigDecimal price,
+        @NotBlank
         String currency) {
 }
 

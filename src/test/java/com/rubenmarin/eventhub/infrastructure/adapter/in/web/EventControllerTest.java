@@ -4,6 +4,7 @@ import com.rubenmarin.eventhub.event.application.exception.EventNotFoundExceptio
 import com.rubenmarin.eventhub.event.domain.model.Event;
 import com.rubenmarin.eventhub.event.infrastructure.adapter.in.web.CreateEventRequest;
 import com.rubenmarin.eventhub.event.infrastructure.adapter.in.web.EventResponse;
+import com.rubenmarin.eventhub.event.infrastructure.adapter.in.web.exception.ValidationErrorResponse;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -64,6 +65,36 @@ class EventControllerTest {
                     Assertions.assertEquals(new BigDecimal("49.99"), body.price());
                     Assertions.assertEquals("EUR", body.currency());
                 });
+    }
+
+    @Test
+    void shouldNotCreateEvent() {
+
+        CreateEventRequest request = new CreateEventRequest(
+                "",
+                "",
+                null,
+                0,
+                new BigDecimal("-10"),
+                ""
+        );
+
+        webTestClient.post()
+                .uri("/events")
+                /** el contentype que consume (request)*/
+                .contentType(MediaType.APPLICATION_JSON)
+                /** el contentype que quiero que me conteste el server */
+                .accept(MediaType.APPLICATION_JSON)
+                .bodyValue(request)
+                .exchange()
+
+                /** el contentype que produce (Response)*/
+                .expectHeader().contentType(MediaType.APPLICATION_JSON)
+                .expectStatus().isBadRequest()
+
+        .expectBody(ValidationErrorResponse.class)
+                .consumeWith(postResponse -> {System.out.println(postResponse.getResponseBody());});
+                ;
     }
 
 

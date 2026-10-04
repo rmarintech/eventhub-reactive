@@ -6,6 +6,7 @@ import com.rubenmarin.eventhub.event.application.port.in.EventQueryUseCase;
 import com.rubenmarin.eventhub.event.domain.model.Event;
 import com.rubenmarin.eventhub.event.domain.model.EventId;
 import com.rubenmarin.eventhub.event.infrastructure.adapter.in.web.exception.InvalidEventIdException;
+import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.*;
@@ -34,7 +35,7 @@ public class EventController {
             produces = MediaType.APPLICATION_JSON_VALUE
     )
     @ResponseStatus(HttpStatus.CREATED)
-    public Mono<EventResponse> createEvent(@RequestBody CreateEventRequest rq) {
+    public Mono<EventResponse> createEvent(@Valid @RequestBody CreateEventRequest rq) {
 
         Mono<Event> event = createEventUseCase.createEvent(toCommand(rq));
         Mono<EventResponse> response = event.map(value -> toResponse(value));
