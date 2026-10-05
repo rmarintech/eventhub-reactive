@@ -26,7 +26,7 @@ public class PublishEventService implements PublishEventUseCase {
         Mono<Event> eventPublished =
                 eventFound.flatMap(event -> {
                     event.publish();
-                    return eventRepository.save(event);
+                    return eventRepository.update(event);
 
                 });
 

@@ -34,7 +34,7 @@ public class ReserveEventPlacesServiceTest {
 
         newEvent.publish();
 
-        Mono<Event> savedEvent = eventRepository.save(newEvent);
+        Mono<Event> savedEvent = eventRepository.update(newEvent);
 
 
         Mono<Event> reservedEvent = savedEvent.flatMap(event -> {
@@ -60,7 +60,18 @@ public class ReserveEventPlacesServiceTest {
         private Event savedEvent;
 
         @Override
-        public Mono<Event> save(Event event) {
+        public Mono<Event> create(Event event) {
+
+            // return Mono.defer(() -> Mono.just(this.savedEvent = event));
+
+            return Mono.fromSupplier(() -> {
+                this.savedEvent = event;
+                return event;
+            });
+        }
+
+        @Override
+        public Mono<Event> update(Event event) {
 
             // return Mono.defer(() -> Mono.just(this.savedEvent = event));
 

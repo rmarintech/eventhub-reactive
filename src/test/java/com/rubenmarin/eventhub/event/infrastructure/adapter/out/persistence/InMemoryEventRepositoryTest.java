@@ -20,7 +20,7 @@ import java.util.List;
 class InMemoryEventRepositoryTest {
 
     @Test
-    void shouldSaveEvent() {
+    void shouldCreateEvent() {
         Event event = Event.create(
                 new EventName("Reactive Java Workshop"),
                 "Introduction to Project Reactor",
@@ -32,7 +32,7 @@ class InMemoryEventRepositoryTest {
         InMemoryEventRepository repository = new InMemoryEventRepository();
 
 
-        Mono<Event> savedEvent =  repository.save(event);
+        Mono<Event> savedEvent =  repository.create(event);
 
 //        List< Event> events = new ArrayList<>();
 //        savedEvent.subscribe( value -> events.add(value) );

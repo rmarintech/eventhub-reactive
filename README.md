@@ -75,17 +75,24 @@ Planned:
 
 ## Persistence
 
-Planned:
+Currently introduced:
 
--   PostgreSQL
--   R2DBC
+-   PostgreSQL 17
+-   Spring Data R2DBC
+-   PostgreSQL R2DBC driver
+-   ReactiveCrudRepository
+-   Domain ↔ persistence mapping
+-   SQL schema initialization
 
 ## Infrastructure
 
+Currently introduced:
+
+-   Docker Compose for local PostgreSQL
+
 Planned:
 
--   Docker
--   Docker Compose
+-   Backend/frontend Docker images
 -   Apache Kafka
 -   Kubernetes
 -   Helm
@@ -154,7 +161,9 @@ Publish Event API                    ✅
         ↓
 Booking HTTP API                    ✅
         ↓
-R2DBC / PostgreSQL                  🚧 NEXT
+Event R2DBC / PostgreSQL            ✅ CURRENT
+        ↓
+Booking persistence                 🚧 NEXT
 ```
 
 For the complete project plan, check [ROADMAP.md](docs/ROADMAP.md).
@@ -164,8 +173,8 @@ For the complete project plan, check [ROADMAP.md](docs/ROADMAP.md).
 # 🏗️ Technical Picture
 
 The project now contains framework-independent Event and Booking domain
-models, reactive application ports, in-memory reactive output adapters,
-Spring WebFlux HTTP input adapters for Event and Booking, and Spring IoC
+models, reactive application ports, an R2DBC/PostgreSQL output adapter for Event,
+an in-memory Booking output adapter, Spring WebFlux HTTP input adapters for Event and Booking, and Spring IoC
 configuration for dependency wiring. Booking creation coordinates Event
 capacity through an Event application input port rather than accessing
 Event persistence directly. Event publication is also exposed as an
@@ -184,7 +193,11 @@ Event                                        DOMAIN
     ↓
 EventRepository                              OUTPUT PORT
     ↓
-InMemoryEventRepository                      OUTPUT ADAPTER
+R2dbcEventRepositoryAdapter                  OUTPUT ADAPTER
+    ↓
+SpringDataEventRepository
+    ↓
+PostgreSQL 17
     ↓
 Mono<Event> / Flux<Event>
     ↓
@@ -221,6 +234,11 @@ eventhub-reactive
 │   └── infrastructure/
 │       ├── adapter/in/web/
 │       ├── adapter/out/persistence/
+│       │   ├── InMemoryEventRepository.java
+│       │   └── r2dbc/
+│       │       ├── EventEntity.java
+│       │       ├── SpringDataEventRepository.java
+│       │       └── R2dbcEventRepositoryAdapter.java
 │       └── config/
 │
 ├── src/test/java/com/rubenmarin/eventhub/event/
@@ -237,8 +255,9 @@ eventhub-reactive
     └── ROADMAP.md
 ```
 
-The domain remains independent of Spring and Reactor. Spring-specific
-HTTP, persistence adapters and dependency wiring live in infrastructure.
+The domain remains independent of Spring, Reactor and PostgreSQL. Spring-specific
+HTTP, R2DBC persistence adapters and dependency wiring live in infrastructure.
+`Event.create()` creates new Aggregates, while `Event.rehydrate()` reconstructs persisted Aggregates without leaking persistence annotations into the domain.
 
 ------------------------------------------------------------------------
 
@@ -279,6 +298,25 @@ The domain protects its own business rules rather than exposing
 unrestricted state modification.
 
 Detailed notes and examples are available in [DDD.md](docs/DDD.md).
+
+------------------------------------------------------------------------
+
+# 🗄️ Reactive Event Persistence
+
+Event persistence is now backed by PostgreSQL 17 through Spring Data R2DBC. PostgreSQL runs locally through Docker Compose, and `schema.sql` initializes the `events` table.
+
+The application-owned `EventRepository` distinguishes persistence intent with `create(Event)` and `update(Event)`. The R2DBC adapter maps the domain Aggregate to `EventEntity` and maps database results back through `Event.rehydrate(...)`.
+
+Because Event IDs are generated in the domain before persistence, `EventEntity` implements `Persistable<UUID>` and uses a transient `isNew` flag:
+
+``` text
+create(event) → isNew=true  → INSERT
+update(event) → isNew=false → UPDATE
+```
+
+Both paths have been manually verified against PostgreSQL: newly created Events are persisted as `DRAFT`, and publication updates the same row to `PUBLISHED`.
+
+Booking persistence, reactive transactions, database migrations and PostgreSQL Testcontainers are still pending.
 
 ------------------------------------------------------------------------
 
@@ -394,4 +432,4 @@ explored in this project:
 `Dependency Inversion` · `Dependency Injection` · `Spring IoC` ·
 `Project Reactor` · `Mono` · `Flux` · `StepVerifier` ·
 `Reactor Schedulers` · `Spring WebFlux` · `WebTestClient` ·
-`Reactive HTTP`
+`Reactive HTTP` · `Spring Data R2DBC` · `PostgreSQL 17` · `Docker Compose`

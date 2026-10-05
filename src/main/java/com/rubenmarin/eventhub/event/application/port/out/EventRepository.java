@@ -13,7 +13,9 @@ import reactor.core.publisher.Mono;
  */
 public interface EventRepository {
 
-    Mono<Event> save(Event event);
+    Mono<Event> create (Event event);
+
+    Mono<Event> update(Event event);
 
     Mono<Event> findById(EventId id);
 

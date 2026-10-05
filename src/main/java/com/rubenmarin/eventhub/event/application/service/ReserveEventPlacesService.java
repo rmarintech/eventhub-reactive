@@ -26,7 +26,7 @@ public class ReserveEventPlacesService implements ReserveEventPlacesUseCase {
         Mono<Event> eventReserved =
                 eventFound.flatMap(event -> {
                     event.reservePlaces(places);
-                    return eventRepository.save(event);
+                    return eventRepository.update(event);
 
                 });
 

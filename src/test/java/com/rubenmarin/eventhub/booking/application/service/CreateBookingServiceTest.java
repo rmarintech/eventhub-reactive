@@ -51,7 +51,7 @@ public class CreateBookingServiceTest {
         newEvent.publish();
         CustomerId customerId = CustomerId.generate();
 
-        Mono<Event> savedEvent = eventRepository.save(newEvent);
+        Mono<Event> savedEvent = eventRepository.create(newEvent);
 
 
         Mono<Booking> booking = savedEvent.flatMap(e -> {
@@ -85,7 +85,7 @@ public class CreateBookingServiceTest {
         CustomerId customerId = CustomerId.generate();
         EventId eventId = newEvent.id();
 
-        Mono<Event> savedEvent = eventRepository.save(newEvent);
+        Mono<Event> savedEvent = eventRepository.create(newEvent);
 
 
         Mono<Booking> booking = savedEvent.flatMap(e -> {
@@ -113,7 +113,18 @@ public class CreateBookingServiceTest {
         private Event savedEvent;
 
         @Override
-        public Mono<Event> save(Event event) {
+        public Mono<Event> create(Event event) {
+
+            // return Mono.defer(() -> Mono.just(this.savedEvent = event));
+
+            return Mono.fromSupplier(() -> {
+                this.savedEvent = event;
+                return event;
+            });
+        }
+
+        @Override
+        public Mono<Event> update(Event event) {
 
             // return Mono.defer(() -> Mono.just(this.savedEvent = event));
 

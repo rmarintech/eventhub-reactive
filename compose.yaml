@@ -1,0 +1,12 @@
+services:
+
+  postgres:
+    image: postgres:17
+
+    environment:
+      POSTGRES_DB: eventhub
+      POSTGRES_USER: eventhub
+      POSTGRES_PASSWORD: eventhub
+
+    ports:
+      - "5432:5432"

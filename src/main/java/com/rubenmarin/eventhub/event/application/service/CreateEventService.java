@@ -4,7 +4,6 @@ import com.rubenmarin.eventhub.event.application.port.in.CreateEventCommand;
 import com.rubenmarin.eventhub.event.application.port.in.CreateEventUseCase;
 import com.rubenmarin.eventhub.event.application.port.out.EventRepository;
 import com.rubenmarin.eventhub.event.domain.model.*;
-import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 public class CreateEventService implements CreateEventUseCase {
@@ -27,8 +26,8 @@ public class CreateEventService implements CreateEventUseCase {
 
         );
 
-        Mono<Event> saved = eventRepository.save(event);
-        return saved;
+        Mono<Event> created = eventRepository.create(event);
+        return created;
     }
 
 

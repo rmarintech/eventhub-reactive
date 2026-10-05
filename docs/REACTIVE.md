@@ -186,7 +186,7 @@ R2DBC → non-blocking → stays in reactive flow
 JDBC  → blocking     → isolate if used from WebFlux
 ```
 
-R2DBC itself has not yet been implemented in EventHub.
+R2DBC has now been implemented for Event persistence in EventHub.
 
 ## 12. Current learning tests
 
@@ -227,7 +227,8 @@ CreateEventUseCase.createEvent(...) → Mono<Event>
 EventQueryUseCase.findById(...)      → Mono<Event>
 EventQueryUseCase.findAll()          → Flux<Event>
 
-EventRepository.save(...)            → Mono<Event>
+EventRepository.create(...)          → Mono<Event>
+EventRepository.update(...)          → Mono<Event>
 EventRepository.findById(...)        → Mono<Event>
 EventRepository.findAll()            → Flux<Event>
 ```
@@ -386,15 +387,14 @@ Spring WebFlux fundamentals          ✅
         ↓
 Reactive HTTP input adapter          ✅
         ↓
-HTTP error handling                  ✅ CURRENT
+HTTP error handling                  ✅
         ↓
-Request validation                   🚧 NEXT
+Request validation                   ✅
         ↓
-R2DBC / PostgreSQL                   ⏳
+Booking reactive flow / HTTP API     ✅
+        ↓
+Event R2DBC / PostgreSQL             ✅ CURRENT
 ```
-
-The next step is request validation. Reactive database persistence has
-not yet been implemented.
 
 ## 23. Reactive coordination between Event and Booking
 
@@ -492,8 +492,81 @@ Booking HTTP API                     ✅
         ↓
 Publish Event API                    ✅
         ↓
-R2DBC / PostgreSQL                   🚧 NEXT
+R2DBC / PostgreSQL                   ✅ EVENT PERSISTENCE
 ```
 
-R2DBC/PostgreSQL has only been discussed conceptually so far; reactive
-database persistence has not yet been implemented.
+## 26. Spring Data R2DBC and PostgreSQL
+
+Event persistence now stays reactive through Spring Data R2DBC and the PostgreSQL R2DBC driver.
+
+``` text
+WebFlux
+  ↓
+Application service
+  ↓
+EventRepository
+  ↓
+R2dbcEventRepositoryAdapter
+  ↓
+ReactiveCrudRepository
+  ↓
+R2DBC PostgreSQL driver
+  ↓
+PostgreSQL
+```
+
+Unlike wrapping JDBC in a `Mono`, R2DBC provides a non-blocking database access model that fits the reactive pipeline directly.
+
+`SpringDataEventRepository` extends `ReactiveCrudRepository<EventEntity, UUID>`, so its operations already return `Mono` and `Flux`. The adapter maps those emitted persistence entities synchronously with `map()`:
+
+``` text
+Mono<EventEntity> → map(toDomain) → Mono<Event>
+Flux<EventEntity> → map(toDomain) → Flux<Event>
+```
+
+No manual `subscribe()` is used in the repository adapter.
+
+## 27. Reactive Create and Update
+
+A generated UUID means a new Event already has a non-null ID before it reaches Spring Data. `EventEntity` therefore implements `Persistable<UUID>` so the adapter can explicitly distinguish new and existing persistence entities.
+
+``` text
+repository.create(event)
+  ↓
+isNew = true
+  ↓
+Spring Data save(...)
+  ↓
+INSERT
+
+repository.update(event)
+  ↓
+isNew = false
+  ↓
+Spring Data save(...)
+  ↓
+UPDATE
+```
+
+The `isNew` value is marked `@Transient`: it controls Spring Data persistence behaviour but is not a PostgreSQL column.
+
+The create and update paths were verified against the running PostgreSQL database: new Events are inserted as `DRAFT`, and publishing an Event updates the existing row to `PUBLISHED`.
+
+The current Spring-backed HTTP integration tests use the configured PostgreSQL database, so tests that create Events can currently leave rows in the development database. PostgreSQL Testcontainers has not yet been implemented.
+
+## 28. Current position
+
+``` text
+Reactive Programming Fundamentals   ✅
+        ↓
+Spring WebFlux                      ✅
+        ↓
+HTTP / validation / Booking API     ✅
+        ↓
+Event R2DBC / PostgreSQL            ✅ CURRENT
+        ↓
+Booking persistence                 ⏳
+        ↓
+Concurrency                         ⏳
+```
+

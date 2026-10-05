@@ -37,6 +37,25 @@ public class Event {
         this.status = Objects.requireNonNull(status);
     }
 
+    public static Event rehydrate(
+            EventId id,
+            EventName name,
+            String description,
+            LocalDateTime startDate,
+            Capacity capacity,
+            Money price,
+            EventStatus status
+    ) {
+        return new Event(
+                id,
+                name,
+                description,
+                startDate,
+                capacity,
+                price,
+                status);
+    }
+
     public static Event create(
             EventName name,
             String description,

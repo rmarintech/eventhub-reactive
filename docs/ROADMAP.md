@@ -93,7 +93,7 @@ architecture tests remain pending
 -   [ ] Domain-specific exceptions
 -   [ ] Domain events
 -   [ ] Event domain-event tests
--   [ ] Persistence rehydration strategy
+-   [x] Persistence rehydration strategy
 -   [ ] Additional Event use cases
 -   [ ] Domain documentation update
 
@@ -158,16 +158,16 @@ architecture tests remain pending
 
 # 7. Reactive Persistence
 
--   [ ] PostgreSQL
--   [ ] R2DBC
--   [ ] JDBC vs R2DBC
--   [ ] Configure reactive PostgreSQL connection
--   [ ] Spring Data R2DBC
--   [ ] Persistence model
--   [ ] Domain ↔ persistence mapping
--   [ ] Reactive repository adapter
--   [ ] Reactive repository port
--   [ ] Reactive CRUD
+-   [x] PostgreSQL
+-   [x] R2DBC
+-   [x] JDBC vs R2DBC
+-   [x] Configure reactive PostgreSQL connection
+-   [x] Spring Data R2DBC
+-   [x] Persistence model
+-   [x] Domain ↔ persistence mapping
+-   [x] Reactive repository adapter
+-   [x] Reactive repository port
+-   [x] Reactive CRUD
 -   [ ] Reactive transactions
 -   [ ] Database migrations
 -   [ ] Repository integration tests
@@ -348,9 +348,9 @@ architecture tests remain pending
 -   [ ] Frontend Dockerfile
 -   [ ] Multi-stage builds
 -   [ ] Non-root containers
--   [ ] PostgreSQL container
+-   [x] PostgreSQL container
 -   [ ] Kafka container
--   [ ] Docker Compose
+-   [x] Docker Compose
 -   [ ] Container networking
 -   [ ] Health checks
 -   [ ] Secrets
@@ -542,7 +542,9 @@ Booking Domain / application flow   ✅
         ↓
 Booking HTTP API                    ✅
         ↓
-R2DBC / PostgreSQL                  🚧 NEXT
+Event R2DBC / PostgreSQL            ✅
+        ↓
+Booking persistence                 🚧 NEXT
         ↓
 Concurrency                         ⏳
         ↓

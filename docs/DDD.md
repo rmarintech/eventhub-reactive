@@ -909,7 +909,7 @@ CreateEventService
         ↓
 Event.create(...)          synchronous domain logic
         ↓
-EventRepository.save(...)
+EventRepository.create(...)
         ↓
 Mono<Event>
 ```
@@ -926,7 +926,8 @@ The repository port now expresses reactive persistence/query contracts:
 
 ``` java
 public interface EventRepository {
-    Mono<Event> save(Event event);
+    Mono<Event> create(Event event);
+    Mono<Event> update(Event event);
     Mono<Event> findById(EventId id);
     Flux<Event> findAll();
 }
@@ -935,7 +936,8 @@ public interface EventRepository {
 The cardinality is explicit:
 
 ``` text
-save(...)      → 0..1 result → Mono<Event>
+create(...)    → 0..1 result → Mono<Event>
+update(...)    → 0..1 result → Mono<Event>
 findById(...)  → 0..1 result → Mono<Event>
 findAll()      → 0..N results → Flux<Event>
 ```
@@ -947,10 +949,10 @@ A missing Event is represented by an empty `Mono`, rather than by
 
 # 26. Reactive Output Adapter and Lazy Execution
 
-The current output adapter is still in memory, but its operations now
-preserve lazy reactive execution.
+The in-memory output adapter was used first to study lazy reactive execution.
+It remains available as a plain Java test adapter, while production Event persistence now uses the R2DBC adapter described later in this document.
 
-`save()` uses `Mono.fromSupplier(...)` because the subscription lazily
+`create()` and `update()` use `Mono.fromSupplier(...)` because the subscription lazily
 produces a value while performing the in-memory save.
 
 `findById()` and `findAll()` use deferred publisher creation so the
@@ -1143,7 +1145,7 @@ Event                                   DOMAIN
     ↓
 EventRepository                         OUTPUT PORT
     ↓
-InMemoryEventRepository                 OUTPUT ADAPTER
+EventRepository implementation           OUTPUT ADAPTER
     ↓
 Mono<Event> / Flux<Event>
     ↓
@@ -1298,11 +1300,11 @@ invalid EventId representation     → 400 Bad Request
 
 # 35. HTTP Integration Test Isolation
 
-The WebFlux integration tests also exposed the lifecycle of the
-in-memory repository. `InMemoryEventRepository` is a Spring
-`@Repository` and therefore a singleton by default inside the reused
-test `ApplicationContext`. Its internal map can consequently contain
-Events created by earlier test methods.
+Earlier WebFlux integration tests exposed the lifecycle of the
+in-memory repository when it was the Spring production adapter. The
+production Event repository has since been replaced by the R2DBC adapter;
+`InMemoryEventRepository` is now a plain Java adapter used by tests that
+instantiate it directly.
 
 The list test was changed so it no longer assumes:
 
@@ -1509,7 +1511,7 @@ EventRepository
         ↓
 Event.publish()
         ↓
-EventRepository.save(...)
+EventRepository.update(...)
 ```
 
 `PublishEventService` loads the Event, translates an empty repository
@@ -1619,6 +1621,62 @@ application dependencies are correctly wired.
 
 ------------------------------------------------------------------------
 
-This is the current stopping point of the DDD and architecture
-documentation. Reactive database persistence with R2DBC/PostgreSQL is
-the next course area and has not yet been implemented.
+# 45. Reactive PostgreSQL Persistence with R2DBC
+
+The Event module now has real reactive persistence backed by PostgreSQL 17 and Spring Data R2DBC.
+PostgreSQL runs locally in Docker Compose and the application connects through an R2DBC URL.
+The schema is initialized from `src/main/resources/schema.sql`.
+
+The persistence boundary is now:
+
+``` text
+Event                                  DOMAIN
+  ↓
+EventRepository                        OUTPUT PORT
+  ↓
+R2dbcEventRepositoryAdapter            OUTPUT ADAPTER
+  ↓
+SpringDataEventRepository
+  ↓
+ReactiveCrudRepository<EventEntity, UUID>
+  ↓
+R2DBC PostgreSQL driver
+  ↓
+PostgreSQL
+```
+
+The domain remains persistence-independent. `EventEntity` is an infrastructure persistence model annotated with `@Table("events")`; domain Value Objects are flattened into relational columns such as total/available capacity and amount/currency.
+
+The adapter performs explicit mapping in both directions:
+
+``` text
+Event → EventEntity → PostgreSQL
+PostgreSQL → EventEntity → Event.rehydrate(...) → Event
+```
+
+`Event.rehydrate(...)` reconstructs an existing Aggregate while preserving its persisted ID, status and available capacity. It is distinct from `Event.create(...)`, which represents creation of a new Aggregate.
+
+# 46. Create vs Update Persistence Intent
+
+Because `Event.create()` generates its UUID before persistence, a non-null `@Id` alone cannot tell Spring Data whether the row is new. This was observed in practice: Spring Data treated a new entity as an update, the HTTP request returned successfully, but no row was inserted.
+
+`EventEntity` therefore implements `Persistable<UUID>` and exposes transient persistence metadata through `isNew`. The flag is not stored in PostgreSQL.
+
+The application-owned repository port now makes persistence intent explicit:
+
+``` text
+create(Event) → new Event → isNew = true  → INSERT
+update(Event) → existing Event → isNew = false → UPDATE
+```
+
+This keeps the persistence concern out of the domain. `CreateEventService` calls `create()`, while publication and capacity reservation call `update()`.
+
+The in-memory adapter implements the same port, although both operations use `Map.put(...)` internally because a `HashMap` does not need to distinguish SQL INSERT from UPDATE.
+
+The implementation was validated with the full green test suite and manually against PostgreSQL: creating Events produced persisted `DRAFT` rows and publishing an Event updated the same row to `PUBLISHED`.
+
+Booking persistence, reactive transactions, database migrations and PostgreSQL Testcontainers have not yet been implemented.
+
+------------------------------------------------------------------------
+
+This is the current stopping point of the DDD and architecture documentation.

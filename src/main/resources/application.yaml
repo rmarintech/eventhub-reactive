@@ -1,3 +1,13 @@
 spring:
   application:
     name: eventhub-reactive
+
+
+  r2dbc:
+    url: r2dbc:postgresql://localhost:5432/eventhub
+    username: eventhub
+    password: eventhub
+
+  sql:
+    init:
+      mode: always

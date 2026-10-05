@@ -19,10 +19,8 @@ public class CreateEventServiceTest {
 
     @Test
     void shouldCreateEvent() {
-
         InMemoryEventRepository repository = new InMemoryEventRepository();
         CreateEventService service = new CreateEventService(repository);
-
 
         CreateEventCommand command =
                 new CreateEventCommand(
@@ -33,20 +31,6 @@ public class CreateEventServiceTest {
                         new BigDecimal("49.99"),
                         Currency.getInstance("EUR")
                 );
-
-
-//        Event created = service.createEvent(command);
-//
-//        Assertions.assertNotNull(created.id());
-//        Assertions.assertEquals(new EventName("Reactive Java Workshop"), created.name());
-//        Assertions.assertEquals("Introduction to Project Reactor", created.description());
-//        Assertions.assertNotNull(created.startDate());
-//        Assertions.assertEquals(20, created.capacity().total());
-//        Assertions.assertEquals(20, created.capacity().available());
-//        Assertions.assertEquals(Money.euros(new BigDecimal("49.99")), created.price());
-//        Assertions.assertEquals(EventStatus.DRAFT, created.status());
-//
-//        Assertions.assertEquals(created, repository.savedEvent);
 
 
         Mono<Event> created = service.createEvent(command);
@@ -64,8 +48,6 @@ public class CreateEventServiceTest {
                     Assertions.assertEquals(event, repository.savedEvent);
                 })
                 .verifyComplete();
-
-
     }
 
 
@@ -74,9 +56,20 @@ public class CreateEventServiceTest {
         private Event savedEvent;
 
         @Override
-        public Mono<Event> save(Event event) {
+        public Mono<Event> create(Event event) {
 
            // return Mono.defer(() -> Mono.just(this.savedEvent = event));
+
+            return Mono.fromSupplier(() -> {
+                this.savedEvent= event;
+                return event;
+            });
+        }
+
+        @Override
+        public Mono<Event> update(Event event) {
+
+            // return Mono.defer(() -> Mono.just(this.savedEvent = event));
 
             return Mono.fromSupplier(() -> {
                 this.savedEvent= event;
