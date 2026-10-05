@@ -848,7 +848,8 @@ been studied and implemented in the course.
 
 # 23. DDD and Hexagonal Architecture
 
-The project now combines the domain model with a Hexagonal Architecture boundary.
+The project now combines the domain model with a Hexagonal Architecture
+boundary.
 
 The distinction studied so far is:
 
@@ -862,7 +863,9 @@ Hexagonal Architecture
 isolates the application and domain from external technical details
 ```
 
-The Event domain remains pure Java. The application layer coordinates use cases around that domain, while ports define the boundaries through which external adapters interact with the application.
+The Event domain remains pure Java. The application layer coordinates
+use cases around that domain, while ports define the boundaries through
+which external adapters interact with the application.
 
 Current dependency direction:
 
@@ -880,21 +883,24 @@ The domain does not depend on the application or infrastructure layers.
 
 # 24. Reactive Application Layer and Create Event Use Case
 
-The application boundary is now reactive while the domain remains synchronous and framework-independent.
+The application boundary is now reactive while the domain remains
+synchronous and framework-independent.
 
-The inbound command currently contains the HTTP-independent values required to create an Event, including its currency.
+The inbound command currently contains the HTTP-independent values
+required to create an Event, including its currency.
 
 The inbound port returns a reactive result:
 
-```java
+``` java
 public interface CreateEventUseCase {
     Mono<Event> createEvent(CreateEventCommand command);
 }
 ```
 
-`CreateEventService` creates the domain Aggregate synchronously and delegates persistence through the reactive repository port:
+`CreateEventService` creates the domain Aggregate synchronously and
+delegates persistence through the reactive repository port:
 
-```text
+``` text
 CreateEventCommand
         ↓
 CreateEventUseCase
@@ -908,7 +914,9 @@ EventRepository.save(...)
 Mono<Event>
 ```
 
-Reactive types are used at the application boundary and infrastructure interaction; `Event`, `Capacity`, `Money` and the other domain types still contain no `Mono` or `Flux`.
+Reactive types are used at the application boundary and infrastructure
+interaction; `Event`, `Capacity`, `Money` and the other domain types
+still contain no `Mono` or `Flux`.
 
 ------------------------------------------------------------------------
 
@@ -916,7 +924,7 @@ Reactive types are used at the application boundary and infrastructure interacti
 
 The repository port now expresses reactive persistence/query contracts:
 
-```java
+``` java
 public interface EventRepository {
     Mono<Event> save(Event event);
     Mono<Event> findById(EventId id);
@@ -926,50 +934,57 @@ public interface EventRepository {
 
 The cardinality is explicit:
 
-```text
+``` text
 save(...)      → 0..1 result → Mono<Event>
 findById(...)  → 0..1 result → Mono<Event>
 findAll()      → 0..N results → Flux<Event>
 ```
 
-A missing Event is represented by an empty `Mono`, rather than by `Mono<Optional<Event>>`.
+A missing Event is represented by an empty `Mono`, rather than by
+`Mono<Optional<Event>>`.
 
 ------------------------------------------------------------------------
 
 # 26. Reactive Output Adapter and Lazy Execution
 
-The current output adapter is still in memory, but its operations now preserve lazy reactive execution.
+The current output adapter is still in memory, but its operations now
+preserve lazy reactive execution.
 
-`save()` uses `Mono.fromSupplier(...)` because the subscription lazily produces a value while performing the in-memory save.
+`save()` uses `Mono.fromSupplier(...)` because the subscription lazily
+produces a value while performing the in-memory save.
 
-`findById()` and `findAll()` use deferred publisher creation so the current contents of the map are inspected at subscription time.
+`findById()` and `findAll()` use deferred publisher creation so the
+current contents of the map are inspected at subscription time.
 
 The distinction studied is:
 
-```text
+``` text
 fromSupplier → lazy VALUE
 
 defer        → lazy PUBLISHER
 ```
 
-The adapter remains an infrastructure implementation of the application-owned `EventRepository` port.
+The adapter remains an infrastructure implementation of the
+application-owned `EventRepository` port.
 
 ------------------------------------------------------------------------
 
 # 27. Query Input Port and Application Service
 
-Read operations are grouped in one query-oriented inbound port rather than creating one interface per simple query:
+Read operations are grouped in one query-oriented inbound port rather
+than creating one interface per simple query:
 
-```java
+``` java
 public interface EventQueryUseCase {
     Mono<Event> findById(EventId id);
     Flux<Event> findAll();
 }
 ```
 
-`EventQueryService` implements this port and delegates to `EventRepository`.
+`EventQueryService` implements this port and delegates to
+`EventRepository`.
 
-```text
+``` text
 EventQueryUseCase
         ↑
 EventQueryService
@@ -979,19 +994,23 @@ EventRepository
    └── findAll()
 ```
 
-This is an organization of application responsibilities; CQRS has not been introduced.
+This is an organization of application responsibilities; CQRS has not
+been introduced.
 
 ------------------------------------------------------------------------
 
 # 28. Dependency Inversion, Injection and Spring IoC
 
-The application services depend on `EventRepository`, an abstraction owned by the application boundary. Infrastructure implements that abstraction.
+The application services depend on `EventRepository`, an abstraction
+owned by the application boundary. Infrastructure implements that
+abstraction.
 
-Both application services receive the repository through constructor injection and remain free of Spring annotations.
+Both application services receive the repository through constructor
+injection and remain free of Spring annotations.
 
 Spring wiring lives in infrastructure:
 
-```java
+``` java
 @Configuration
 public class EventConfiguration {
 
@@ -1009,7 +1028,7 @@ public class EventConfiguration {
 
 The distinction studied remains:
 
-```text
+``` text
 Dependency Inversion
     → depend on an abstraction / port
 
@@ -1028,7 +1047,7 @@ The HTTP input adapter has now been implemented with Spring WebFlux.
 
 The current controller exposes:
 
-```text
+``` text
 POST /events       → create Event
 GET  /events       → list Events
 GET  /events/{id}  → find Event by id
@@ -1036,7 +1055,7 @@ GET  /events/{id}  → find Event by id
 
 HTTP-specific DTOs are kept in infrastructure:
 
-```text
+``` text
 HTTP JSON
     ↓
 CreateEventRequest          infrastructure input DTO
@@ -1054,15 +1073,18 @@ HTTP JSON
 
 This prevents the HTTP contract from becoming the domain model.
 
-The controller uses `map()` for the synchronous transformation from `Event` to `EventResponse`; it does not call `subscribe()` manually. WebFlux performs the subscription at the HTTP boundary.
+The controller uses `map()` for the synchronous transformation from
+`Event` to `EventResponse`; it does not call `subscribe()` manually.
+WebFlux performs the subscription at the HTTP boundary.
 
 ------------------------------------------------------------------------
 
 # 30. HTTP Contract Studied So Far
 
-The create endpoint explicitly consumes and produces JSON and returns `201 Created`:
+The create endpoint explicitly consumes and produces JSON and returns
+`201 Created`:
 
-```text
+``` text
 POST /events
 
 Request
@@ -1076,25 +1098,27 @@ Content-Type: application/json
 
 The distinction studied is:
 
-```text
+``` text
 Content-Type → format of the body being sent
 Accept       → format the client wants to receive
 consumes     → formats accepted by the endpoint
 produces     → formats produced by the endpoint
 ```
 
-Sending an unsupported request media type was tested and WebFlux returned `415 Unsupported Media Type` before entering the controller.
+Sending an unsupported request media type was tested and WebFlux
+returned `415 Unsupported Media Type` before entering the controller.
 
 The GET endpoints currently cover the successful path:
 
-```text
+``` text
 GET /events       → 200 OK + JSON collection
 GET /events/{id}  → 200 OK + JSON EventResponse when the Event exists
 ```
 
-The unsuccessful find-by-id paths have now also been implemented and tested:
+The unsuccessful find-by-id paths have now also been implemented and
+tested:
 
-```text
+``` text
 GET /events/{valid-existing-id}     → 200 OK
 GET /events/{valid-missing-id}      → 404 Not Found
 GET /events/{invalid-id-format}     → 400 Bad Request
@@ -1106,7 +1130,7 @@ GET /events/{invalid-id-format}     → 400 Bad Request
 
 The current vertical slice is:
 
-```text
+``` text
 HTTP request
     ↓
 EventController                         INPUT ADAPTER
@@ -1138,7 +1162,7 @@ The domain itself remains synchronous pure Java.
 
 The project now tests the architecture at several levels:
 
-```text
+``` text
 DOMAIN
   → pure business-rule unit tests
 
@@ -1152,15 +1176,20 @@ SPRING / HTTP INPUT ADAPTER
   → WebTestClient integration tests
 ```
 
-The fake repository was updated to preserve the semantics of the reactive port: lazy save/query execution, empty results when appropriate, and ID-aware `findById()` behaviour.
+The fake repository was updated to preserve the semantics of the
+reactive port: lazy save/query execution, empty results when
+appropriate, and ID-aware `findById()` behaviour.
 
-`WebTestClient` tests currently verify the successful create/list/find flows. The find-by-id test creates an Event through `POST /events`, captures the generated UUID from the response, and then retrieves that same resource through `GET /events/{id}`.
+`WebTestClient` tests currently verify the successful create/list/find
+flows. The find-by-id test creates an Event through `POST /events`,
+captures the generated UUID from the response, and then retrieves that
+same resource through `GET /events/{id}`.
 
 ------------------------------------------------------------------------
 
 # 33. Current Architecture Structure
 
-```text
+``` text
 com.rubenmarin.eventhub.event
 │
 ├── domain
@@ -1198,11 +1227,13 @@ com.rubenmarin.eventhub.event
 
 # 34. HTTP Error Handling
 
-A repository lookup that does not find an Event is represented by `Mono.empty()`. The repository does not decide HTTP semantics.
+A repository lookup that does not find an Event is represented by
+`Mono.empty()`. The repository does not decide HTTP semantics.
 
-`EventQueryService` translates that absence into an application-specific error using the Reactor operator already studied:
+`EventQueryService` translates that absence into an application-specific
+error using the Reactor operator already studied:
 
-```text
+``` text
 EventRepository.findById(...)
         ↓
 Mono.empty()
@@ -1212,11 +1243,14 @@ switchIfEmpty(Mono.error(...))
 EventNotFoundException
 ```
 
-`EventNotFoundException` belongs to the application layer because the application decides that a missing Event is an error for this use case. It contains no HTTP knowledge.
+`EventNotFoundException` belongs to the application layer because the
+application decides that a missing Event is an error for this use case.
+It contains no HTTP knowledge.
 
-The WebFlux input adapter translates application/web exceptions into HTTP responses through `@RestControllerAdvice` and `@ExceptionHandler`:
+The WebFlux input adapter translates application/web exceptions into
+HTTP responses through `@RestControllerAdvice` and `@ExceptionHandler`:
 
-```text
+``` text
 EventNotFoundException
         ↓
 GlobalExceptionHandler
@@ -1224,9 +1258,11 @@ GlobalExceptionHandler
 404 Not Found
 ```
 
-A malformed Event identifier is different. The controller receives a `String` from HTTP and must translate it into an `EventId`. The conversion is isolated in `parseEventId(String id)`.
+A malformed Event identifier is different. The controller receives a
+`String` from HTTP and must translate it into an `EventId`. The
+conversion is isolated in `parseEventId(String id)`.
 
-```text
+``` text
 HTTP String
     ↓
 parseEventId(...)
@@ -1240,13 +1276,19 @@ UUID.fromString(...)
                400 Bad Request
 ```
 
-`InvalidEventIdException` is kept in the web input adapter because the failure currently belongs to translation of HTTP input into the type required by the application.
+`InvalidEventIdException` is kept in the web input adapter because the
+failure currently belongs to translation of HTTP input into the type
+required by the application.
 
-A generic `@ExceptionHandler(IllegalArgumentException.class)` was deliberately avoided after testing it, because domain code also uses `IllegalArgumentException` for invariants. Mapping every such exception to HTTP 400 could incorrectly classify an unrelated application or programming error as a client error.
+A generic `@ExceptionHandler(IllegalArgumentException.class)` was
+deliberately avoided after testing it, because domain code also uses
+`IllegalArgumentException` for invariants. Mapping every such exception
+to HTTP 400 could incorrectly classify an unrelated application or
+programming error as a client error.
 
 The resulting distinction is:
 
-```text
+``` text
 valid EventId + Event exists       → 200 OK
 valid EventId + Event missing      → 404 Not Found
 invalid EventId representation     → 400 Bad Request
@@ -1256,17 +1298,24 @@ invalid EventId representation     → 400 Bad Request
 
 # 35. HTTP Integration Test Isolation
 
-The WebFlux integration tests also exposed the lifecycle of the in-memory repository. `InMemoryEventRepository` is a Spring `@Repository` and therefore a singleton by default inside the reused test `ApplicationContext`. Its internal map can consequently contain Events created by earlier test methods.
+The WebFlux integration tests also exposed the lifecycle of the
+in-memory repository. `InMemoryEventRepository` is a Spring
+`@Repository` and therefore a singleton by default inside the reused
+test `ApplicationContext`. Its internal map can consequently contain
+Events created by earlier test methods.
 
 The list test was changed so it no longer assumes:
 
-```text
+``` text
 events.size() == 1
 ```
 
-or that the Event created by the current test is the first element. Instead, it captures the ID returned by `POST /events`, performs `GET /events`, filters the returned collection by that ID, and verifies the matching Event.
+or that the Event created by the current test is the first element.
+Instead, it captures the ID returned by `POST /events`, performs
+`GET /events`, filters the returned collection by that ID, and verifies
+the matching Event.
 
-```text
+``` text
 POST Event X
     ↓
 capture X.id
@@ -1280,25 +1329,35 @@ findFirst().orElseThrow()
 verify Event X
 ```
 
-This makes the assertion independent of unrelated Events already stored in the singleton in-memory adapter without changing production scope only for testing.
+This makes the assertion independent of unrelated Events already stored
+in the singleton in-memory adapter without changing production scope
+only for testing.
 
-The current WebTestClient suite now covers successful create/list/find flows, a valid but missing Event ID returning 404, and a malformed Event ID returning 400. The full test suite is green.
+The current WebTestClient suite now covers successful create/list/find
+flows, a valid but missing Event ID returning 404, and a malformed Event
+ID returning 400. The full test suite is green.
 
 ------------------------------------------------------------------------
 
-This is the current stopping point of the architecture documentation. Request validation and reactive database persistence remain future course steps.
+This is the current stopping point of the architecture documentation.
+Request validation and reactive database persistence remain future
+course steps.
 
 ------------------------------------------------------------------------
 
 # 36. Request Validation at the HTTP Boundary
 
-Event creation now validates HTTP input before it reaches the application use case.
+Event creation now validates HTTP input before it reaches the
+application use case.
 
-`CreateEventRequest` uses Jakarta Bean Validation constraints for the rules studied so far, including required text fields, maximum Event name length, positive capacity, non-negative price and required start date/currency.
+`CreateEventRequest` uses Jakarta Bean Validation constraints for the
+rules studied so far, including required text fields, maximum Event name
+length, positive capacity, non-negative price and required start
+date/currency.
 
 The request flow is:
 
-```text
+``` text
 HTTP JSON
     ↓
 Jackson deserialization
@@ -1310,9 +1369,14 @@ CreateEventRequest
     └── invalid → WebExchangeBindException → 400 Bad Request
 ```
 
-This reinforces the distinction between boundary validation and domain invariants. HTTP validation rejects malformed or incomplete request data early, while the domain still protects its own business rules independently.
+This reinforces the distinction between boundary validation and domain
+invariants. HTTP validation rejects malformed or incomplete request data
+early, while the domain still protects its own business rules
+independently.
 
-Validation errors are translated by the WebFlux exception handler into a `ValidationErrorResponse` containing a timestamp, HTTP status, message and field-error map.
+Validation errors are translated by the WebFlux exception handler into a
+`ValidationErrorResponse` containing a timestamp, HTTP status, message
+and field-error map.
 
 ------------------------------------------------------------------------
 
@@ -1322,7 +1386,7 @@ A second business module, `booking`, has now been introduced.
 
 The Booking model studied so far contains:
 
-```text
+``` text
 Booking
 │
 ├── BookingId
@@ -1332,11 +1396,13 @@ Booking
 └── BookingStatus
 ```
 
-A Booking is created through its factory method with a generated `BookingId` and starts in `CONFIRMED` status. The number of places must be greater than zero.
+A Booking is created through its factory method with a generated
+`BookingId` and starts in `CONFIRMED` status. The number of places must
+be greater than zero.
 
 The lifecycle currently studied is intentionally small:
 
-```text
+``` text
 CONFIRMED
     │
     │ cancel()
@@ -1344,25 +1410,30 @@ CONFIRMED
 CANCELLED
 ```
 
-Trying to cancel an already cancelled Booking is rejected with `IllegalStateException`.
+Trying to cancel an already cancelled Booking is rejected with
+`IllegalStateException`.
 
-Booking domain tests cover successful creation, cancellation, repeated cancellation rejection and invalid place counts. A JUnit 5 parameterized test with `@ParameterizedTest` and `@ValueSource` was introduced to test multiple invalid place values.
+Booking domain tests cover successful creation, cancellation, repeated
+cancellation rejection and invalid place counts. A JUnit 5 parameterized
+test with `@ParameterizedTest` and `@ValueSource` was introduced to test
+multiple invalid place values.
 
 ------------------------------------------------------------------------
 
 # 38. Cross-Module Coordination Through an Input Port
 
-Creating a Booking requires reserving capacity in an Event. The Booking application layer does not access `EventRepository` directly.
+Creating a Booking requires reserving capacity in an Event. The Booking
+application layer does not access `EventRepository` directly.
 
 Instead, the Event module exposes an application input port:
 
-```text
+``` text
 ReserveEventPlacesUseCase
 ```
 
 The dependency direction is:
 
-```text
+``` text
 Booking application
         ↓
 ReserveEventPlacesUseCase       Event application API
@@ -1374,11 +1445,17 @@ EventRepository
 Event Aggregate
 ```
 
-This preserves the module boundary: another module communicates with Event through its application API rather than reaching into Event persistence.
+This preserves the module boundary: another module communicates with
+Event through its application API rather than reaching into Event
+persistence.
 
-Inside the Event module, `ReserveEventPlacesService` loads the Event through `EventRepository`, converts an empty result into `EventNotFoundException`, tells the Aggregate to reserve the requested places and saves the updated Event.
+Inside the Event module, `ReserveEventPlacesService` loads the Event
+through `EventRepository`, converts an empty result into
+`EventNotFoundException`, tells the Aggregate to reserve the requested
+places and saves the updated Event.
 
-The domain remains responsible for the actual reservation rules: the Event must be published and enough capacity must be available.
+The domain remains responsible for the actual reservation rules: the
+Event must be published and enough capacity must be available.
 
 ------------------------------------------------------------------------
 
@@ -1386,7 +1463,7 @@ The domain remains responsible for the actual reservation rules: the Event must 
 
 `CreateBookingService` coordinates the two operations studied so far:
 
-```text
+``` text
 CreateBookingCommand
         ↓
 reserve Event places
@@ -1398,14 +1475,150 @@ create/save Booking
 Mono<Booking>
 ```
 
-`flatMap()` is required because reserving Event places returns a Publisher and the next operation, saving the Booking, also returns a Publisher.
+`flatMap()` is required because reserving Event places returns a
+Publisher and the next operation, saving the Booking, also returns a
+Publisher.
 
-An important Reactor rule was reinforced while implementing this flow: operators create new Publishers. Calling a reactive method and ignoring the returned `Mono` does not add that operation to the subscribed pipeline.
+An important Reactor rule was reinforced while implementing this flow:
+operators create new Publishers. Calling a reactive method and ignoring
+the returned `Mono` does not add that operation to the subscribed
+pipeline.
 
-The application tests use `StepVerifier` and in-memory fake repositories. They currently verify successful Booking creation and propagation of an insufficient-capacity error. The success scenario also verifies the generated Booking data and the Event association.
+The application tests use `StepVerifier` and in-memory fake
+repositories. They currently verify successful Booking creation and
+propagation of an insufficient-capacity error. The success scenario also
+verifies the generated Booking data and the Event association.
 
-Common test dependencies are recreated before every test using JUnit 5 `@BeforeEach`, keeping the stateful fake repositories isolated between test methods.
+Common test dependencies are recreated before every test using JUnit 5
+`@BeforeEach`, keeping the stateful fake repositories isolated between
+test methods.
 
 ------------------------------------------------------------------------
 
-This is the current stopping point of the DDD and architecture documentation. The Booking HTTP adapter and reactive database persistence have not yet been implemented.
+# 40. Publish Event Application Use Case
+
+Event publication is now exposed through an explicit application input
+port:
+
+``` text
+PublishEventUseCase
+        ↑
+PublishEventService
+        ↓
+EventRepository
+        ↓
+Event.publish()
+        ↓
+EventRepository.save(...)
+```
+
+`PublishEventService` loads the Event, translates an empty repository
+result into `EventNotFoundException`, invokes the synchronous domain
+behaviour `event.publish()`, and composes the reactive save operation
+with `flatMap()`.
+
+The service is tested for both the successful `DRAFT → PUBLISHED`
+transition and the missing-Event error path.
+
+------------------------------------------------------------------------
+
+# 41. Booking HTTP Input Adapter
+
+The Booking module now exposes:
+
+``` text
+POST /bookings
+```
+
+The adapter keeps the HTTP contract separate from the application and
+domain models:
+
+``` text
+HTTP JSON
+    ↓
+CreateBookingRequest
+    ↓
+CreateBookingCommand
+    ↓
+CreateBookingUseCase
+    ↓
+Mono<Booking>
+    ↓ map(...)
+BookingResponse
+    ↓
+201 Created
+```
+
+`CreateBookingRequest` validates non-blank identifier strings and a
+positive number of places. The web adapter converts identifier strings
+into `UUID`, `CustomerId` and `EventId` values before creating the
+application command.
+
+Malformed UUID input is translated into the web-specific
+`InvalidIdException` and mapped to `400 Bad Request`.
+
+`BookingResponse` exposes the generated Booking ID, customer ID, Event
+ID, number of places and Booking status.
+
+------------------------------------------------------------------------
+
+# 42. Event Publication HTTP Endpoint
+
+Event publication is now available through:
+
+``` text
+POST /events/{id}/publish
+```
+
+The Event identifier belongs in the URL because it identifies the
+resource on which the publish operation is executed. No request body is
+currently required because `publish()` needs no additional input.
+
+The controller delegates to `PublishEventUseCase` rather than accessing
+`EventRepository` directly.
+
+------------------------------------------------------------------------
+
+# 43. Event Availability in the HTTP Contract
+
+`EventResponse` now exposes both:
+
+``` text
+capacity   → total Event capacity
+available  → currently available places
+```
+
+The complete Booking flow was manually verified with an Event whose
+availability changed from `20` to `17` after creating a Booking for `3`
+places.
+
+------------------------------------------------------------------------
+
+# 44. Booking Controller Isolation Test
+
+A focused `BookingControllerTest` has been added using Mockito and
+`WebTestClient`.
+
+`WebTestClient` is bound directly to a real `BookingController`, while
+`CreateBookingUseCase` is replaced with a Mockito mock:
+
+``` text
+WebTestClient
+      ↓
+BookingController              real
+      ↓
+CreateBookingUseCase           mock
+```
+
+This isolates the HTTP adapter from the real application service and
+repositories while verifying the `POST /bookings` HTTP contract and
+`201 Created` response.
+
+Spring configuration tests also verify that the Event and Booking
+application dependencies are correctly wired.
+
+------------------------------------------------------------------------
+
+This is the current stopping point of the DDD and architecture
+documentation. Reactive database persistence with R2DBC/PostgreSQL is
+the next course area and has not yet been implemented.

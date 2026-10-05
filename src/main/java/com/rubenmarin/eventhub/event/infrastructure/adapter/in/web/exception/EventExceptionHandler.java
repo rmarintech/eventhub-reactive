@@ -13,7 +13,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 @RestControllerAdvice
-public class GlobalExceptionHandler {
+public class EventExceptionHandler {
 
     @ExceptionHandler(EventNotFoundException.class)
     public ResponseEntity<?> handleEventNotFoundException(EventNotFoundException e){

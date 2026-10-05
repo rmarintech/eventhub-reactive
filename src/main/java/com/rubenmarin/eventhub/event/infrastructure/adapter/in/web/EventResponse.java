@@ -11,8 +11,10 @@ public record EventResponse(
         String description,
         LocalDateTime startDate,
         int capacity,
+        int available,
         BigDecimal price,
-        String currency) {
+        String currency,
+        String status) {
 
 
 }

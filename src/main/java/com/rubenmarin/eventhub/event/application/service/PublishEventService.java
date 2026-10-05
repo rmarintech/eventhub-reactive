@@ -1,21 +1,21 @@
 package com.rubenmarin.eventhub.event.application.service;
 
 import com.rubenmarin.eventhub.event.application.exception.EventNotFoundException;
-import com.rubenmarin.eventhub.event.application.port.in.ReserveEventPlacesUseCase;
+import com.rubenmarin.eventhub.event.application.port.in.PublishEventUseCase;
 import com.rubenmarin.eventhub.event.application.port.out.EventRepository;
 import com.rubenmarin.eventhub.event.domain.model.Event;
 import com.rubenmarin.eventhub.event.domain.model.EventId;
 import reactor.core.publisher.Mono;
 
-public class ReserveEventPlacesService implements ReserveEventPlacesUseCase {
+public class PublishEventService implements PublishEventUseCase {
     private final EventRepository eventRepository;
 
-    public ReserveEventPlacesService(EventRepository eventRepository) {
+    public PublishEventService(EventRepository eventRepository) {
         this.eventRepository = eventRepository;
     }
 
     @Override
-    public Mono<Event> reserveEventPlaces(EventId id, int places) {
+    public Mono<Event> publishEvent(EventId id) {
         Mono<Event> eventFound = eventRepository.findById(id)
                 .switchIfEmpty(
                         Mono.error(
@@ -23,13 +23,13 @@ public class ReserveEventPlacesService implements ReserveEventPlacesUseCase {
                         )
                 );
 
-        Mono<Event> eventReserved =
+        Mono<Event> eventPublished =
                 eventFound.flatMap(event -> {
-                    event.reservePlaces(places);
+                    event.publish();
                     return eventRepository.save(event);
 
                 });
 
-        return eventReserved;
+        return eventPublished;
     }
 }

@@ -1,4 +1,4 @@
-package com.rubenmarin.eventhub.infrastructure.adapter.out.persistence;
+package com.rubenmarin.eventhub.event.infrastructure.adapter.out.persistence;
 
 
 import com.rubenmarin.eventhub.event.application.port.out.EventRepository;

@@ -1,35 +1,43 @@
 # Reactive Programming --- EventHub
 
-This document contains only the Reactive Programming concepts already studied and tested in EventHub.
+This document contains only the Reactive Programming concepts already
+studied and tested in EventHub.
 
 ## 1. Core model
 
-We studied **imperative vs reactive**, **blocking vs non-blocking**, and **synchronous vs asynchronous**. Reactive programming models work as streams of signals; it does not automatically mean asynchronous or multithreaded execution.
+We studied **imperative vs reactive**, **blocking vs non-blocking**, and
+**synchronous vs asynchronous**. Reactive programming models work as
+streams of signals; it does not automatically mean asynchronous or
+multithreaded execution.
 
 ## 2. Reactive Streams
 
-The model studied contains `Publisher`, `Subscriber`, `Subscription` and `Processor`. Backpressure lets a subscriber express how much data it is ready to receive. Project Reactor implements this model for Java.
+The model studied contains `Publisher`, `Subscriber`, `Subscription` and
+`Processor`. Backpressure lets a subscriber express how much data it is
+ready to receive. Project Reactor implements this model for Java.
 
 ## 3. Mono and Flux
 
-```text
+``` text
 Mono<T> → 0..1 values
 Flux<T> → 0..N values
 ```
 
-Signals studied are `onNext`, `onComplete` and `onError`. `onError` and `onComplete` are terminal signals.
+Signals studied are `onNext`, `onComplete` and `onError`. `onError` and
+`onComplete` are terminal signals.
 
 ## 4. Subscription and lazy execution
 
-Building a pipeline does not necessarily execute it. Subscription triggers execution.
+Building a pipeline does not necessarily execute it. Subscription
+triggers execution.
 
-```text
+``` text
 build pipeline → recipe exists → subscribe → execution starts
 ```
 
 Studied creation methods:
 
-```text
+``` text
 Mono.just(value)       → value already available
 Mono.fromSupplier(...) → lazy value
 Mono.fromCallable(...) → lazy Callable-based operation
@@ -38,13 +46,18 @@ Mono.defer(...)        → lazy Publisher creation
 
 ## 5. Operators
 
-`map()` transforms values, `filter()` filters them, `flatMap()` flattens nested publishers and can process asynchronous publishers concurrently, while `concatMap()` processes them sequentially and preserves order. Operator order matters.
+`map()` transforms values, `filter()` filters them, `flatMap()` flattens
+nested publishers and can process asynchronous publishers concurrently,
+while `concatMap()` processes them sequentially and preserves order.
+Operator order matters.
 
 ### `switchIfEmpty()`
 
-`switchIfEmpty()` switches to a fallback Publisher when the original Publisher completes without emitting a value. If the original Publisher emits a value, the fallback Publisher is not used.
+`switchIfEmpty()` switches to a fallback Publisher when the original
+Publisher completes without emitting a value. If the original Publisher
+emits a value, the fallback Publisher is not used.
 
-```text
+``` text
 Mono.empty()
     ↓
 switchIfEmpty(fallback)
@@ -54,17 +67,20 @@ fallback value
 
 ### `zip()`
 
-`zip()` combines values emitted by multiple Publishers. With two `Mono` instances, both must emit a value before a `Tuple2` can be created.
+`zip()` combines values emitted by multiple Publishers. With two `Mono`
+instances, both must emit a value before a `Tuple2` can be created.
 
-```text
+``` text
 Mono<T1> ──┐
            ├── zip ──► Tuple2<T1, T2>
 Mono<T2> ──┘
 ```
 
-If one of the zipped Publishers completes empty, the zipped result also completes without emitting a value. A fallback can be supplied before the `zip()` when that matches the required semantics:
+If one of the zipped Publishers completes empty, the zipped result also
+completes without emitting a value. A fallback can be supplied before
+the `zip()` when that matches the required semantics:
 
-```java
+``` java
 Mono<Integer> availablePlaces =
         Mono.<Integer>empty()
                 .switchIfEmpty(Mono.just(0));
@@ -72,7 +88,7 @@ Mono<Integer> availablePlaces =
 
 ## 6. Reactive error handling
 
-```text
+``` text
 doOnError      → observe an error
 onErrorReturn  → fixed fallback value
 onErrorResume  → fallback Publisher
@@ -80,13 +96,15 @@ retry          → resubscribe upstream
 timeout        → TimeoutException when work takes too long
 ```
 
-`timeout().retry()` lets retry see the timeout; `retry().timeout()` places the timeout downstream of retry.
+`timeout().retry()` lets retry see the timeout; `retry().timeout()`
+places the timeout downstream of retry.
 
 ## 7. StepVerifier
 
-`StepVerifier` subscribes and verifies reactive signals without relying on `Thread.sleep()`.
+`StepVerifier` subscribes and verifies reactive signals without relying
+on `Thread.sleep()`.
 
-```java
+``` java
 StepVerifier.create(result)
         .expectNext("SUCCESS")
         .verifyComplete();
@@ -94,7 +112,7 @@ StepVerifier.create(result)
 
 ## 8. Cold and hot publishers
 
-```text
+``` text
 COLD
 subscription → new independent execution
 
@@ -103,26 +121,30 @@ subscribers share an ongoing stream
 late subscribers may miss previous emissions
 ```
 
-We used `publish()` to create a `ConnectableFlux` and `connect()` to start its shared upstream subscription.
+We used `publish()` to create a `ConnectableFlux` and `connect()` to
+start its shared upstream subscription.
 
 ## 9. Threading
 
-A simple synchronous Reactor pipeline executes on the subscribing thread by default.
+A simple synchronous Reactor pipeline executes on the subscribing thread
+by default.
 
-```text
+``` text
 Reactive != automatically multithreaded
 ```
 
-`subscribeOn()` controls where subscription/upstream work is scheduled. `publishOn()` changes the execution context for downstream operators after that point.
+`subscribeOn()` controls where subscription/upstream work is scheduled.
+`publishOn()` changes the execution context for downstream operators
+after that point.
 
-```text
+``` text
 subscribeOn → where subscription/upstream execution starts
 publishOn   → from this point, downstream continues on another Scheduler
 ```
 
 ## 10. Reactor schedulers
 
-```text
+``` text
 Schedulers.parallel()
     → CPU-oriented work
     → avoid blocking
@@ -132,31 +154,34 @@ Schedulers.boundedElastic()
     → isolate blocking operations
 ```
 
-```java
+``` java
 Mono.fromCallable(() -> oldBlockingLibrary.call())
         .subscribeOn(Schedulers.boundedElastic());
 ```
 
-`boundedElastic()` does not make blocking code non-blocking; it isolates that blocking work.
+`boundedElastic()` does not make blocking code non-blocking; it isolates
+that blocking work.
 
 ## 11. Event loop and blocking
 
-The WebFlux event-loop model was introduced conceptually to understand why blocking work is dangerous. With non-blocking I/O, an event-loop thread can process other requests while waiting for I/O completion.
+The WebFlux event-loop model was introduced conceptually to understand
+why blocking work is dangerous. With non-blocking I/O, an event-loop
+thread can process other requests while waiting for I/O completion.
 
-```text
+``` text
 Event Loop + blocking operation = bad combination
 ```
 
 When blocking code cannot be avoided:
 
-```java
+``` java
 Mono.fromCallable(() -> blockingOperation())
         .subscribeOn(Schedulers.boundedElastic());
 ```
 
 The persistence distinction discussed conceptually was:
 
-```text
+``` text
 R2DBC → non-blocking → stays in reactive flow
 JDBC  → blocking     → isolate if used from WebFlux
 ```
@@ -165,15 +190,21 @@ R2DBC itself has not yet been implemented in EventHub.
 
 ## 12. Current learning tests
 
-`ReactorBasicsTest` currently covers Mono/Flux creation, Consumer and signals, lazy execution, map/filter, flatMap/concatMap, `switchIfEmpty`, `zip`, error propagation, retry/timeout/fallback, cold/hot publishers, StepVerifier, default threading, subscribeOn, publishOn, parallel and boundedElastic.
+`ReactorBasicsTest` currently covers Mono/Flux creation, Consumer and
+signals, lazy execution, map/filter, flatMap/concatMap, `switchIfEmpty`,
+`zip`, error propagation, retry/timeout/fallback, cold/hot publishers,
+StepVerifier, default threading, subscribeOn, publishOn, parallel and
+boundedElastic.
 
 ## 13. Spring WebFlux fundamentals
 
-Spring WebFlux has now been added to EventHub. Project Reactor provides the reactive programming model (`Mono`, `Flux`, operators, schedulers), while Spring WebFlux provides the reactive HTTP/web layer.
+Spring WebFlux has now been added to EventHub. Project Reactor provides
+the reactive programming model (`Mono`, `Flux`, operators, schedulers),
+while Spring WebFlux provides the reactive HTTP/web layer.
 
 The servlet-style and reactive models were compared conceptually:
 
-```text
+``` text
 Traditional blocking style
 request → thread → blocking I/O → response
 
@@ -181,13 +212,17 @@ Reactive WebFlux style
 request → event-loop processing → non-blocking I/O → continuation → response
 ```
 
-Wrapping blocking JDBC work in `Mono.just(...)` does not make it non-blocking because the JDBC call is evaluated before the `Mono` is created. When unavoidable blocking work must be isolated, the studied pattern is `fromCallable(...).subscribeOn(boundedElastic())`; the target persistence stack for EventHub remains R2DBC.
+Wrapping blocking JDBC work in `Mono.just(...)` does not make it
+non-blocking because the JDBC call is evaluated before the `Mono` is
+created. When unavoidable blocking work must be isolated, the studied
+pattern is `fromCallable(...).subscribeOn(boundedElastic())`; the target
+persistence stack for EventHub remains R2DBC.
 
 ## 14. Reactive application boundary
 
 The EventHub application ports now expose reactive results:
 
-```text
+``` text
 CreateEventUseCase.createEvent(...) → Mono<Event>
 EventQueryUseCase.findById(...)      → Mono<Event>
 EventQueryUseCase.findAll()          → Flux<Event>
@@ -197,35 +232,45 @@ EventRepository.findById(...)        → Mono<Event>
 EventRepository.findAll()            → Flux<Event>
 ```
 
-The domain remains synchronous. `Event.create(...)` and domain behaviour do not return `Mono` or `Flux`.
+The domain remains synchronous. `Event.create(...)` and domain behaviour
+do not return `Mono` or `Flux`.
 
 ## 15. `fromSupplier` vs `defer` in the repository
 
 The in-memory repository was used to reinforce lazy execution:
 
-```text
+``` text
 fromSupplier → execute lazily and produce a VALUE
 
 defer        → execute lazily and produce/select a PUBLISHER
 ```
 
-`Mono.justOrEmpty(...)` was also used to model a possibly absent value without emitting `null`. Reactor publishers do not emit `null` values.
+`Mono.justOrEmpty(...)` was also used to model a possibly absent value
+without emitting `null`. Reactor publishers do not emit `null` values.
 
 ## 16. WebFlux HTTP input adapter
 
-The first reactive HTTP input adapter is implemented with `EventController`.
+The first reactive HTTP input adapter is implemented with
+`EventController`.
 
-Current endpoints:
+Current Event endpoints include:
 
-```text
+``` text
 POST /events
 GET  /events
 GET  /events/{id}
+POST /events/{id}/publish
+```
+
+The Booking HTTP adapter now also exposes:
+
+``` text
+POST /bookings
 ```
 
 The create flow is:
 
-```text
+``` text
 JSON
  ↓
 CreateEventRequest
@@ -241,20 +286,24 @@ Mono<EventResponse>
 JSON
 ```
 
-`map()` is used because `Event → EventResponse` is a synchronous transformation. The controller does not call `subscribe()`; WebFlux subscribes at the HTTP boundary.
+`map()` is used because `Event → EventResponse` is a synchronous
+transformation. The controller does not call `subscribe()`; WebFlux
+subscribes at the HTTP boundary.
 
 ## 17. HTTP media types
 
 The following HTTP concepts have been tested:
 
-```text
+``` text
 Content-Type → format of the body being sent
 Accept       → format requested for the response
 consumes     → media types accepted by the endpoint
 produces     → media types produced by the endpoint
 ```
 
-The create endpoint consumes and produces JSON and returns `201 Created`. Sending an unsupported request `Content-Type` produced `415 Unsupported Media Type`.
+The create endpoint consumes and produces JSON and returns
+`201 Created`. Sending an unsupported request `Content-Type` produced
+`415 Unsupported Media Type`.
 
 ## 18. WebTestClient
 
@@ -262,7 +311,7 @@ The create endpoint consumes and produces JSON and returns `201 Created`. Sendin
 
 The tests currently verify:
 
-```text
+``` text
 POST /events                       → 201 Created + JSON EventResponse
 GET /events                        → 200 OK + JSON list
 GET /events/{existing-id}          → 200 OK + JSON EventResponse
@@ -270,15 +319,20 @@ GET /events/{missing-valid-id}     → 404 Not Found
 GET /events/{invalid-id-format}    → 400 Bad Request
 ```
 
-The find-by-id test creates an Event first, captures the generated ID from the POST response and uses it in the following GET request.
+The find-by-id test creates an Event first, captures the generated ID
+from the POST response and uses it in the following GET request.
 
 ## 19. Empty publishers and HTTP not-found semantics
 
-The unsuccessful query path has now been studied. `EventRepository.findById(...)` represents absence with `Mono.empty()`. An empty publisher is a completion signal, not an error signal, so it does not automatically express HTTP `404 Not Found`.
+The unsuccessful query path has now been studied.
+`EventRepository.findById(...)` represents absence with `Mono.empty()`.
+An empty publisher is a completion signal, not an error signal, so it
+does not automatically express HTTP `404 Not Found`.
 
-The application service converts the empty result into an application error:
+The application service converts the empty result into an application
+error:
 
-```text
+``` text
 Mono.empty()
     ↓
 switchIfEmpty(Mono.error(new EventNotFoundException(...)))
@@ -286,32 +340,46 @@ switchIfEmpty(Mono.error(new EventNotFoundException(...)))
 onError
 ```
 
-The WebFlux exception handler then translates that application error to HTTP 404. This keeps HTTP semantics out of the repository and application exception itself.
+The WebFlux exception handler then translates that application error to
+HTTP 404. This keeps HTTP semantics out of the repository and
+application exception itself.
 
 ## 20. WebFlux exception translation
 
-`@RestControllerAdvice` provides shared exception handling for the web layer, while `@ExceptionHandler` selects the exception type handled by each method.
+`@RestControllerAdvice` provides shared exception handling for the web
+layer, while `@ExceptionHandler` selects the exception type handled by
+each method.
 
 The mappings implemented and tested are:
 
-```text
+``` text
 EventNotFoundException   → 404 Not Found
 InvalidEventIdException  → 400 Bad Request
 ```
 
-The malformed-ID path is translated at the HTTP input adapter boundary. `parseEventId(String)` converts the path variable to `EventId`; an invalid UUID representation becomes `InvalidEventIdException`.
+The malformed-ID path is translated at the HTTP input adapter boundary.
+`parseEventId(String)` converts the path variable to `EventId`; an
+invalid UUID representation becomes `InvalidEventIdException`.
 
-A generic handler for every `IllegalArgumentException` was tested and then narrowed. Domain invariants also use `IllegalArgumentException`, so globally translating the base exception to HTTP 400 would be too broad.
+A generic handler for every `IllegalArgumentException` was tested and
+then narrowed. Domain invariants also use `IllegalArgumentException`, so
+globally translating the base exception to HTTP 400 would be too broad.
 
 ## 21. Integration-test state
 
-The Spring `InMemoryEventRepository` is a singleton in the test `ApplicationContext`, so its map may retain Events created by other integration-test methods. The list test therefore does not assert that exactly one Event exists or rely on list order. It captures the Event ID created by the current POST, finds that Event in the GET result using `filter(...).findFirst().orElseThrow()`, and verifies its fields.
+The Spring `InMemoryEventRepository` is a singleton in the test
+`ApplicationContext`, so its map may retain Events created by other
+integration-test methods. The list test therefore does not assert that
+exactly one Event exists or rely on list order. It captures the Event ID
+created by the current POST, finds that Event in the GET result using
+`filter(...).findFirst().orElseThrow()`, and verifies its fields.
 
-This keeps the test focused on its actual requirement while leaving the production repository scope unchanged.
+This keeps the test focused on its actual requirement while leaving the
+production repository scope unchanged.
 
 ## 22. Current position
 
-```text
+``` text
 Reactive Programming Fundamentals   ✅
         ↓
 Spring WebFlux fundamentals          ✅
@@ -325,13 +393,15 @@ Request validation                   🚧 NEXT
 R2DBC / PostgreSQL                   ⏳
 ```
 
-The next step is request validation. Reactive database persistence has not yet been implemented.
+The next step is request validation. Reactive database persistence has
+not yet been implemented.
 
 ## 23. Reactive coordination between Event and Booking
 
-The Booking application flow has now provided a practical use of `flatMap()` across application use cases.
+The Booking application flow has now provided a practical use of
+`flatMap()` across application use cases.
 
-```text
+``` text
 reserveEventPlaces(...)
         ↓
 Mono<Event>
@@ -343,34 +413,87 @@ Mono<Booking>
 
 The studied rule is:
 
-```text
+``` text
 lambda returns a normal value       → map
 lambda returns Mono / Flux          → flatMap
 ordered Flux async composition      → concatMap when sequential ordering is required
 ```
 
-During implementation, an important lazy-composition mistake was tested and corrected: calling a reactive repository method without returning/composing its `Mono` means that operation is not part of the subscribed pipeline.
+During implementation, an important lazy-composition mistake was tested
+and corrected: calling a reactive repository method without
+returning/composing its `Mono` means that operation is not part of the
+subscribed pipeline.
 
-`StepVerifier` is now also used in Booking application tests. The tests verify a successful `Mono<Booking>` and verify an `IllegalStateException` error signal when the requested number of places exceeds Event capacity.
+`StepVerifier` is now also used in Booking application tests. The tests
+verify a successful `Mono<Booking>` and verify an
+`IllegalStateException` error signal when the requested number of places
+exceeds Event capacity.
 
-JUnit 5 `@BeforeEach` is used to recreate the stateful in-memory fake repositories and application services before each test.
+JUnit 5 `@BeforeEach` is used to recreate the stateful in-memory fake
+repositories and application services before each test.
 
-## 24. Current position
+## 24. Booking HTTP API and controller isolation
 
-```text
+The reactive Booking flow is now exposed through `POST /bookings`.
+
+``` text
+HTTP JSON
+    ↓
+CreateBookingRequest
+    ↓
+CreateBookingCommand
+    ↓
+CreateBookingUseCase
+    ↓
+Mono<Booking>
+    ↓ map(Booking → BookingResponse)
+    ↓
+201 Created
+```
+
+The controller uses `map()` because `Booking → BookingResponse` is a
+synchronous transformation.
+
+A focused controller test was introduced with Mockito and
+`WebTestClient`. `WebTestClient` is bound directly to the real
+`BookingController`, while `CreateBookingUseCase` is mocked.
+
+The Event publication flow also reinforces reactive composition:
+
+``` text
+EventRepository.findById(...)
+    ↓
+switchIfEmpty(...)
+    ↓
+flatMap(event → publish + save)
+    ↓
+Mono<Event>
+```
+
+The publish service is tested with `StepVerifier` for both successful
+publication and `EventNotFoundException`.
+
+## 25. Current position
+
+``` text
 Reactive Programming Fundamentals   ✅
         ↓
 Spring WebFlux fundamentals          ✅
         ↓
-Reactive HTTP input adapter          ✅
+Reactive HTTP input adapters         ✅
         ↓
 HTTP error handling                  ✅
         ↓
 Request validation                   ✅
         ↓
-Booking reactive application flow    ✅ CURRENT
+Booking reactive application flow    ✅
         ↓
-Booking HTTP API                     🚧 NEXT
+Booking HTTP API                     ✅
         ↓
-R2DBC / PostgreSQL                   ⏳
+Publish Event API                    ✅
+        ↓
+R2DBC / PostgreSQL                   🚧 NEXT
 ```
+
+R2DBC/PostgreSQL has only been discussed conceptually so far; reactive
+database persistence has not yet been implemented.

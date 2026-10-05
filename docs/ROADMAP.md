@@ -83,7 +83,8 @@ implemented and validated.
 -   [ ] Architecture tests
 -   [ ] Hexagonal Architecture documentation
 
-**Status:** IN PROGRESS — HTTP input adapter is implemented; dedicated architecture tests remain pending
+**Status:** IN PROGRESS --- HTTP input adapter is implemented; dedicated
+architecture tests remain pending
 
 ------------------------------------------------------------------------
 
@@ -180,12 +181,14 @@ implemented and validated.
 -   [x] Create Event use case
 -   [x] Find Event use case
 -   [x] List Events use case
--   [ ] Publish Event use case
+-   [x] Publish Event use case
 -   [ ] Cancel Event use case
 -   [x] Reactive Event REST API
 -   [x] Request / response DTOs
 -   [x] Validation
 -   [x] Error responses
+-   [x] Publish Event service tests
+-   [x] Publish Event HTTP endpoint
 -   [ ] API integration tests
 
 ------------------------------------------------------------------------
@@ -205,7 +208,8 @@ implemented and validated.
 -   [x] Booking ports
 -   [x] Booking adapters
 -   [ ] Booking persistence
--   [ ] Booking REST API
+-   [x] Booking REST API
+-   [x] Booking controller test with mocked use case
 
 ------------------------------------------------------------------------
 
@@ -323,7 +327,7 @@ implemented and validated.
 
 -   [ ] Complete domain unit-test suite
 -   [x] Application tests with fake ports
--   [ ] Mockito
+-   [x] Mockito
 -   [x] Reactor `StepVerifier`
 -   [x] WebFlux `WebTestClient`
 -   [ ] R2DBC integration tests
@@ -536,9 +540,9 @@ Request validation                  ✅
         ↓
 Booking Domain / application flow   ✅
         ↓
-Booking HTTP API                    🚧 NEXT
+Booking HTTP API                    ✅
         ↓
-R2DBC / PostgreSQL                  ⏳
+R2DBC / PostgreSQL                  🚧 NEXT
         ↓
 Concurrency                         ⏳
         ↓

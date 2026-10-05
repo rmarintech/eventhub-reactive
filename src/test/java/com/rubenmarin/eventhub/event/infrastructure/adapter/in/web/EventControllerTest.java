@@ -1,4 +1,4 @@
-package com.rubenmarin.eventhub.infrastructure.adapter.in.web;
+package com.rubenmarin.eventhub.event.infrastructure.adapter.in.web;
 
 import com.rubenmarin.eventhub.event.application.exception.EventNotFoundException;
 import com.rubenmarin.eventhub.event.domain.model.Event;

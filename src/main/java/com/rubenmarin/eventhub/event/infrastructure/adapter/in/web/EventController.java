@@ -3,6 +3,7 @@ package com.rubenmarin.eventhub.event.infrastructure.adapter.in.web;
 import com.rubenmarin.eventhub.event.application.port.in.CreateEventCommand;
 import com.rubenmarin.eventhub.event.application.port.in.CreateEventUseCase;
 import com.rubenmarin.eventhub.event.application.port.in.EventQueryUseCase;
+import com.rubenmarin.eventhub.event.application.port.in.PublishEventUseCase;
 import com.rubenmarin.eventhub.event.domain.model.Event;
 import com.rubenmarin.eventhub.event.domain.model.EventId;
 import com.rubenmarin.eventhub.event.infrastructure.adapter.in.web.exception.InvalidEventIdException;
@@ -23,11 +24,14 @@ public class EventController {
 
     private final CreateEventUseCase createEventUseCase;
     private final EventQueryUseCase eventQueryUseCase;
+    private final PublishEventUseCase publishEventUseCase;
 
     public EventController(CreateEventUseCase createEventUseCase,
-                           EventQueryUseCase eventQueryUseCase) {
+                           EventQueryUseCase eventQueryUseCase,
+    PublishEventUseCase publishEventUseCase ) {
         this.createEventUseCase = createEventUseCase;
         this.eventQueryUseCase = eventQueryUseCase;
+        this.publishEventUseCase = publishEventUseCase;
     }
 
     @PostMapping(
@@ -38,6 +42,15 @@ public class EventController {
     public Mono<EventResponse> createEvent(@Valid @RequestBody CreateEventRequest rq) {
 
         Mono<Event> event = createEventUseCase.createEvent(toCommand(rq));
+        Mono<EventResponse> response = event.map(value -> toResponse(value));
+        return response;
+    }
+
+    @PostMapping("/{id}/publish")
+    @ResponseStatus(HttpStatus.OK)
+    public Mono<EventResponse> publishEvent(@PathVariable String id) {
+
+        Mono<Event> event = publishEventUseCase.publishEvent(parseEventId(id));
         Mono<EventResponse> response = event.map(value -> toResponse(value));
         return response;
     }
@@ -78,8 +91,10 @@ public class EventController {
                 event.description(),
                 event.startDate(),
                 event.capacity().total(),
+                event.capacity().available(),
                 event.price().amount(),
-                event.price().currency().getCurrencyCode()
+                event.price().currency().getCurrencyCode(),
+                event.status().name()
         );
     }
 
