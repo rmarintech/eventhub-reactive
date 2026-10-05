@@ -1705,6 +1705,65 @@ The complete flow was manually verified: creating a Booking for 3 places persist
 
 At this point these are two successfully composed reactive persistence operations. Atomicity across both database writes has not yet been implemented or studied; reactive transactions remain a later step.
 
+
+------------------------------------------------------------------------
+
+# 48. Concurrent Booking and Optimistic Locking
+
+A concurrency problem was reproduced around Event capacity. Two booking
+operations can read the same persisted Event state before either update has
+completed.
+
+``` text
+Event availability = 3
+
+Booking A reads available = 3
+Booking B reads available = 3
+
+Booking A reserves 2
+Booking B reserves 2
+```
+
+Each Aggregate instance can satisfy its domain invariant because each was
+created from a snapshot that still contained 3 available places. Without
+concurrency control, both operations could therefore proceed from stale state
+and cause a lost update / business overselling problem.
+
+The distinction studied is:
+
+``` text
+Domain invariant
+    → protects one Aggregate instance
+
+Concurrency control
+    → protects persisted state when multiple operations race
+```
+
+The Event persistence model now uses optimistic locking with a version value.
+The Event Aggregate preserves that version when existing state is rehydrated,
+and the R2DBC persistence entity maps it using Spring Data's `@Version`.
+
+``` text
+both operations read Event version N
+        ↓
+first UPDATE succeeds
+        ↓
+database version becomes N + 1
+        ↓
+second UPDATE still expects version N
+        ↓
+optimistic locking failure
+```
+
+This prevents a stale Event snapshot from silently overwriting the update that
+won the race.
+
+A focused concurrent-booking test reproduces the race and verifies the
+optimistic-locking behaviour. The full test suite is green.
+
+Handling the operation that loses the race, and transaction/atomicity across
+Event and Booking writes, remain later course steps.
+
 ------------------------------------------------------------------------
 
 This is the current stopping point of the DDD and architecture documentation.

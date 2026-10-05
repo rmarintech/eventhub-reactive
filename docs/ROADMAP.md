@@ -216,13 +216,15 @@ architecture tests remain pending
 # 10. Capacity & Concurrency
 
 -   [x] Booking vs Event capacity coordination
--   [ ] Concurrent booking scenario
--   [ ] Overselling problem
--   [ ] Reproduce race condition
--   [ ] Evaluate concurrency-control strategy
--   [ ] Implement selected strategy
--   [ ] Concurrency integration tests
--   [ ] Document concurrency decisions
+-   [x] Concurrent booking scenario
+-   [x] Overselling problem
+-   [x] Reproduce race condition
+-   [x] Evaluate concurrency-control strategy
+-   [x] Implement optimistic locking with Event versioning
+-   [x] Concurrent booking / optimistic-locking test
+-   [x] Document optimistic-locking decision
+-   [ ] Handle/recover the booking that loses the race
+-   [ ] Reactive transaction/atomicity across Event and Booking writes
 
 ------------------------------------------------------------------------
 
@@ -546,7 +548,7 @@ Event R2DBC / PostgreSQL            ✅
         ↓
 Booking persistence                 ✅
         ↓
-Concurrency                         🚧 NEXT
+Concurrency / optimistic locking    🚧 IN PROGRESS
         ↓
 Kafka / Event-Driven                ⏳
         ↓

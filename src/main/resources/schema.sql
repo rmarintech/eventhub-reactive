@@ -7,7 +7,8 @@ CREATE TABLE IF NOT EXISTS events (
     capacity_available INTEGER NOT NULL,
     price_amount NUMERIC(12, 2) NOT NULL,
     price_currency VARCHAR(3) NOT NULL,
-    status VARCHAR(20) NOT NULL
+    status VARCHAR(20) NOT NULL,
+    version BIGINT NOT NULL DEFAULT 0
 );
 
 

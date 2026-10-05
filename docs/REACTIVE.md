@@ -565,9 +565,9 @@ HTTP / validation / Booking API     ✅
         ↓
 Event R2DBC / PostgreSQL            ✅
         ↓
-Booking R2DBC / PostgreSQL          ✅ CURRENT
+Booking R2DBC / PostgreSQL          ✅
         ↓
-Concurrency                         ⏳
+Concurrency / optimistic locking      🚧 CURRENT
 ```
 
 
@@ -594,3 +594,30 @@ Booking persisted
 ```
 
 Both operations were manually verified against PostgreSQL. Reactive transaction management across the two writes has not yet been implemented or studied.
+
+## 30. Concurrent reactive updates and optimistic locking
+
+The Booking flow has now been tested with simultaneous operations that can
+read the same Event state before either persistence update completes.
+
+Reactive execution does not itself prevent this race:
+
+``` text
+Booking A ──► read Event version N ──► reserve ──► update
+Booking B ──► read Event version N ──► reserve ──► update
+```
+
+Optimistic locking is now used at the R2DBC persistence boundary. The first
+update succeeds and advances the Event version. A competing update based on
+the stale version fails instead of silently overwriting the newer state.
+
+``` text
+first update   → version N matches → UPDATE succeeds → version N + 1
+second update  → version N stale   → optimistic locking error
+```
+
+A focused concurrent-booking test reproduces this behaviour, and the complete
+test suite is green.
+
+Retry/recovery policy for the losing booking and reactive transaction
+management across Event and Booking writes have not yet been studied.

@@ -22,7 +22,7 @@ public class R2dbcEventRepositoryAdapter implements EventRepository {
     public Mono<Event> create(Event event) {
 
         Mono<Event> toRet = springDataEventRepository
-                .save(toEntity(event , true))
+                .save(toEntity(event, true))
                 .map(entity -> toDomain(entity));
 
 
@@ -71,7 +71,8 @@ public class R2dbcEventRepositoryAdapter implements EventRepository {
                 event.price().amount(),
                 event.price().currency().getCurrencyCode(),
                 event.status().name(),
-                isNew
+                isNew,
+                event.version()
 
         );
         return toRet;
@@ -87,7 +88,8 @@ public class R2dbcEventRepositoryAdapter implements EventRepository {
                 entity.startDate(),
                 new Capacity(entity.capacityTotal(), entity.capacityAvailable()),
                 new Money(entity.priceAmount(), Currency.getInstance(entity.priceCurrency())),
-                EventStatus.valueOf(entity.status())
+                EventStatus.valueOf(entity.status()),
+                entity.version()
         );
         return toRet;
 

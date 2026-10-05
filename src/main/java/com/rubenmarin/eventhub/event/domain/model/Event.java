@@ -5,7 +5,7 @@ import java.util.Objects;
 
 /**
  * Aggregate Root for the Event aggregate.
- *
+ * <p>
  * Event protects the business invariants related to
  * the lifecycle and capacity of an event.
  */
@@ -18,6 +18,7 @@ public class Event {
     private Capacity capacity;
     private final Money price;
     private EventStatus status;
+    private Long version;
 
     private Event(
             EventId id,
@@ -26,7 +27,8 @@ public class Event {
             LocalDateTime startDate,
             Capacity capacity,
             Money price,
-            EventStatus status
+            EventStatus status,
+            Long version
     ) {
         this.id = Objects.requireNonNull(id);
         this.name = Objects.requireNonNull(name);
@@ -35,6 +37,7 @@ public class Event {
         this.capacity = Objects.requireNonNull(capacity);
         this.price = Objects.requireNonNull(price);
         this.status = Objects.requireNonNull(status);
+        this.version = version;
     }
 
     public static Event rehydrate(
@@ -44,7 +47,8 @@ public class Event {
             LocalDateTime startDate,
             Capacity capacity,
             Money price,
-            EventStatus status
+            EventStatus status,
+            Long version
     ) {
         return new Event(
                 id,
@@ -53,7 +57,9 @@ public class Event {
                 startDate,
                 capacity,
                 price,
-                status);
+                status,
+                version
+        );
     }
 
     public static Event create(
@@ -70,7 +76,8 @@ public class Event {
                 startDate,
                 capacity,
                 price,
-                EventStatus.DRAFT
+                EventStatus.DRAFT,
+                null
         );
     }
 
@@ -100,6 +107,10 @@ public class Event {
 
     public EventStatus status() {
         return status;
+    }
+
+    public Long version() {
+        return version;
     }
 
     public void publish() {

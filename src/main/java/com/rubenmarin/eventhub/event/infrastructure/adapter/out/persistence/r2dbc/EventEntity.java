@@ -1,7 +1,8 @@
 package com.rubenmarin.eventhub.event.infrastructure.adapter.out.persistence.r2dbc;
 
-import org.springframework.data.annotation.Id  ;
+import org.springframework.data.annotation.Id;
 import org.springframework.data.annotation.Transient;
+import org.springframework.data.annotation.Version;
 import org.springframework.data.domain.Persistable;
 import org.springframework.data.relational.core.mapping.Column;
 import org.springframework.data.relational.core.mapping.Table;
@@ -29,12 +30,16 @@ public record EventEntity(
         String status,
 
         @Transient //No lo queremos en la ddbb solo metadatos
-        boolean isNew
+        boolean isNew,
+
+        //Optimistic locking
+        @Version
+        Long version
 
 ) implements Persistable<UUID> {
 
-        @Override
-        public UUID getId() {
-                return id;
-        }
+    @Override
+    public UUID getId() {
+        return id;
+    }
 }

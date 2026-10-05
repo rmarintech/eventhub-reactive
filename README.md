@@ -62,6 +62,8 @@ Currently introduced:
 -   Publish Event application use case and HTTP endpoint
 -   Booking WebFlux HTTP input adapter
 -   Focused controller testing with Mockito and WebTestClient
+-   Concurrent booking race-condition testing
+-   Optimistic locking / Event versioning
 
 Planned in the project roadmap: - Modular Monolith - Event-Driven
 Architecture
@@ -83,6 +85,7 @@ Currently introduced:
 -   ReactiveCrudRepository
 -   Domain ↔ persistence mapping
 -   SQL schema initialization
+-   Optimistic locking with persisted Event version
 
 ## Infrastructure
 
@@ -163,9 +166,9 @@ Booking HTTP API                    ✅
         ↓
 Event R2DBC / PostgreSQL            ✅
         ↓
-Booking R2DBC / PostgreSQL          ✅ CURRENT
+Booking R2DBC / PostgreSQL          ✅
         ↓
-Concurrency                         🚧 NEXT
+Concurrency / optimistic locking      🚧 CURRENT
 ```
 
 For the complete project plan, check [ROADMAP.md](docs/ROADMAP.md).
@@ -350,6 +353,27 @@ This validates the two persistence operations, but reactive transaction/atomicit
 
 ------------------------------------------------------------------------
 
+# 🔒 Concurrent Booking and Optimistic Locking
+
+Concurrent booking operations can read the same Event capacity before either
+update is persisted. The project now reproduces this race condition and uses
+optimistic locking on the persisted Event version to prevent a stale update
+from silently overwriting the winner.
+
+``` text
+Booking A ──► read version N ──► update succeeds ──► version N + 1
+Booking B ──► read version N ──► stale update ──► optimistic locking failure
+```
+
+This protects Event capacity against the lost-update/overselling scenario
+studied so far. A focused concurrency test verifies the behaviour and the full
+test suite is green.
+
+Recovery for the booking that loses the race and reactive transaction/atomicity
+across Event and Booking persistence remain later steps.
+
+------------------------------------------------------------------------
+
 # 🧪 Testing
 
 The project now contains pure domain unit tests, application-service
@@ -406,6 +430,7 @@ Current tested behaviour includes:
 -   Event availability exposed separately from total capacity
 -   Booking creation through `POST /bookings`
 -   isolated `BookingController` testing with Mockito + `WebTestClient`
+-   concurrent Booking race condition and optimistic-locking failure
 
 The current build can be verified with:
 
