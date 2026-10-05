@@ -37,10 +37,10 @@ public class CreateBookingService implements CreateBookingUseCase {
                         command.places()
                 );
 
-        Mono<Booking> saved = reservedEvent.flatMap(
-                event -> bookingRepository.save(booking));
+        Mono<Booking> created = reservedEvent.flatMap(
+                event -> bookingRepository.create(booking));
 
-        return saved;
+        return created;
 
     }
 

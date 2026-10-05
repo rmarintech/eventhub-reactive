@@ -1675,7 +1675,35 @@ The in-memory adapter implements the same port, although both operations use `Ma
 
 The implementation was validated with the full green test suite and manually against PostgreSQL: creating Events produced persisted `DRAFT` rows and publishing an Event updated the same row to `PUBLISHED`.
 
-Booking persistence, reactive transactions, database migrations and PostgreSQL Testcontainers have not yet been implemented.
+Reactive transactions, database migrations and PostgreSQL Testcontainers have not yet been implemented.
+
+------------------------------------------------------------------------
+
+# 47. Booking PostgreSQL Persistence
+
+The Booking module now also persists Bookings reactively in PostgreSQL through its own persistence adapter.
+
+The already studied cross-module boundary is preserved:
+
+``` text
+CreateBookingService
+    ↓
+ReserveEventPlacesUseCase
+    ↓
+Event module updates Event capacity
+    ↓
+BookingRepository
+    ↓
+Booking persistence adapter
+    ↓
+PostgreSQL
+```
+
+The Booking application layer still does not access `EventRepository` directly. Event owns its persistence, and Booking coordinates with Event through the Event application input port.
+
+The complete flow was manually verified: creating a Booking for 3 places persisted the Booking and changed the corresponding Event availability from `20` to `17`.
+
+At this point these are two successfully composed reactive persistence operations. Atomicity across both database writes has not yet been implemented or studied; reactive transactions remain a later step.
 
 ------------------------------------------------------------------------
 

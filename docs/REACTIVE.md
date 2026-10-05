@@ -563,10 +563,34 @@ Spring WebFlux                      ✅
         ↓
 HTTP / validation / Booking API     ✅
         ↓
-Event R2DBC / PostgreSQL            ✅ CURRENT
+Event R2DBC / PostgreSQL            ✅
         ↓
-Booking persistence                 ⏳
+Booking R2DBC / PostgreSQL          ✅ CURRENT
         ↓
 Concurrency                         ⏳
 ```
 
+
+## 29. Booking R2DBC persistence
+
+Booking persistence now also reaches PostgreSQL through the reactive persistence stack.
+
+``` text
+POST /bookings
+    ↓
+CreateBookingService
+    ↓
+ReserveEventPlacesUseCase
+    ↓
+EventRepository.update(...)
+    ↓
+PostgreSQL: Event availability 20 → 17
+    ↓
+BookingRepository
+    ↓
+R2DBC / PostgreSQL
+    ↓
+Booking persisted
+```
+
+Both operations were manually verified against PostgreSQL. Reactive transaction management across the two writes has not yet been implemented or studied.

@@ -207,7 +207,7 @@ architecture tests remain pending
 -   [x] Booking application layer
 -   [x] Booking ports
 -   [x] Booking adapters
--   [ ] Booking persistence
+-   [x] Booking persistence
 -   [x] Booking REST API
 -   [x] Booking controller test with mocked use case
 
@@ -544,9 +544,9 @@ Booking HTTP API                    ✅
         ↓
 Event R2DBC / PostgreSQL            ✅
         ↓
-Booking persistence                 🚧 NEXT
+Booking persistence                 ✅
         ↓
-Concurrency                         ⏳
+Concurrency                         🚧 NEXT
         ↓
 Kafka / Event-Driven                ⏳
         ↓

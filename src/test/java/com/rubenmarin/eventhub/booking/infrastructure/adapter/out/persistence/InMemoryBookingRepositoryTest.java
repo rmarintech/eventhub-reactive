@@ -13,7 +13,7 @@ import java.util.UUID;
 class InMemoryBookingRepositoryTest {
 
     @Test
-    void shouldSaveBooking() {
+    void shouldCreateBooking() {
 
         Booking booking = Booking.generate(
                 new CustomerId(UUID.randomUUID()),
@@ -23,7 +23,7 @@ class InMemoryBookingRepositoryTest {
 
         InMemoryBookingRepository bookingRepository = new InMemoryBookingRepository();
 
-        Mono<Booking> savedBooking = bookingRepository.save(booking);
+        Mono<Booking> savedBooking = bookingRepository.create(booking);
 
         StepVerifier.create(savedBooking)
                 .expectNext(booking)

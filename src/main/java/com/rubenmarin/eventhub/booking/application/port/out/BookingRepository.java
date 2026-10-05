@@ -11,7 +11,8 @@ import reactor.core.publisher.Mono;
  */
 public interface BookingRepository {
 
-    Mono<Booking> save(Booking booking);
+    Mono<Booking> create(Booking booking);
 
+    Mono<Booking> update(Booking booking);
 
 }

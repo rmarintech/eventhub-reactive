@@ -161,9 +161,11 @@ Publish Event API                    ✅
         ↓
 Booking HTTP API                    ✅
         ↓
-Event R2DBC / PostgreSQL            ✅ CURRENT
+Event R2DBC / PostgreSQL            ✅
         ↓
-Booking persistence                 🚧 NEXT
+Booking R2DBC / PostgreSQL          ✅ CURRENT
+        ↓
+Concurrency                         🚧 NEXT
 ```
 
 For the complete project plan, check [ROADMAP.md](docs/ROADMAP.md).
@@ -173,8 +175,7 @@ For the complete project plan, check [ROADMAP.md](docs/ROADMAP.md).
 # 🏗️ Technical Picture
 
 The project now contains framework-independent Event and Booking domain
-models, reactive application ports, an R2DBC/PostgreSQL output adapter for Event,
-an in-memory Booking output adapter, Spring WebFlux HTTP input adapters for Event and Booking, and Spring IoC
+models, reactive application ports, R2DBC/PostgreSQL output adapters for Event and Booking, Spring WebFlux HTTP input adapters for Event and Booking, and Spring IoC
 configuration for dependency wiring. Booking creation coordinates Event
 capacity through an Event application input port rather than accessing
 Event persistence directly. Event publication is also exposed as an
@@ -316,7 +317,36 @@ update(event) → isNew=false → UPDATE
 
 Both paths have been manually verified against PostgreSQL: newly created Events are persisted as `DRAFT`, and publication updates the same row to `PUBLISHED`.
 
-Booking persistence, reactive transactions, database migrations and PostgreSQL Testcontainers are still pending.
+Reactive transactions, database migrations and PostgreSQL Testcontainers are still pending.
+
+------------------------------------------------------------------------
+
+
+# 🗄️ Reactive Booking Persistence
+
+Booking persistence is now also backed by PostgreSQL through Spring Data R2DBC.
+
+The existing Booking flow keeps the module boundary already introduced: Booking coordinates Event capacity through `ReserveEventPlacesUseCase`, while Event persistence remains owned by the Event module. After capacity is reserved, the Booking is persisted through its own repository adapter.
+
+``` text
+POST /bookings
+    ↓
+CreateBookingService
+    ↓
+ReserveEventPlacesUseCase
+    ↓
+EventRepository.update(...)
+    ↓
+PostgreSQL: Event capacity updated
+    ↓
+BookingRepository
+    ↓
+R2DBC / PostgreSQL: Booking inserted
+```
+
+The complete flow was manually verified against PostgreSQL: reserving 3 places reduced Event availability from `20` to `17`, and the corresponding Booking was persisted.
+
+This validates the two persistence operations, but reactive transaction/atomicity across them has not yet been implemented or studied.
 
 ------------------------------------------------------------------------
 

@@ -157,7 +157,15 @@ public class CreateBookingServiceTest {
         private Booking savedBooking;
 
         @Override
-        public Mono<Booking> save(Booking booking) {
+        public Mono<Booking> create(Booking booking) {
+            return Mono.fromSupplier(() -> {
+                this.savedBooking = booking;
+                return booking;
+            });
+        }
+
+        @Override
+        public Mono<Booking> update(Booking booking) {
             return Mono.fromSupplier(() -> {
                 this.savedBooking = booking;
                 return booking;
