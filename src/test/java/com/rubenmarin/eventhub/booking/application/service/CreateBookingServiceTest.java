@@ -171,6 +171,11 @@ public class CreateBookingServiceTest {
                 return booking;
             });
         }
+
+        @Override
+        public Flux<Booking> findByEventId(EventId eventId) {
+            return null;
+        }
     }
 
 }

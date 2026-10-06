@@ -1,5 +1,6 @@
 package com.rubenmarin.eventhub.event.infrastructure.adapter.in.web.exception;
 
+import com.rubenmarin.eventhub.event.application.exception.ConcurrentUpdateException;
 import com.rubenmarin.eventhub.event.application.exception.EventNotFoundException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -14,6 +15,13 @@ import java.util.Map;
 
 @RestControllerAdvice
 public class EventExceptionHandler {
+
+
+    @ExceptionHandler(ConcurrentUpdateException.class)
+    public ResponseEntity<?> handleConcurrentUpdateException(ConcurrentUpdateException e){
+
+        return ResponseEntity.status(HttpStatus.CONFLICT).build();
+    };
 
     @ExceptionHandler(EventNotFoundException.class)
     public ResponseEntity<?> handleEventNotFoundException(EventNotFoundException e){

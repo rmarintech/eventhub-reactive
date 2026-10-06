@@ -3,6 +3,7 @@ package com.rubenmarin.eventhub.booking.infrastructure.adapter.out.persistence;
 import com.rubenmarin.eventhub.booking.domain.model.Booking;
 import com.rubenmarin.eventhub.booking.domain.model.BookingId;
 import com.rubenmarin.eventhub.booking.application.port.out.BookingRepository;
+import com.rubenmarin.eventhub.event.domain.model.EventId;
 import org.springframework.stereotype.Repository;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -44,6 +45,11 @@ public class InMemoryBookingRepository implements BookingRepository {
             bookings.put(booking.getBookingId(), booking);
             return booking;
         });
+    }
+
+    @Override
+    public Flux<Booking> findByEventId(EventId eventId) {
+        return null;
     }
 
 }

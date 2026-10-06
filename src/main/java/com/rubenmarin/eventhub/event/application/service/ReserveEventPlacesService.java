@@ -1,5 +1,6 @@
 package com.rubenmarin.eventhub.event.application.service;
 
+import com.rubenmarin.eventhub.event.application.exception.ConcurrentUpdateException;
 import com.rubenmarin.eventhub.event.application.exception.EventNotFoundException;
 import com.rubenmarin.eventhub.event.application.port.in.ReserveEventPlacesUseCase;
 import com.rubenmarin.eventhub.event.application.port.out.EventRepository;
@@ -16,6 +17,16 @@ public class ReserveEventPlacesService implements ReserveEventPlacesUseCase {
 
     @Override
     public Mono<Event> reserveEventPlaces(EventId id, int places) {
+        Mono<Event> eventReserved =
+                this.attemptReservation(id, places)
+                        .onErrorResume(ConcurrentUpdateException.class, error -> {
+                            return this.attemptReservation(id, places);
+                        });
+
+        return eventReserved;
+    }
+
+    private Mono<Event> attemptReservation(EventId id, int places) {
         Mono<Event> eventFound = eventRepository.findById(id)
                 .switchIfEmpty(
                         Mono.error(
@@ -27,9 +38,10 @@ public class ReserveEventPlacesService implements ReserveEventPlacesUseCase {
                 eventFound.flatMap(event -> {
                     event.reservePlaces(places);
                     return eventRepository.update(event);
-
                 });
 
+
         return eventReserved;
+
     }
 }

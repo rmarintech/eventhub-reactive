@@ -5,9 +5,7 @@ import com.rubenmarin.eventhub.booking.domain.model.Booking;
 import com.rubenmarin.eventhub.booking.domain.model.BookingId;
 import com.rubenmarin.eventhub.booking.domain.model.BookingStatus;
 import com.rubenmarin.eventhub.booking.domain.model.CustomerId;
-import com.rubenmarin.eventhub.event.application.port.out.EventRepository;
 import com.rubenmarin.eventhub.event.domain.model.*;
-import com.rubenmarin.eventhub.event.infrastructure.adapter.out.persistence.r2dbc.SpringDataEventRepository;
 import org.springframework.stereotype.Repository;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -20,11 +18,8 @@ public class R2dbcBookingRepositoryAdapter implements BookingRepository {
     private final SpringDataBookingRepository springDataBookingRepository;
 
     public R2dbcBookingRepositoryAdapter(SpringDataBookingRepository springDataBookingRepository) {
-
         this.springDataBookingRepository = springDataBookingRepository;
     }
-
-
 
     @Override
     public Mono<Booking> create(Booking booking) {
@@ -32,7 +27,6 @@ public class R2dbcBookingRepositoryAdapter implements BookingRepository {
         Mono<Booking> toRet = springDataBookingRepository
                 .save(toEntity(booking , true))
                 .map(entity -> toDomain(entity));
-
 
         return toRet;
     }
@@ -44,6 +38,14 @@ public class R2dbcBookingRepositoryAdapter implements BookingRepository {
                 .save(toEntity(booking, false))
                 .map(entity -> toDomain(entity));
 
+        return toRet;
+    }
+
+    @Override
+    public Flux<Booking> findByEventId(EventId eventId) {
+        Flux<Booking>toRet = springDataBookingRepository
+                .findByEventId(eventId.value())
+                .map(entity -> toDomain(entity));
 
         return toRet;
     }

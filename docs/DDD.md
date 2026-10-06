@@ -1761,8 +1761,84 @@ won the race.
 A focused concurrent-booking test reproduces the race and verifies the
 optimistic-locking behaviour. The full test suite is green.
 
-Handling the operation that loses the race, and transaction/atomicity across
-Event and Booking writes, remain later course steps.
+The operation that loses the optimistic-locking race is now handled by the
+application. A persistence-specific optimistic-locking failure is translated at
+the infrastructure boundary into `ConcurrentUpdateException`, an
+application-level exception. This keeps Spring Data details out of the
+application layer.
+
+------------------------------------------------------------------------
+
+# 49. Recovering the Booking That Loses the Race
+
+An optimistic-locking conflict means that the Event state used by the losing
+operation is stale. It does not necessarily mean that the Event is already full.
+
+The recovery policy studied and implemented is:
+
+``` text
+reserve using current Event snapshot
+        ↓
+concurrent update detected
+        ↓
+ConcurrentUpdateException
+        ↓
+re-read Event from persistence
+        ↓
+re-evaluate Event.reservePlaces(...)
+        ↓
+retry the update once
+```
+
+Re-reading is important because the domain rule must be evaluated against the
+latest persisted capacity.
+
+For example:
+
+``` text
+available = 5
+Booking A reserves 1
+Booking B wants 2 and loses the version race
+        ↓
+re-read → available = 4
+        ↓
+Booking B can still reserve 2
+```
+
+But:
+
+``` text
+available = 3
+Booking A reserves 2
+Booking B wants 2 and loses the version race
+        ↓
+re-read → available = 1
+        ↓
+Event.reservePlaces(2) rejects the reservation
+```
+
+The retry is deliberately bounded to one additional attempt rather than being
+an unlimited retry loop.
+
+The concurrency integration test now verifies the resulting business state for
+two concurrent Bookings of 2 places against an Event with capacity 3. After the
+race settles, exactly one Booking is persisted and the Event has 1 available
+place.
+
+To verify persisted Bookings by Event, the Booking application now exposes a
+query use case backed by `BookingRepository.findByEventId(...)`. The R2DBC
+adapter delegates that query to a Spring Data derived query and maps the
+resulting persistence entities back to domain `Booking` objects.
+
+The test composes the concurrent attempt with the later verification using
+Reactor. `then(...)` waits for the first Publisher to terminate successfully
+while discarding its emitted value, then subscribes to the Publisher that reads
+the final persisted state. `Flux.count()` converts the Booking query into a
+`Mono<Long>` so the final Booking count can be asserted together with the
+persisted Event.
+
+Reactive transaction/atomicity across the Event update and Booking insert has
+still not been implemented or studied.
 
 ------------------------------------------------------------------------
 

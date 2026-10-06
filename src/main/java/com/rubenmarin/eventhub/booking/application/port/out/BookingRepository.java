@@ -1,6 +1,8 @@
 package com.rubenmarin.eventhub.booking.application.port.out;
 
 import com.rubenmarin.eventhub.booking.domain.model.Booking;
+import com.rubenmarin.eventhub.event.domain.model.EventId;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 /**
@@ -15,4 +17,5 @@ public interface BookingRepository {
 
     Mono<Booking> update(Booking booking);
 
+    Flux<Booking> findByEventId(EventId eventId);
 }

@@ -1,5 +1,6 @@
 package com.rubenmarin.eventhub.booking;
 
+import com.rubenmarin.eventhub.booking.application.port.in.BookingQueryUseCase;
 import com.rubenmarin.eventhub.booking.application.port.in.CreateBookingCommand;
 import com.rubenmarin.eventhub.booking.application.port.in.CreateBookingUseCase;
 import com.rubenmarin.eventhub.booking.domain.model.Booking;
@@ -9,10 +10,11 @@ import com.rubenmarin.eventhub.event.application.port.in.CreateEventUseCase;
 import com.rubenmarin.eventhub.event.application.port.in.EventQueryUseCase;
 import com.rubenmarin.eventhub.event.application.port.in.PublishEventUseCase;
 import com.rubenmarin.eventhub.event.domain.model.Event;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.dao.OptimisticLockingFailureException;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 import reactor.util.function.Tuple2;
@@ -33,9 +35,15 @@ class BookingConcurrencyTest {
     @Autowired
     private CreateBookingUseCase createBookingUseCase;
 
+    @Autowired
+    private BookingQueryUseCase bookingQueryUseCase;
+
+    @Autowired
+    private EventQueryUseCase eventQueryUseCase;
+
 
     @Test
-    void shouldFailConcurrentBooking() {
+    void shouldOnlyCreateOneBookingWhenTwoConcurrentBookingsExceedCapacity() {
 
         CreateEventCommand createEventCommand = new CreateEventCommand(
                 "Integration test event",
@@ -50,7 +58,7 @@ class BookingConcurrencyTest {
                     return publishEventUseCase.publishEvent(event.id());
                 });
 
-        Mono<Tuple2<Booking, Booking>> tuple = givenEvent.flatMap(event -> {
+        Mono<Tuple2<Long, Event>> tuple = givenEvent.flatMap(event -> {
             CreateBookingCommand createBookingACommand =
                     new CreateBookingCommand(
                             new CustomerId(UUID.randomUUID()),
@@ -65,11 +73,25 @@ class BookingConcurrencyTest {
             Mono<Booking> bookingA = createBookingUseCase.createBooking(createBookingACommand);
             Mono<Booking> bookingB = createBookingUseCase.createBooking(createBookingBCommand);
 
-            return Mono.zip(bookingA, bookingB);
+            return Mono.zip(bookingA, bookingB)
+                    .onErrorResume(IllegalStateException.class, error -> {
+                        return Mono.empty();
+                    }).then(
+                            Mono.zip(
+                                    bookingQueryUseCase.findByEventId(event.id()).count(),
+                                    eventQueryUseCase.findById(event.id()
+                                    )
+                            )
+                    );
         });
 
         StepVerifier.create(tuple)
-                .expectError(OptimisticLockingFailureException.class)
-                .verify();
+                .assertNext(tuple2 -> {
+                    Long bCount = tuple2.getT1();
+                    Event pEvent = tuple2.getT2();
+                    Assertions.assertEquals(1L, bCount);
+                    Assertions.assertEquals(1, pEvent.capacity().available());
+                })
+                .verifyComplete();
     }
 }

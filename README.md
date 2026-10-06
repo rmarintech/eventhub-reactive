@@ -64,6 +64,8 @@ Currently introduced:
 -   Focused controller testing with Mockito and WebTestClient
 -   Concurrent booking race-condition testing
 -   Optimistic locking / Event versioning
+-   Bounded recovery after concurrent Event updates
+-   Booking query by Event through an application use case
 
 Planned in the project roadmap: - Modular Monolith - Event-Driven
 Architecture
@@ -168,7 +170,9 @@ Event R2DBC / PostgreSQL            ✅
         ↓
 Booking R2DBC / PostgreSQL          ✅
         ↓
-Concurrency / optimistic locking      🚧 CURRENT
+Concurrency / optimistic locking      ✅
+        ↓
+Reactive transaction / atomicity       🚧 NEXT
 ```
 
 For the complete project plan, check [ROADMAP.md](docs/ROADMAP.md).
@@ -369,8 +373,25 @@ This protects Event capacity against the lost-update/overselling scenario
 studied so far. A focused concurrency test verifies the behaviour and the full
 test suite is green.
 
-Recovery for the booking that loses the race and reactive transaction/atomicity
-across Event and Booking persistence remain later steps.
+The booking that loses the version race is now recovered by re-reading the
+latest Event state and re-evaluating the reservation once. Infrastructure
+translates the Spring Data optimistic-locking failure into the
+application-level `ConcurrentUpdateException`, keeping the application
+independent of Spring Data.
+
+When two concurrent Bookings request 2 places each from an Event with capacity
+3, the integration test now verifies the final persisted business state:
+
+``` text
+Bookings persisted        = 1
+Event available places    = 1
+```
+
+The test queries Bookings by Event through `BookingQueryUseCase` and verifies the
+persisted Event through `EventQueryUseCase`.
+
+Reactive transaction/atomicity across Event and Booking persistence remains the
+next concurrency/persistence step.
 
 ------------------------------------------------------------------------
 
@@ -431,6 +452,9 @@ Current tested behaviour includes:
 -   Booking creation through `POST /bookings`
 -   isolated `BookingController` testing with Mockito + `WebTestClient`
 -   concurrent Booking race condition and optimistic-locking failure
+-   bounded recovery after an optimistic-lock conflict
+-   final concurrent-booking state: one persisted Booking and one remaining Event place
+-   Booking lookup by Event and reactive `count()` verification
 
 The current build can be verified with:
 

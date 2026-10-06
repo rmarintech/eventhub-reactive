@@ -619,5 +619,47 @@ second update  → version N stale   → optimistic locking error
 A focused concurrent-booking test reproduces this behaviour, and the complete
 test suite is green.
 
-Retry/recovery policy for the losing booking and reactive transaction
-management across Event and Booking writes have not yet been studied.
+The losing operation is now recovered by re-reading the Event and attempting
+the reservation once more. The application reacts to a persistence-agnostic
+`ConcurrentUpdateException`, while the R2DBC adapter owns translation from the
+Spring Data optimistic-locking exception.
+
+## 31. Sequencing verification with `then()` and `count()`
+
+The final concurrency test introduced `then(...)` to sequence a verification
+Publisher after the concurrent booking attempt.
+
+``` text
+concurrent booking attempt
+        ↓
+onErrorResume(...) for the expected insufficient-capacity result
+        ↓
+then(...)
+        ↓
+query persisted Bookings and Event
+```
+
+`then(otherPublisher)` waits for the upstream Publisher to complete successfully,
+discards any value emitted by that upstream Publisher, and continues with the
+Publisher supplied to `then`.
+
+The Booking query returns `Flux<Booking>`. Calling `count()` produces a
+`Mono<Long>`, which makes the number of persisted Bookings directly testable.
+
+The final test combines:
+
+``` text
+Mono<Long>   Booking count
+        +
+Mono<Event>  persisted Event
+        ↓
+Mono.zip(...)
+        ↓
+Tuple2<Long, Event>
+```
+
+`StepVerifier` then verifies the final persisted business state: one Booking
+exists and the Event has one available place.
+
+Reactive transaction management across the Event update and Booking insert has
+not yet been implemented or studied.
