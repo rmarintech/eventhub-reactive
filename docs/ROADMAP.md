@@ -168,7 +168,7 @@ architecture tests remain pending
 -   [x] Reactive repository adapter
 -   [x] Reactive repository port
 -   [x] Reactive CRUD
--   [ ] Reactive transactions
+-   [x] Reactive transactions
 -   [ ] Database migrations
 -   [ ] Repository integration tests
 -   [ ] PostgreSQL Testcontainers
@@ -224,7 +224,8 @@ architecture tests remain pending
 -   [x] Concurrent booking / optimistic-locking test
 -   [x] Document optimistic-locking decision
 -   [ ] Handle/recover the booking that loses the race
--   [ ] Reactive transaction/atomicity across Event and Booking writes
+-   [x] Reactive transaction/atomicity across Event and Booking writes
+-   [x] Verify rollback when Booking persistence fails after Event capacity update
 
 ------------------------------------------------------------------------
 
@@ -548,7 +549,7 @@ Event R2DBC / PostgreSQL            ✅
         ↓
 Booking persistence                 ✅
         ↓
-Concurrency / optimistic locking    🚧 IN PROGRESS
+Concurrency / optimistic locking    ✅
         ↓
 Kafka / Event-Driven                ⏳
         ↓# EventHub Reactive --- Project Roadmap
@@ -721,7 +722,7 @@ architecture tests remain pending
 -   [x] Reactive repository adapter
 -   [x] Reactive repository port
 -   [x] Reactive CRUD
--   [ ] Reactive transactions
+-   [x] Reactive transactions
 -   [ ] Database migrations
 -   [ ] Repository integration tests
 -   [ ] PostgreSQL Testcontainers
@@ -781,7 +782,8 @@ architecture tests remain pending
 -   [x] Bound optimistic-lock recovery to one additional attempt
 -   [x] Verify only one Booking is persisted when concurrent demand exceeds capacity
 -   [x] Verify final persisted Event availability after the concurrent attempt
--   [ ] Reactive transaction/atomicity across Event and Booking writes
+-   [x] Reactive transaction/atomicity across Event and Booking writes
+-   [x] Verify rollback when Booking persistence fails after Event capacity update
 
 ------------------------------------------------------------------------
 
@@ -1105,7 +1107,7 @@ Event R2DBC / PostgreSQL            ✅
         ↓
 Booking persistence                 ✅
         ↓
-Concurrency / optimistic locking    🚧 IN PROGRESS
+Concurrency / optimistic locking    ✅
         ↓
 Kafka / Event-Driven                ⏳
         ↓
@@ -1135,26 +1137,26 @@ Portfolio / Interview Preparation   ⏳
 ```
 
 Security                            ⏳
-        ↓
+↓
 React / TypeScript                  ⏳
-        ↓
+↓
 Full-Stack Integration              ⏳
-        ↓
+↓
 Real-Time Features                  ⏳
-        ↓
+↓
 Docker                              ⏳
-        ↓
+↓
 CI/CD                               ⏳
-        ↓
+↓
 Observability                       ⏳
-        ↓
+↓
 Performance                         ⏳
-        ↓
+↓
 Kubernetes / Helm                   ⏳
-        ↓
+↓
 Microservices Evolution             ⏳
-        ↓
+↓
 System Design                       ⏳
-        ↓
+↓
 Portfolio / Interview Preparation   ⏳
 ```

@@ -1843,3 +1843,31 @@ still not been implemented or studied.
 ------------------------------------------------------------------------
 
 This is the current stopping point of the DDD and architecture documentation.
+
+
+## 50. Transaction boundary for Booking creation
+
+Booking creation coordinates two persisted changes: reserving capacity on the
+Event Aggregate and creating the Booking Aggregate. These writes form one
+application-level business operation.
+
+```text
+reserve Event capacity
+        ↓
+persist Event
+        ↓
+persist Booking
+        ↓
+all succeed → COMMIT
+any fails   → ROLLBACK
+```
+
+A test forces Booking persistence to fail after the Event update and verifies
+that the Event capacity returns to its previous persisted value. This prevents
+a partial state where capacity has been consumed without a corresponding
+Booking.
+
+Optimistic locking and transaction atomicity solve different problems:
+optimistic locking detects stale concurrent writes, while the transaction
+provides all-or-nothing persistence across Event and Booking. Both mechanisms
+are therefore retained.

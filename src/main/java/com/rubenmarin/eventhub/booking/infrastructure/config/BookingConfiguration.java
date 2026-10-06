@@ -5,10 +5,11 @@ import com.rubenmarin.eventhub.booking.application.port.in.CreateBookingUseCase;
 import com.rubenmarin.eventhub.booking.application.port.out.BookingRepository;
 import com.rubenmarin.eventhub.booking.application.service.BookingQueryService;
 import com.rubenmarin.eventhub.booking.application.service.CreateBookingService;
+import com.rubenmarin.eventhub.booking.infrastructure.transaction.TransactionalCreateBooking;
 import com.rubenmarin.eventhub.event.application.port.in.ReserveEventPlacesUseCase;
-import com.rubenmarin.eventhub.event.application.service.ReserveEventPlacesService;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.transaction.reactive.TransactionalOperator;
 
 @Configuration
 public class BookingConfiguration {
@@ -17,12 +18,14 @@ public class BookingConfiguration {
     @Bean
     public CreateBookingUseCase createBookingUseCase(
             BookingRepository bookingRepository,
-            ReserveEventPlacesUseCase reserveEventPlacesUseCase
+            ReserveEventPlacesUseCase reserveEventPlacesUseCase,
+            TransactionalOperator transactionalOperator
     ) {
+        CreateBookingService service =  new CreateBookingService(bookingRepository, reserveEventPlacesUseCase);
 
-        return new CreateBookingService(
-                bookingRepository,
-                reserveEventPlacesUseCase);
+        return new TransactionalCreateBooking(
+                service,
+                transactionalOperator);
     }
 
     @Bean

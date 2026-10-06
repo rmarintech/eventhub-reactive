@@ -662,4 +662,38 @@ Tuple2<Long, Event>
 exists and the Event has one available place.
 
 Reactive transaction management across the Event update and Booking insert has
-not yet been implemented or studied.
+now been implemented and tested.
+
+## 32. Reactive transaction and atomicity
+
+Booking creation performs two database writes that form one business operation:
+
+```text
+Event capacity update
+        ↓
+Booking insert
+```
+
+Without a transaction, a successful Event update followed by a failed Booking
+insert would leave a partial state: capacity reduced but no Booking persisted.
+
+The Booking use case is now executed inside a reactive transaction so both
+writes succeed or both are rolled back:
+
+```text
+BEGIN TRANSACTION
+        ↓
+UPDATE Event
+        ↓
+INSERT Booking
+        ↓
+success → COMMIT
+failure → ROLLBACK
+```
+
+A dedicated test forces Booking persistence to fail after the Event capacity
+update and verifies that the persisted Event capacity remains unchanged.
+
+Optimistic locking protects against stale concurrent updates; the transaction
+protects atomicity across related database writes. The complete test suite is
+green with both mechanisms enabled.

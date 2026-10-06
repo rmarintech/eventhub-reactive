@@ -66,6 +66,7 @@ Currently introduced:
 -   Optimistic locking / Event versioning
 -   Bounded recovery after concurrent Event updates
 -   Booking query by Event through an application use case
+-   Reactive transaction / atomic Booking creation
 
 Planned in the project roadmap: - Modular Monolith - Event-Driven
 Architecture
@@ -172,7 +173,7 @@ Booking R2DBC / PostgreSQL          ✅
         ↓
 Concurrency / optimistic locking      ✅
         ↓
-Reactive transaction / atomicity       🚧 NEXT
+Reactive transaction / atomicity       ✅
 ```
 
 For the complete project plan, check [ROADMAP.md](docs/ROADMAP.md).
@@ -324,7 +325,7 @@ update(event) → isNew=false → UPDATE
 
 Both paths have been manually verified against PostgreSQL: newly created Events are persisted as `DRAFT`, and publication updates the same row to `PUBLISHED`.
 
-Reactive transactions, database migrations and PostgreSQL Testcontainers are still pending.
+Reactive transaction management is now implemented for Booking creation. Database migrations and PostgreSQL Testcontainers are still pending.
 
 ------------------------------------------------------------------------
 
@@ -353,7 +354,7 @@ R2DBC / PostgreSQL: Booking inserted
 
 The complete flow was manually verified against PostgreSQL: reserving 3 places reduced Event availability from `20` to `17`, and the corresponding Booking was persisted.
 
-This validates the two persistence operations, but reactive transaction/atomicity across them has not yet been implemented or studied.
+The Event capacity update and Booking insert are now coordinated as one reactive transaction. If Booking persistence fails after the Event update, the Event update is rolled back so the database does not retain a partial business state.
 
 ------------------------------------------------------------------------
 
@@ -390,8 +391,7 @@ Event available places    = 1
 The test queries Bookings by Event through `BookingQueryUseCase` and verifies the
 persisted Event through `EventQueryUseCase`.
 
-Reactive transaction/atomicity across Event and Booking persistence remains the
-next concurrency/persistence step.
+Reactive transaction/atomicity across Event and Booking persistence is now implemented and tested. A failure injected after the Event update verifies that the capacity change is rolled back.
 
 ------------------------------------------------------------------------
 
@@ -455,6 +455,7 @@ Current tested behaviour includes:
 -   bounded recovery after an optimistic-lock conflict
 -   final concurrent-booking state: one persisted Booking and one remaining Event place
 -   Booking lookup by Event and reactive `count()` verification
+-   reactive transaction rollback when Booking persistence fails after Event capacity update
 
 The current build can be verified with:
 

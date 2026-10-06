@@ -3,10 +3,6 @@ package com.rubenmarin.eventhub.booking.application.port.in;
 import com.rubenmarin.eventhub.booking.domain.model.CustomerId;
 import com.rubenmarin.eventhub.event.domain.model.EventId;
 
-import java.math.BigDecimal;
-import java.time.LocalDateTime;
-import java.util.Currency;
-
 /**
  * Input data required to execute the Create Booking use case.
  * <p>
