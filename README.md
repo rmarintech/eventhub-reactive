@@ -128,12 +128,12 @@ Planned:
 Detailed learning material is kept in separate documents and is updated
 as each topic is actually studied.
 
-c Do cu                     mentation
-  --------------------------- ------------------------------------------------------
-ect progress \[R OA         DMAP.md\](docs/ROADMAP.md)
-in-Driven Design \[D DD     .md\](docs/DDD.md)
-gonal Architecture \[D DD   .md\](docs/DDD.md#23-ddd-and-hexagonal-architecture)
-tive Programming \[R EA     CTIVE.md\](docs/REACTIVE.md)
+| Topic | Documentation |
+| --- | --- |
+| Project progress | [ROADMAP.md](docs/ROADMAP.md) |
+| Domain-Driven Design | [DDD.md](docs/DDD.md) |
+| Hexagonal Architecture | [DDD.md](docs/DDD.md#23-ddd-and-hexagonal-architecture) |
+| Reactive Programming | [REACTIVE.md](docs/REACTIVE.md) |
 
 Additional documentation will be created when the corresponding topics
 are reached in the course.
@@ -167,7 +167,7 @@ Request validation                  ✅
         ↓
 Booking domain / application flow   ✅
         ↓
-Publish Event API                    ✅
+Publish Event API                   ✅
         ↓
 Booking HTTP API                    ✅
         ↓
@@ -175,15 +175,15 @@ Event R2DBC / PostgreSQL            ✅
         ↓
 Booking R2DBC / PostgreSQL          ✅
         ↓
-Concurrency / optimistic locking      ✅
+Concurrency / optimistic locking    ✅
         ↓
-Reactive transaction / atomicity       ✅
+Reactive transaction / atomicity    ✅
         ↓
-Domain Events                          ✅
+Domain Events                       ✅
         ↓
-Domain Events vs Integration Events    ✅
+Domain Events vs Integration Events ✅
         ↓
-Kafka fundamentals                     🚧 NEXT
+Kafka fundamentals                  🚧 NEXT
 ```
 
 For the complete project plan, check [ROADMAP.md](docs/ROADMAP.md).
