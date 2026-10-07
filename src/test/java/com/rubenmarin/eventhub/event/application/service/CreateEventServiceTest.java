@@ -5,7 +5,6 @@ import com.rubenmarin.eventhub.event.application.port.out.EventRepository;
 import com.rubenmarin.eventhub.event.domain.model.*;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
-import org.mockito.Mockito;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;

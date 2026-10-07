@@ -3,7 +3,7 @@ package com.rubenmarin.eventhub.booking.infrastructure.adapter.out.persistence;
 
 import com.rubenmarin.eventhub.booking.domain.model.Booking;
 import com.rubenmarin.eventhub.booking.domain.model.CustomerId;
-import com.rubenmarin.eventhub.event.domain.model.*;
+import com.rubenmarin.eventhub.event.domain.model.EventId;
 import org.junit.jupiter.api.Test;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;

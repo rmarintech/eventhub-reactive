@@ -497,7 +497,8 @@ R2DBC / PostgreSQL                   ✅ EVENT PERSISTENCE
 
 ## 26. Spring Data R2DBC and PostgreSQL
 
-Event persistence now stays reactive through Spring Data R2DBC and the PostgreSQL R2DBC driver.
+Event persistence now stays reactive through Spring Data R2DBC and the
+PostgreSQL R2DBC driver.
 
 ``` text
 WebFlux
@@ -515,9 +516,13 @@ R2DBC PostgreSQL driver
 PostgreSQL
 ```
 
-Unlike wrapping JDBC in a `Mono`, R2DBC provides a non-blocking database access model that fits the reactive pipeline directly.
+Unlike wrapping JDBC in a `Mono`, R2DBC provides a non-blocking database
+access model that fits the reactive pipeline directly.
 
-`SpringDataEventRepository` extends `ReactiveCrudRepository<EventEntity, UUID>`, so its operations already return `Mono` and `Flux`. The adapter maps those emitted persistence entities synchronously with `map()`:
+`SpringDataEventRepository` extends
+`ReactiveCrudRepository<EventEntity, UUID>`, so its operations already
+return `Mono` and `Flux`. The adapter maps those emitted persistence
+entities synchronously with `map()`:
 
 ``` text
 Mono<EventEntity> → map(toDomain) → Mono<Event>
@@ -528,7 +533,10 @@ No manual `subscribe()` is used in the repository adapter.
 
 ## 27. Reactive Create and Update
 
-A generated UUID means a new Event already has a non-null ID before it reaches Spring Data. `EventEntity` therefore implements `Persistable<UUID>` so the adapter can explicitly distinguish new and existing persistence entities.
+A generated UUID means a new Event already has a non-null ID before it
+reaches Spring Data. `EventEntity` therefore implements
+`Persistable<UUID>` so the adapter can explicitly distinguish new and
+existing persistence entities.
 
 ``` text
 repository.create(event)
@@ -548,11 +556,17 @@ Spring Data save(...)
 UPDATE
 ```
 
-The `isNew` value is marked `@Transient`: it controls Spring Data persistence behaviour but is not a PostgreSQL column.
+The `isNew` value is marked `@Transient`: it controls Spring Data
+persistence behaviour but is not a PostgreSQL column.
 
-The create and update paths were verified against the running PostgreSQL database: new Events are inserted as `DRAFT`, and publishing an Event updates the existing row to `PUBLISHED`.
+The create and update paths were verified against the running PostgreSQL
+database: new Events are inserted as `DRAFT`, and publishing an Event
+updates the existing row to `PUBLISHED`.
 
-The current Spring-backed HTTP integration tests use the configured PostgreSQL database, so tests that create Events can currently leave rows in the development database. PostgreSQL Testcontainers has not yet been implemented.
+The current Spring-backed HTTP integration tests use the configured
+PostgreSQL database, so tests that create Events can currently leave
+rows in the development database. PostgreSQL Testcontainers has not yet
+been implemented.
 
 ## 28. Current position
 
@@ -570,10 +584,10 @@ Booking R2DBC / PostgreSQL          ✅
 Concurrency / optimistic locking      🚧 CURRENT
 ```
 
-
 ## 29. Booking R2DBC persistence
 
-Booking persistence now also reaches PostgreSQL through the reactive persistence stack.
+Booking persistence now also reaches PostgreSQL through the reactive
+persistence stack.
 
 ``` text
 POST /bookings
@@ -593,12 +607,15 @@ R2DBC / PostgreSQL
 Booking persisted
 ```
 
-Both operations were manually verified against PostgreSQL. Reactive transaction management across the two writes has not yet been implemented or studied.
+Both operations were manually verified against PostgreSQL. Reactive
+transaction management across the two writes has not yet been
+implemented or studied.
 
 ## 30. Concurrent reactive updates and optimistic locking
 
-The Booking flow has now been tested with simultaneous operations that can
-read the same Event state before either persistence update completes.
+The Booking flow has now been tested with simultaneous operations that
+can read the same Event state before either persistence update
+completes.
 
 Reactive execution does not itself prevent this race:
 
@@ -607,27 +624,29 @@ Booking A ──► read Event version N ──► reserve ──► update
 Booking B ──► read Event version N ──► reserve ──► update
 ```
 
-Optimistic locking is now used at the R2DBC persistence boundary. The first
-update succeeds and advances the Event version. A competing update based on
-the stale version fails instead of silently overwriting the newer state.
+Optimistic locking is now used at the R2DBC persistence boundary. The
+first update succeeds and advances the Event version. A competing update
+based on the stale version fails instead of silently overwriting the
+newer state.
 
 ``` text
 first update   → version N matches → UPDATE succeeds → version N + 1
 second update  → version N stale   → optimistic locking error
 ```
 
-A focused concurrent-booking test reproduces this behaviour, and the complete
-test suite is green.
+A focused concurrent-booking test reproduces this behaviour, and the
+complete test suite is green.
 
-The losing operation is now recovered by re-reading the Event and attempting
-the reservation once more. The application reacts to a persistence-agnostic
-`ConcurrentUpdateException`, while the R2DBC adapter owns translation from the
-Spring Data optimistic-locking exception.
+The losing operation is now recovered by re-reading the Event and
+attempting the reservation once more. The application reacts to a
+persistence-agnostic `ConcurrentUpdateException`, while the R2DBC
+adapter owns translation from the Spring Data optimistic-locking
+exception.
 
 ## 31. Sequencing verification with `then()` and `count()`
 
-The final concurrency test introduced `then(...)` to sequence a verification
-Publisher after the concurrent booking attempt.
+The final concurrency test introduced `then(...)` to sequence a
+verification Publisher after the concurrent booking attempt.
 
 ``` text
 concurrent booking attempt
@@ -639,12 +658,13 @@ then(...)
 query persisted Bookings and Event
 ```
 
-`then(otherPublisher)` waits for the upstream Publisher to complete successfully,
-discards any value emitted by that upstream Publisher, and continues with the
-Publisher supplied to `then`.
+`then(otherPublisher)` waits for the upstream Publisher to complete
+successfully, discards any value emitted by that upstream Publisher, and
+continues with the Publisher supplied to `then`.
 
 The Booking query returns `Flux<Booking>`. Calling `count()` produces a
-`Mono<Long>`, which makes the number of persisted Bookings directly testable.
+`Mono<Long>`, which makes the number of persisted Bookings directly
+testable.
 
 The final test combines:
 
@@ -658,29 +678,31 @@ Mono.zip(...)
 Tuple2<Long, Event>
 ```
 
-`StepVerifier` then verifies the final persisted business state: one Booking
-exists and the Event has one available place.
+`StepVerifier` then verifies the final persisted business state: one
+Booking exists and the Event has one available place.
 
-Reactive transaction management across the Event update and Booking insert has
-now been implemented and tested.
+Reactive transaction management across the Event update and Booking
+insert has now been implemented and tested.
 
 ## 32. Reactive transaction and atomicity
 
-Booking creation performs two database writes that form one business operation:
+Booking creation performs two database writes that form one business
+operation:
 
-```text
+``` text
 Event capacity update
         ↓
 Booking insert
 ```
 
-Without a transaction, a successful Event update followed by a failed Booking
-insert would leave a partial state: capacity reduced but no Booking persisted.
+Without a transaction, a successful Event update followed by a failed
+Booking insert would leave a partial state: capacity reduced but no
+Booking persisted.
 
-The Booking use case is now executed inside a reactive transaction so both
-writes succeed or both are rolled back:
+The Booking use case is now executed inside a reactive transaction so
+both writes succeed or both are rolled back:
 
-```text
+``` text
 BEGIN TRANSACTION
         ↓
 UPDATE Event
@@ -691,20 +713,20 @@ success → COMMIT
 failure → ROLLBACK
 ```
 
-A dedicated test forces Booking persistence to fail after the Event capacity
-update and verifies that the persisted Event capacity remains unchanged.
+A dedicated test forces Booking persistence to fail after the Event
+capacity update and verifies that the persisted Event capacity remains
+unchanged.
 
-Optimistic locking protects against stale concurrent updates; the transaction
-protects atomicity across related database writes. The complete test suite is
-green with both mechanisms enabled.
-
+Optimistic locking protects against stale concurrent updates; the
+transaction protects atomicity across related database writes. The
+complete test suite is green with both mechanisms enabled.
 
 ## 33. Reactive Domain Event Publication
 
 Booking creation now composes Domain Event publication into the returned
 reactive pipeline:
 
-```text
+``` text
 Mono<Booking>
     ↓ flatMap
 Booking.domainEvents()
@@ -720,11 +742,39 @@ then(Mono.just(bookingCreated))
 Mono<Booking>
 ```
 
-`Flux.fromIterable(...)` creates a cold `Flux` from the Aggregate's recorded
-events. `then()` represents completion of all upstream publication work as a
-`Mono<Void>`. `then(Mono.just(bookingCreated))` then re-emits the already
-created Booking so the use case still returns `Mono<Booking>`.
+`Flux.fromIterable(...)` creates a cold `Flux` from the Aggregate's
+recorded events. `then()` represents completion of all upstream
+publication work as a `Mono<Void>`. `then(Mono.just(bookingCreated))`
+then re-emits the already created Booking so the use case still returns
+`Mono<Booking>`.
 
 This also reinforced that `Mono<Void>` is a Publisher, not `null`.
-`Mono.empty()` represents successful completion without an emitted value.
-The complete test suite is green with Domain Event publication included.
+`Mono.empty()` represents successful completion without an emitted
+value. The complete test suite is green with Domain Event publication
+included.
+
+## 34. Reactive Domain Event Dispatching
+
+Domain Event publication now continues through a reactive dispatcher
+instead of completing immediately in the in-memory publisher.
+
+``` text
+publishDomainEvent(event)
+    ↓
+DomainEventDispatcher.dispatch(event)
+    ↓
+matching DomainEventHandler.handle(event)
+    ↓
+Mono<Void>
+```
+
+The dispatcher and handlers preserve the existing reactive completion
+contract: `Mono<Void>` represents successful completion without an
+emitted value. The focused dispatcher test uses
+`StepVerifier.verifyComplete()` and Mockito to verify that the matching
+handler is invoked.
+
+`BookingCreatedHandler` then maps the Domain Event to a
+`BookingCreatedIntegrationEvent` and delegates to the reactive
+`IntegrationEventPublisher` output port. Kafka has not yet been
+introduced.

@@ -12,7 +12,6 @@ import reactor.test.StepVerifier;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.Currency;
-import java.util.UUID;
 
 public class PublishEventServiceTest {
 

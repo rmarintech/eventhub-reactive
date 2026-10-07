@@ -1,5 +1,6 @@
 package com.rubenmarin.eventhub.booking.application.service;
 
+import com.rubenmarin.eventhub.booking.application.mapper.BookingIntegrationEventMapper;
 import com.rubenmarin.eventhub.booking.application.port.in.CreateBookingCommand;
 import com.rubenmarin.eventhub.booking.application.port.out.BookingRepository;
 import com.rubenmarin.eventhub.booking.domain.event.BookingCreated;
@@ -10,6 +11,7 @@ import com.rubenmarin.eventhub.event.application.port.out.EventRepository;
 import com.rubenmarin.eventhub.event.application.service.ReserveEventPlacesService;
 import com.rubenmarin.eventhub.event.domain.model.*;
 import com.rubenmarin.eventhub.shared.application.port.out.DomainEventPublisher;
+import com.rubenmarin.eventhub.shared.application.port.out.IntegrationEventPublisher;
 import com.rubenmarin.eventhub.shared.domain.event.DomainEvent;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
@@ -34,6 +36,8 @@ public class CreateBookingServiceTest {
     InMemoryBookingRepository bookingRepository;
     ReserveEventPlacesService reserveEventPlacesUseCase;
     CreateBookingService createBookingService;
+    BookingIntegrationEventMapper bookingIntegrationEventMapper;
+    IntegrationEventPublisher integrationEventPublisher;
 
     @Mock
     DomainEventPublisher domainEventPublisher;

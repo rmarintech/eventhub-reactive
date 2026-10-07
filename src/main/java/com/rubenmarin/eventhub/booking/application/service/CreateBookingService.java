@@ -1,5 +1,6 @@
 package com.rubenmarin.eventhub.booking.application.service;
 
+import com.rubenmarin.eventhub.booking.application.mapper.BookingIntegrationEventMapper;
 import com.rubenmarin.eventhub.booking.application.port.in.CreateBookingCommand;
 import com.rubenmarin.eventhub.booking.application.port.in.CreateBookingUseCase;
 import com.rubenmarin.eventhub.booking.application.port.out.BookingRepository;
@@ -10,6 +11,7 @@ import com.rubenmarin.eventhub.event.application.port.in.ReserveEventPlacesUseCa
 import com.rubenmarin.eventhub.event.domain.model.Event;
 import com.rubenmarin.eventhub.event.domain.model.EventId;
 import com.rubenmarin.eventhub.shared.application.port.out.DomainEventPublisher;
+import com.rubenmarin.eventhub.shared.application.port.out.IntegrationEventPublisher;
 import com.rubenmarin.eventhub.shared.domain.event.DomainEvent;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -25,7 +27,8 @@ public class CreateBookingService implements CreateBookingUseCase {
     public CreateBookingService(
             BookingRepository bookingRepository,
             ReserveEventPlacesUseCase reserveEventPlacesUseCase,
-            DomainEventPublisher domainEventPublisher) {
+            DomainEventPublisher domainEventPublisher
+            ) {
 
         this.bookingRepository = bookingRepository;
         this.reserveEventPlacesUseCase = reserveEventPlacesUseCase;

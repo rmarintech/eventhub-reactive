@@ -228,7 +228,8 @@ architecture tests remain pending
 -   [x] Document optimistic-locking decision
 -   [ ] Handle/recover the booking that loses the race
 -   [x] Reactive transaction/atomicity across Event and Booking writes
--   [x] Verify rollback when Booking persistence fails after Event capacity update
+-   [x] Verify rollback when Booking persistence fails after Event
+    capacity update
 
 ------------------------------------------------------------------------
 
@@ -238,7 +239,12 @@ architecture tests remain pending
 -   [x] `BookingCreated` Domain Event
 -   [x] Domain Event publisher output port
 -   [x] Internal in-memory Domain Event publication
--   [ ] Domain Events vs Integration Events
+-   [x] Domain Events vs Integration Events
+-   [x] Integration Event marker and publisher output port
+-   [x] Booking Domain Event → Integration Event mapping
+-   [x] Domain Event handler abstraction
+-   [x] Domain Event dispatcher
+-   [x] BookingCreated handler and dispatcher tests
 -   [ ] Apache Kafka fundamentals
 -   [ ] Kafka broker setup
 -   [ ] Topics
@@ -560,7 +566,9 @@ Concurrency / optimistic locking    ✅
         ↓
 Domain Events                        ✅
         ↓
-Kafka / Event-Driven                🚧 NEXT
+Domain vs Integration Events         ✅
+        ↓
+Kafka fundamentals                   🚧 NEXT
         ↓# EventHub Reactive --- Project Roadmap
 
 This roadmap tracks the complete learning and implementation path for
@@ -790,12 +798,16 @@ architecture tests remain pending
 -   [x] Concurrent booking / optimistic-locking test
 -   [x] Document optimistic-locking decision
 -   [x] Handle/recover the booking that loses the race
--   [x] Re-read fresh Event state and re-evaluate capacity after a conflict
+-   [x] Re-read fresh Event state and re-evaluate capacity after a
+    conflict
 -   [x] Bound optimistic-lock recovery to one additional attempt
--   [x] Verify only one Booking is persisted when concurrent demand exceeds capacity
--   [x] Verify final persisted Event availability after the concurrent attempt
+-   [x] Verify only one Booking is persisted when concurrent demand
+    exceeds capacity
+-   [x] Verify final persisted Event availability after the concurrent
+    attempt
 -   [x] Reactive transaction/atomicity across Event and Booking writes
--   [x] Verify rollback when Booking persistence fails after Event capacity update
+-   [x] Verify rollback when Booking persistence fails after Event
+    capacity update
 
 ------------------------------------------------------------------------
 
@@ -805,7 +817,12 @@ architecture tests remain pending
 -   [x] `BookingCreated` Domain Event
 -   [x] Domain Event publisher output port
 -   [x] Internal in-memory Domain Event publication
--   [ ] Domain Events vs Integration Events
+-   [x] Domain Events vs Integration Events
+-   [x] Integration Event marker and publisher output port
+-   [x] Booking Domain Event → Integration Event mapping
+-   [x] Domain Event handler abstraction
+-   [x] Domain Event dispatcher
+-   [x] BookingCreated handler and dispatcher tests
 -   [ ] Apache Kafka fundamentals
 -   [ ] Kafka broker setup
 -   [ ] Topics
@@ -1127,7 +1144,9 @@ Concurrency / optimistic locking    ✅
         ↓
 Domain Events                        ✅
         ↓
-Kafka / Event-Driven                🚧 NEXT
+Domain vs Integration Events         ✅
+        ↓
+Kafka fundamentals                   🚧 NEXT
         ↓
 Security                            ⏳
         ↓
@@ -1154,27 +1173,7 @@ System Design                       ⏳
 Portfolio / Interview Preparation   ⏳
 ```
 
-Security                            ⏳
-↓
-React / TypeScript                  ⏳
-↓
-Full-Stack Integration              ⏳
-↓
-Real-Time Features                  ⏳
-↓
-Docker                              ⏳
-↓
-CI/CD                               ⏳
-↓
-Observability                       ⏳
-↓
-Performance                         ⏳
-↓
-Kubernetes / Helm                   ⏳
-↓
-Microservices Evolution             ⏳
-↓
-System Design                       ⏳
-↓
-Portfolio / Interview Preparation   ⏳
-```
+Security ⏳ ↓ React / TypeScript ⏳ ↓ Full-Stack Integration ⏳ ↓
+Real-Time Features ⏳ ↓ Docker ⏳ ↓ CI/CD ⏳ ↓ Observability ⏳ ↓
+Performance ⏳ ↓ Kubernetes / Helm ⏳ ↓ Microservices Evolution ⏳ ↓
+System Design ⏳ ↓ Portfolio / Interview Preparation ⏳ \`\`\`

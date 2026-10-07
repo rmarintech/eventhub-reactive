@@ -949,11 +949,14 @@ A missing Event is represented by an empty `Mono`, rather than by
 
 # 26. Reactive Output Adapter and Lazy Execution
 
-The in-memory output adapter was used first to study lazy reactive execution.
-It remains available as a plain Java test adapter, while production Event persistence now uses the R2DBC adapter described later in this document.
+The in-memory output adapter was used first to study lazy reactive
+execution. It remains available as a plain Java test adapter, while
+production Event persistence now uses the R2DBC adapter described later
+in this document.
 
-`create()` and `update()` use `Mono.fromSupplier(...)` because the subscription lazily
-produces a value while performing the in-memory save.
+`create()` and `update()` use `Mono.fromSupplier(...)` because the
+subscription lazily produces a value while performing the in-memory
+save.
 
 `findById()` and `findAll()` use deferred publisher creation so the
 current contents of the map are inspected at subscription time.
@@ -1300,9 +1303,9 @@ invalid EventId representation     → 400 Bad Request
 
 # 35. HTTP Integration Test Isolation
 
-Earlier WebFlux integration tests exposed the lifecycle of the
-in-memory repository when it was the Spring production adapter. The
-production Event repository has since been replaced by the R2DBC adapter;
+Earlier WebFlux integration tests exposed the lifecycle of the in-memory
+repository when it was the Spring production adapter. The production
+Event repository has since been replaced by the R2DBC adapter;
 `InMemoryEventRepository` is now a plain Java adapter used by tests that
 instantiate it directly.
 
@@ -1623,9 +1626,10 @@ application dependencies are correctly wired.
 
 # 45. Reactive PostgreSQL Persistence with R2DBC
 
-The Event module now has real reactive persistence backed by PostgreSQL 17 and Spring Data R2DBC.
-PostgreSQL runs locally in Docker Compose and the application connects through an R2DBC URL.
-The schema is initialized from `src/main/resources/schema.sql`.
+The Event module now has real reactive persistence backed by PostgreSQL
+17 and Spring Data R2DBC. PostgreSQL runs locally in Docker Compose and
+the application connects through an R2DBC URL. The schema is initialized
+from `src/main/resources/schema.sql`.
 
 The persistence boundary is now:
 
@@ -1645,7 +1649,10 @@ R2DBC PostgreSQL driver
 PostgreSQL
 ```
 
-The domain remains persistence-independent. `EventEntity` is an infrastructure persistence model annotated with `@Table("events")`; domain Value Objects are flattened into relational columns such as total/available capacity and amount/currency.
+The domain remains persistence-independent. `EventEntity` is an
+infrastructure persistence model annotated with `@Table("events")`;
+domain Value Objects are flattened into relational columns such as
+total/available capacity and amount/currency.
 
 The adapter performs explicit mapping in both directions:
 
@@ -1654,34 +1661,51 @@ Event → EventEntity → PostgreSQL
 PostgreSQL → EventEntity → Event.rehydrate(...) → Event
 ```
 
-`Event.rehydrate(...)` reconstructs an existing Aggregate while preserving its persisted ID, status and available capacity. It is distinct from `Event.create(...)`, which represents creation of a new Aggregate.
+`Event.rehydrate(...)` reconstructs an existing Aggregate while
+preserving its persisted ID, status and available capacity. It is
+distinct from `Event.create(...)`, which represents creation of a new
+Aggregate.
 
 # 46. Create vs Update Persistence Intent
 
-Because `Event.create()` generates its UUID before persistence, a non-null `@Id` alone cannot tell Spring Data whether the row is new. This was observed in practice: Spring Data treated a new entity as an update, the HTTP request returned successfully, but no row was inserted.
+Because `Event.create()` generates its UUID before persistence, a
+non-null `@Id` alone cannot tell Spring Data whether the row is new.
+This was observed in practice: Spring Data treated a new entity as an
+update, the HTTP request returned successfully, but no row was inserted.
 
-`EventEntity` therefore implements `Persistable<UUID>` and exposes transient persistence metadata through `isNew`. The flag is not stored in PostgreSQL.
+`EventEntity` therefore implements `Persistable<UUID>` and exposes
+transient persistence metadata through `isNew`. The flag is not stored
+in PostgreSQL.
 
-The application-owned repository port now makes persistence intent explicit:
+The application-owned repository port now makes persistence intent
+explicit:
 
 ``` text
 create(Event) → new Event → isNew = true  → INSERT
 update(Event) → existing Event → isNew = false → UPDATE
 ```
 
-This keeps the persistence concern out of the domain. `CreateEventService` calls `create()`, while publication and capacity reservation call `update()`.
+This keeps the persistence concern out of the domain.
+`CreateEventService` calls `create()`, while publication and capacity
+reservation call `update()`.
 
-The in-memory adapter implements the same port, although both operations use `Map.put(...)` internally because a `HashMap` does not need to distinguish SQL INSERT from UPDATE.
+The in-memory adapter implements the same port, although both operations
+use `Map.put(...)` internally because a `HashMap` does not need to
+distinguish SQL INSERT from UPDATE.
 
-The implementation was validated with the full green test suite and manually against PostgreSQL: creating Events produced persisted `DRAFT` rows and publishing an Event updated the same row to `PUBLISHED`.
+The implementation was validated with the full green test suite and
+manually against PostgreSQL: creating Events produced persisted `DRAFT`
+rows and publishing an Event updated the same row to `PUBLISHED`.
 
-Reactive transactions, database migrations and PostgreSQL Testcontainers have not yet been implemented.
+Reactive transactions, database migrations and PostgreSQL Testcontainers
+have not yet been implemented.
 
 ------------------------------------------------------------------------
 
 # 47. Booking PostgreSQL Persistence
 
-The Booking module now also persists Bookings reactively in PostgreSQL through its own persistence adapter.
+The Booking module now also persists Bookings reactively in PostgreSQL
+through its own persistence adapter.
 
 The already studied cross-module boundary is preserved:
 
@@ -1699,20 +1723,25 @@ Booking persistence adapter
 PostgreSQL
 ```
 
-The Booking application layer still does not access `EventRepository` directly. Event owns its persistence, and Booking coordinates with Event through the Event application input port.
+The Booking application layer still does not access `EventRepository`
+directly. Event owns its persistence, and Booking coordinates with Event
+through the Event application input port.
 
-The complete flow was manually verified: creating a Booking for 3 places persisted the Booking and changed the corresponding Event availability from `20` to `17`.
+The complete flow was manually verified: creating a Booking for 3 places
+persisted the Booking and changed the corresponding Event availability
+from `20` to `17`.
 
-At this point these are two successfully composed reactive persistence operations. Atomicity across both database writes has not yet been implemented or studied; reactive transactions remain a later step.
-
+At this point these are two successfully composed reactive persistence
+operations. Atomicity across both database writes has not yet been
+implemented or studied; reactive transactions remain a later step.
 
 ------------------------------------------------------------------------
 
 # 48. Concurrent Booking and Optimistic Locking
 
 A concurrency problem was reproduced around Event capacity. Two booking
-operations can read the same persisted Event state before either update has
-completed.
+operations can read the same persisted Event state before either update
+has completed.
 
 ``` text
 Event availability = 3
@@ -1724,10 +1753,10 @@ Booking A reserves 2
 Booking B reserves 2
 ```
 
-Each Aggregate instance can satisfy its domain invariant because each was
-created from a snapshot that still contained 3 available places. Without
-concurrency control, both operations could therefore proceed from stale state
-and cause a lost update / business overselling problem.
+Each Aggregate instance can satisfy its domain invariant because each
+was created from a snapshot that still contained 3 available places.
+Without concurrency control, both operations could therefore proceed
+from stale state and cause a lost update / business overselling problem.
 
 The distinction studied is:
 
@@ -1739,9 +1768,10 @@ Concurrency control
     → protects persisted state when multiple operations race
 ```
 
-The Event persistence model now uses optimistic locking with a version value.
-The Event Aggregate preserves that version when existing state is rehydrated,
-and the R2DBC persistence entity maps it using Spring Data's `@Version`.
+The Event persistence model now uses optimistic locking with a version
+value. The Event Aggregate preserves that version when existing state is
+rehydrated, and the R2DBC persistence entity maps it using Spring Data's
+`@Version`.
 
 ``` text
 both operations read Event version N
@@ -1755,24 +1785,25 @@ second UPDATE still expects version N
 optimistic locking failure
 ```
 
-This prevents a stale Event snapshot from silently overwriting the update that
-won the race.
+This prevents a stale Event snapshot from silently overwriting the
+update that won the race.
 
 A focused concurrent-booking test reproduces the race and verifies the
 optimistic-locking behaviour. The full test suite is green.
 
-The operation that loses the optimistic-locking race is now handled by the
-application. A persistence-specific optimistic-locking failure is translated at
-the infrastructure boundary into `ConcurrentUpdateException`, an
-application-level exception. This keeps Spring Data details out of the
-application layer.
+The operation that loses the optimistic-locking race is now handled by
+the application. A persistence-specific optimistic-locking failure is
+translated at the infrastructure boundary into
+`ConcurrentUpdateException`, an application-level exception. This keeps
+Spring Data details out of the application layer.
 
 ------------------------------------------------------------------------
 
 # 49. Recovering the Booking That Loses the Race
 
-An optimistic-locking conflict means that the Event state used by the losing
-operation is stale. It does not necessarily mean that the Event is already full.
+An optimistic-locking conflict means that the Event state used by the
+losing operation is stale. It does not necessarily mean that the Event
+is already full.
 
 The recovery policy studied and implemented is:
 
@@ -1790,8 +1821,8 @@ re-evaluate Event.reservePlaces(...)
 retry the update once
 ```
 
-Re-reading is important because the domain rule must be evaluated against the
-latest persisted capacity.
+Re-reading is important because the domain rule must be evaluated
+against the latest persisted capacity.
 
 For example:
 
@@ -1817,41 +1848,42 @@ re-read → available = 1
 Event.reservePlaces(2) rejects the reservation
 ```
 
-The retry is deliberately bounded to one additional attempt rather than being
-an unlimited retry loop.
+The retry is deliberately bounded to one additional attempt rather than
+being an unlimited retry loop.
 
-The concurrency integration test now verifies the resulting business state for
-two concurrent Bookings of 2 places against an Event with capacity 3. After the
-race settles, exactly one Booking is persisted and the Event has 1 available
-place.
+The concurrency integration test now verifies the resulting business
+state for two concurrent Bookings of 2 places against an Event with
+capacity 3. After the race settles, exactly one Booking is persisted and
+the Event has 1 available place.
 
-To verify persisted Bookings by Event, the Booking application now exposes a
-query use case backed by `BookingRepository.findByEventId(...)`. The R2DBC
-adapter delegates that query to a Spring Data derived query and maps the
-resulting persistence entities back to domain `Booking` objects.
+To verify persisted Bookings by Event, the Booking application now
+exposes a query use case backed by
+`BookingRepository.findByEventId(...)`. The R2DBC adapter delegates that
+query to a Spring Data derived query and maps the resulting persistence
+entities back to domain `Booking` objects.
 
-The test composes the concurrent attempt with the later verification using
-Reactor. `then(...)` waits for the first Publisher to terminate successfully
-while discarding its emitted value, then subscribes to the Publisher that reads
-the final persisted state. `Flux.count()` converts the Booking query into a
-`Mono<Long>` so the final Booking count can be asserted together with the
-persisted Event.
+The test composes the concurrent attempt with the later verification
+using Reactor. `then(...)` waits for the first Publisher to terminate
+successfully while discarding its emitted value, then subscribes to the
+Publisher that reads the final persisted state. `Flux.count()` converts
+the Booking query into a `Mono<Long>` so the final Booking count can be
+asserted together with the persisted Event.
 
-Reactive transaction/atomicity across the Event update and Booking insert has
-still not been implemented or studied.
+Reactive transaction/atomicity across the Event update and Booking
+insert has still not been implemented or studied.
 
 ------------------------------------------------------------------------
 
-This is the current stopping point of the DDD and architecture documentation.
-
+This is the current stopping point of the DDD and architecture
+documentation.
 
 ## 50. Transaction boundary for Booking creation
 
-Booking creation coordinates two persisted changes: reserving capacity on the
-Event Aggregate and creating the Booking Aggregate. These writes form one
-application-level business operation.
+Booking creation coordinates two persisted changes: reserving capacity
+on the Event Aggregate and creating the Booking Aggregate. These writes
+form one application-level business operation.
 
-```text
+``` text
 reserve Event capacity
         ↓
 persist Event
@@ -1862,45 +1894,46 @@ all succeed → COMMIT
 any fails   → ROLLBACK
 ```
 
-A test forces Booking persistence to fail after the Event update and verifies
-that the Event capacity returns to its previous persisted value. This prevents
-a partial state where capacity has been consumed without a corresponding
-Booking.
+A test forces Booking persistence to fail after the Event update and
+verifies that the Event capacity returns to its previous persisted
+value. This prevents a partial state where capacity has been consumed
+without a corresponding Booking.
 
 Optimistic locking and transaction atomicity solve different problems:
-optimistic locking detects stale concurrent writes, while the transaction
-provides all-or-nothing persistence across Event and Booking. Both mechanisms
-are therefore retained.
-
+optimistic locking detects stale concurrent writes, while the
+transaction provides all-or-nothing persistence across Event and
+Booking. Both mechanisms are therefore retained.
 
 ------------------------------------------------------------------------
 
 # 51. Booking Domain Events
 
-A Domain Event represents a business fact that has already happened. EventHub
-now uses the framework-independent `DomainEvent` marker interface and the
-`BookingCreated` record.
+A Domain Event represents a business fact that has already happened.
+EventHub now uses the framework-independent `DomainEvent` marker
+interface and the `BookingCreated` record.
 
-```text
+``` text
 CreateBooking    → command: asks for an action
 BookingCreated   → event: states a fact that already happened
 ```
 
-`Booking.generate(...)` owns creation of `BookingCreated` and registers it
-using the same generated `BookingId`. The Aggregate exposes an unmodifiable
-copy of its current domain events. These events are transient facts produced
-during the current Aggregate execution; `Booking.rehydrate(...)` therefore
-starts with an empty domain-event collection.
+`Booking.generate(...)` owns creation of `BookingCreated` and registers
+it using the same generated `BookingId`. The Aggregate exposes an
+unmodifiable copy of its current domain events. These events are
+transient facts produced during the current Aggregate execution;
+`Booking.rehydrate(...)` therefore starts with an empty domain-event
+collection.
 
-Domain tests verify that generating a Booking registers one `BookingCreated`
-with the expected Booking, customer, Event and places data, while rehydrating
-an existing Booking does not register a new event.
+Domain tests verify that generating a Booking registers one
+`BookingCreated` with the expected Booking, customer, Event and places
+data, while rehydrating an existing Booking does not register a new
+event.
 
 # 52. Domain Event Publication Port
 
 Registering and publishing are separate responsibilities:
 
-```text
+``` text
 Domain         → registers the business fact
 Application    → coordinates publication
 Infrastructure → provides the publication mechanism
@@ -1909,9 +1942,10 @@ Infrastructure → provides the publication mechanism
 The application owns the output port `DomainEventPublisher`, whose
 `publishDomainEvent(DomainEvent)` operation returns `Mono<Void>`.
 
-`CreateBookingService` now composes publication after Booking persistence:
+`CreateBookingService` now composes publication after Booking
+persistence:
 
-```text
+``` text
 reserve Event places
         ↓
 persist Booking
@@ -1925,13 +1959,79 @@ publication completes
 return Booking
 ```
 
-Infrastructure currently provides `InMemoryDomainEventPublisher`, which
-represents successful publication with `Mono.empty()`. Shared Spring
-configuration wires that adapter to the application-owned port.
+Infrastructure provides `InMemoryDomainEventPublisher`, which now
+delegates publication to `DomainEventDispatcher`. The dispatcher
+receives the available `DomainEventHandler<?>` beans and routes each
+Domain Event to the handler whose `eventType()` matches the concrete
+event class.
 
-The application test configures a Mockito publisher returning `Mono.empty()`
-and verifies that `publishDomainEvent(...)` is called with `BookingCreated`.
-The complete test suite is green.
+The application test configures a Mockito publisher returning
+`Mono.empty()` and verifies that `publishDomainEvent(...)` is called
+with `BookingCreated`. The complete test suite is green.
 
-The distinction between Domain Events and Integration Events has not yet been
-studied, and Kafka publication has not been implemented.
+Kafka publication has not yet been implemented.
+
+------------------------------------------------------------------------
+
+# 53. Domain Events vs Integration Events
+
+The distinction between Domain Events and Integration Events has now
+been studied and implemented.
+
+``` text
+Domain Event
+    → internal business fact
+    → shaped by the domain
+
+Integration Event
+    → external communication contract
+    → shaped for communication outside the domain/module
+```
+
+`BookingCreated` remains a Domain Event. The application maps it to the
+separate `BookingCreatedIntegrationEvent` contract instead of exposing
+the Domain Event directly to external consumers.
+
+The shared application layer defines the framework-independent
+`IntegrationEvent` marker and the `IntegrationEventPublisher` output
+port. `BookingIntegrationEventMapper` owns the transformation from the
+internal Booking fact to the outward integration contract.
+
+# 54. Domain Event Handler and Dispatcher
+
+Application reactions to Domain Events are represented by
+`DomainEventHandler<T extends DomainEvent>`. A handler exposes both
+`handle(T event)` and `eventType()`.
+
+`BookingCreatedHandler` handles `BookingCreated`, maps it to
+`BookingCreatedIntegrationEvent`, and delegates publication through
+`IntegrationEventPublisher`.
+
+``` text
+BookingCreated
+    ↓
+DomainEventPublisher
+    ↓
+InMemoryDomainEventPublisher
+    ↓
+DomainEventDispatcher
+    ↓
+BookingCreatedHandler
+    ↓
+BookingIntegrationEventMapper
+    ↓
+BookingCreatedIntegrationEvent
+    ↓
+IntegrationEventPublisher
+```
+
+Spring wiring keeps module ownership explicit: shared configuration
+creates the dispatcher and shared publisher adapters, while Booking
+configuration registers the Booking mapper and `BookingCreatedHandler`.
+
+A focused dispatcher test verifies that a `BookingCreated` event is
+routed to the matching `DomainEventHandler<BookingCreated>`. The
+complete test suite is green.
+
+Kafka is still the next transport to be studied; no Kafka implementation
+is documented yet.

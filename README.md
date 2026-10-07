@@ -68,6 +68,9 @@ Currently introduced:
 -   Booking query by Event through an application use case
 -   Reactive transaction / atomic Booking creation
 -   Domain Events and internal reactive Domain Event publication
+-   Domain Events vs Integration Events
+-   Domain Event handlers and generic dispatcher
+-   Integration Event contracts and publisher output port
 
 Planned in the project roadmap: - Modular Monolith - Event-Driven
 Architecture
@@ -125,12 +128,12 @@ Planned:
 Detailed learning material is kept in separate documents and is updated
 as each topic is actually studied.
 
-pic Do                     cumentation
-  -------------------------- --------------------------------------------------------
-oject progress \[R         OADMAP.md\](docs/ROADMAP.md)
-main-Driven Design \[D     DD.md\](docs/DDD.md)
-xagonal Architecture \[D   DD.md\](docs/DDD.md#23-ddd-and-hexagonal-architecture)
-active Programming \[R     EACTIVE.md\](docs/REACTIVE.md)
+c Do cu                     mentation
+  --------------------------- ------------------------------------------------------
+ect progress \[R OA         DMAP.md\](docs/ROADMAP.md)
+in-Driven Design \[D DD     .md\](docs/DDD.md)
+gonal Architecture \[D DD   .md\](docs/DDD.md#23-ddd-and-hexagonal-architecture)
+tive Programming \[R EA     CTIVE.md\](docs/REACTIVE.md)
 
 Additional documentation will be created when the corresponding topics
 are reached in the course.
@@ -178,7 +181,9 @@ Reactive transaction / atomicity       ✅
         ↓
 Domain Events                          ✅
         ↓
-Domain Events vs Integration Events    🚧 NEXT
+Domain Events vs Integration Events    ✅
+        ↓
+Kafka fundamentals                     🚧 NEXT
 ```
 
 For the complete project plan, check [ROADMAP.md](docs/ROADMAP.md).
@@ -188,11 +193,12 @@ For the complete project plan, check [ROADMAP.md](docs/ROADMAP.md).
 # 🏗️ Technical Picture
 
 The project now contains framework-independent Event and Booking domain
-models, reactive application ports, R2DBC/PostgreSQL output adapters for Event and Booking, Spring WebFlux HTTP input adapters for Event and Booking, and Spring IoC
-configuration for dependency wiring. Booking creation coordinates Event
-capacity through an Event application input port rather than accessing
-Event persistence directly. Event publication is also exposed as an
-explicit application use case.
+models, reactive application ports, R2DBC/PostgreSQL output adapters for
+Event and Booking, Spring WebFlux HTTP input adapters for Event and
+Booking, and Spring IoC configuration for dependency wiring. Booking
+creation coordinates Event capacity through an Event application input
+port rather than accessing Event persistence directly. Event publication
+is also exposed as an explicit application use case.
 
 ``` text
 HTTP Client
@@ -269,9 +275,11 @@ eventhub-reactive
     └── ROADMAP.md
 ```
 
-The domain remains independent of Spring, Reactor and PostgreSQL. Spring-specific
-HTTP, R2DBC persistence adapters and dependency wiring live in infrastructure.
-`Event.create()` creates new Aggregates, while `Event.rehydrate()` reconstructs persisted Aggregates without leaking persistence annotations into the domain.
+The domain remains independent of Spring, Reactor and PostgreSQL.
+Spring-specific HTTP, R2DBC persistence adapters and dependency wiring
+live in infrastructure. `Event.create()` creates new Aggregates, while
+`Event.rehydrate()` reconstructs persisted Aggregates without leaking
+persistence annotations into the domain.
 
 ------------------------------------------------------------------------
 
@@ -317,29 +325,43 @@ Detailed notes and examples are available in [DDD.md](docs/DDD.md).
 
 # 🗄️ Reactive Event Persistence
 
-Event persistence is now backed by PostgreSQL 17 through Spring Data R2DBC. PostgreSQL runs locally through Docker Compose, and `schema.sql` initializes the `events` table.
+Event persistence is now backed by PostgreSQL 17 through Spring Data
+R2DBC. PostgreSQL runs locally through Docker Compose, and `schema.sql`
+initializes the `events` table.
 
-The application-owned `EventRepository` distinguishes persistence intent with `create(Event)` and `update(Event)`. The R2DBC adapter maps the domain Aggregate to `EventEntity` and maps database results back through `Event.rehydrate(...)`.
+The application-owned `EventRepository` distinguishes persistence intent
+with `create(Event)` and `update(Event)`. The R2DBC adapter maps the
+domain Aggregate to `EventEntity` and maps database results back through
+`Event.rehydrate(...)`.
 
-Because Event IDs are generated in the domain before persistence, `EventEntity` implements `Persistable<UUID>` and uses a transient `isNew` flag:
+Because Event IDs are generated in the domain before persistence,
+`EventEntity` implements `Persistable<UUID>` and uses a transient
+`isNew` flag:
 
 ``` text
 create(event) → isNew=true  → INSERT
 update(event) → isNew=false → UPDATE
 ```
 
-Both paths have been manually verified against PostgreSQL: newly created Events are persisted as `DRAFT`, and publication updates the same row to `PUBLISHED`.
+Both paths have been manually verified against PostgreSQL: newly created
+Events are persisted as `DRAFT`, and publication updates the same row to
+`PUBLISHED`.
 
-Reactive transaction management is now implemented for Booking creation. Database migrations and PostgreSQL Testcontainers are still pending.
+Reactive transaction management is now implemented for Booking creation.
+Database migrations and PostgreSQL Testcontainers are still pending.
 
 ------------------------------------------------------------------------
 
-
 # 🗄️ Reactive Booking Persistence
 
-Booking persistence is now also backed by PostgreSQL through Spring Data R2DBC.
+Booking persistence is now also backed by PostgreSQL through Spring Data
+R2DBC.
 
-The existing Booking flow keeps the module boundary already introduced: Booking coordinates Event capacity through `ReserveEventPlacesUseCase`, while Event persistence remains owned by the Event module. After capacity is reserved, the Booking is persisted through its own repository adapter.
+The existing Booking flow keeps the module boundary already introduced:
+Booking coordinates Event capacity through `ReserveEventPlacesUseCase`,
+while Event persistence remains owned by the Event module. After
+capacity is reserved, the Booking is persisted through its own
+repository adapter.
 
 ``` text
 POST /bookings
@@ -357,46 +379,54 @@ BookingRepository
 R2DBC / PostgreSQL: Booking inserted
 ```
 
-The complete flow was manually verified against PostgreSQL: reserving 3 places reduced Event availability from `20` to `17`, and the corresponding Booking was persisted.
+The complete flow was manually verified against PostgreSQL: reserving 3
+places reduced Event availability from `20` to `17`, and the
+corresponding Booking was persisted.
 
-The Event capacity update and Booking insert are now coordinated as one reactive transaction. If Booking persistence fails after the Event update, the Event update is rolled back so the database does not retain a partial business state.
+The Event capacity update and Booking insert are now coordinated as one
+reactive transaction. If Booking persistence fails after the Event
+update, the Event update is rolled back so the database does not retain
+a partial business state.
 
 ------------------------------------------------------------------------
 
 # 🔒 Concurrent Booking and Optimistic Locking
 
-Concurrent booking operations can read the same Event capacity before either
-update is persisted. The project now reproduces this race condition and uses
-optimistic locking on the persisted Event version to prevent a stale update
-from silently overwriting the winner.
+Concurrent booking operations can read the same Event capacity before
+either update is persisted. The project now reproduces this race
+condition and uses optimistic locking on the persisted Event version to
+prevent a stale update from silently overwriting the winner.
 
 ``` text
 Booking A ──► read version N ──► update succeeds ──► version N + 1
 Booking B ──► read version N ──► stale update ──► optimistic locking failure
 ```
 
-This protects Event capacity against the lost-update/overselling scenario
-studied so far. A focused concurrency test verifies the behaviour and the full
-test suite is green.
+This protects Event capacity against the lost-update/overselling
+scenario studied so far. A focused concurrency test verifies the
+behaviour and the full test suite is green.
 
-The booking that loses the version race is now recovered by re-reading the
-latest Event state and re-evaluating the reservation once. Infrastructure
-translates the Spring Data optimistic-locking failure into the
-application-level `ConcurrentUpdateException`, keeping the application
-independent of Spring Data.
+The booking that loses the version race is now recovered by re-reading
+the latest Event state and re-evaluating the reservation once.
+Infrastructure translates the Spring Data optimistic-locking failure
+into the application-level `ConcurrentUpdateException`, keeping the
+application independent of Spring Data.
 
-When two concurrent Bookings request 2 places each from an Event with capacity
-3, the integration test now verifies the final persisted business state:
+When two concurrent Bookings request 2 places each from an Event with
+capacity 3, the integration test now verifies the final persisted
+business state:
 
 ``` text
 Bookings persisted        = 1
 Event available places    = 1
 ```
 
-The test queries Bookings by Event through `BookingQueryUseCase` and verifies the
-persisted Event through `EventQueryUseCase`.
+The test queries Bookings by Event through `BookingQueryUseCase` and
+verifies the persisted Event through `EventQueryUseCase`.
 
-Reactive transaction/atomicity across Event and Booking persistence is now implemented and tested. A failure injected after the Event update verifies that the capacity change is rolled back.
+Reactive transaction/atomicity across Event and Booking persistence is
+now implemented and tested. A failure injected after the Event update
+verifies that the capacity change is rolled back.
 
 ------------------------------------------------------------------------
 
@@ -458,10 +488,15 @@ Current tested behaviour includes:
 -   isolated `BookingController` testing with Mockito + `WebTestClient`
 -   concurrent Booking race condition and optimistic-locking failure
 -   bounded recovery after an optimistic-lock conflict
--   final concurrent-booking state: one persisted Booking and one remaining Event place
+-   final concurrent-booking state: one persisted Booking and one
+    remaining Event place
 -   Booking lookup by Event and reactive `count()` verification
--   reactive transaction rollback when Booking persistence fails after Event capacity update
--   BookingCreated Domain Event registration and internal reactive publication
+-   reactive transaction rollback when Booking persistence fails after
+    Event capacity update
+-   BookingCreated Domain Event registration and internal reactive
+    publication
+-   Domain Event dispatch to the matching BookingCreated handler
+-   BookingCreated Domain Event → BookingCreatedIntegrationEvent mapping
 
 The current build can be verified with:
 
@@ -518,4 +553,5 @@ explored in this project:
 `Dependency Inversion` · `Dependency Injection` · `Spring IoC` ·
 `Project Reactor` · `Mono` · `Flux` · `StepVerifier` ·
 `Reactor Schedulers` · `Spring WebFlux` · `WebTestClient` ·
-`Reactive HTTP` · `Spring Data R2DBC` · `PostgreSQL 17` · `Docker Compose`
+`Reactive HTTP` · `Spring Data R2DBC` · `PostgreSQL 17` ·
+`Docker Compose`

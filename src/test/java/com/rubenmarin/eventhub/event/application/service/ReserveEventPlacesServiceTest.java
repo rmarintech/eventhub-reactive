@@ -1,6 +1,5 @@
 package com.rubenmarin.eventhub.event.application.service;
 
-import com.rubenmarin.eventhub.event.application.port.in.CreateEventCommand;
 import com.rubenmarin.eventhub.event.application.port.out.EventRepository;
 import com.rubenmarin.eventhub.event.domain.model.*;
 import org.junit.jupiter.api.Assertions;
