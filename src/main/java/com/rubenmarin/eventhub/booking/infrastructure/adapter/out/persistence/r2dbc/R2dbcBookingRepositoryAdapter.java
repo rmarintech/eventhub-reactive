@@ -53,11 +53,11 @@ public class R2dbcBookingRepositoryAdapter implements BookingRepository {
 
     private BookingEntity toEntity(Booking booking, boolean isNew) {
         BookingEntity toRet = new BookingEntity(
-                booking.getBookingId().value(),
-                booking.getCustomerId().value(),
-                booking.getEventId().value(),
-                booking.getPlaces(),
-                booking.getStatus().name(),
+                booking.bookingId().value(),
+                booking.customerId().value(),
+                booking.eventId().value(),
+                booking.places(),
+                booking.status().name(),
                 isNew
 
         );

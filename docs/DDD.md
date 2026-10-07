@@ -1871,3 +1871,67 @@ Optimistic locking and transaction atomicity solve different problems:
 optimistic locking detects stale concurrent writes, while the transaction
 provides all-or-nothing persistence across Event and Booking. Both mechanisms
 are therefore retained.
+
+
+------------------------------------------------------------------------
+
+# 51. Booking Domain Events
+
+A Domain Event represents a business fact that has already happened. EventHub
+now uses the framework-independent `DomainEvent` marker interface and the
+`BookingCreated` record.
+
+```text
+CreateBooking    → command: asks for an action
+BookingCreated   → event: states a fact that already happened
+```
+
+`Booking.generate(...)` owns creation of `BookingCreated` and registers it
+using the same generated `BookingId`. The Aggregate exposes an unmodifiable
+copy of its current domain events. These events are transient facts produced
+during the current Aggregate execution; `Booking.rehydrate(...)` therefore
+starts with an empty domain-event collection.
+
+Domain tests verify that generating a Booking registers one `BookingCreated`
+with the expected Booking, customer, Event and places data, while rehydrating
+an existing Booking does not register a new event.
+
+# 52. Domain Event Publication Port
+
+Registering and publishing are separate responsibilities:
+
+```text
+Domain         → registers the business fact
+Application    → coordinates publication
+Infrastructure → provides the publication mechanism
+```
+
+The application owns the output port `DomainEventPublisher`, whose
+`publishDomainEvent(DomainEvent)` operation returns `Mono<Void>`.
+
+`CreateBookingService` now composes publication after Booking persistence:
+
+```text
+reserve Event places
+        ↓
+persist Booking
+        ↓
+read Booking domain events
+        ↓
+publish BookingCreated
+        ↓
+publication completes
+        ↓
+return Booking
+```
+
+Infrastructure currently provides `InMemoryDomainEventPublisher`, which
+represents successful publication with `Mono.empty()`. Shared Spring
+configuration wires that adapter to the application-owned port.
+
+The application test configures a Mockito publisher returning `Mono.empty()`
+and verifies that `publishDomainEvent(...)` is called with `BookingCreated`.
+The complete test suite is green.
+
+The distinction between Domain Events and Integration Events has not yet been
+studied, and Kafka publication has not been implemented.

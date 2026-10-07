@@ -47,11 +47,11 @@ public class BookingController {
 
     private BookingResponse toResponse(Booking booking) {
         return new BookingResponse(
-                booking.getBookingId().value(),
-                booking.getCustomerId().value(),
-                booking.getEventId().value(),
-                booking.getPlaces(),
-                booking.getStatus().name()
+                booking.bookingId().value(),
+                booking.customerId().value(),
+                booking.eventId().value(),
+                booking.places(),
+                booking.status().name()
 
         );
     }

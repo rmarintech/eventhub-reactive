@@ -69,7 +69,7 @@ class BookingControllerTest {
                 .expectStatus().isCreated()
                 .expectBody()
                 .jsonPath("$.id").isEqualTo(
-                        booking.getBookingId().value().toString()
+                        booking.bookingId().value().toString()
                 )
                 .jsonPath("$.customerId").isEqualTo(
                         customerId.value().toString()

@@ -67,6 +67,7 @@ Currently introduced:
 -   Bounded recovery after concurrent Event updates
 -   Booking query by Event through an application use case
 -   Reactive transaction / atomic Booking creation
+-   Domain Events and internal reactive Domain Event publication
 
 Planned in the project roadmap: - Modular Monolith - Event-Driven
 Architecture
@@ -174,6 +175,10 @@ Booking R2DBC / PostgreSQL          ✅
 Concurrency / optimistic locking      ✅
         ↓
 Reactive transaction / atomicity       ✅
+        ↓
+Domain Events                          ✅
+        ↓
+Domain Events vs Integration Events    🚧 NEXT
 ```
 
 For the complete project plan, check [ROADMAP.md](docs/ROADMAP.md).
@@ -456,6 +461,7 @@ Current tested behaviour includes:
 -   final concurrent-booking state: one persisted Booking and one remaining Event place
 -   Booking lookup by Event and reactive `count()` verification
 -   reactive transaction rollback when Booking persistence fails after Event capacity update
+-   BookingCreated Domain Event registration and internal reactive publication
 
 The current build can be verified with:
 

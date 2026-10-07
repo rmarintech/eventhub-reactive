@@ -1,8 +1,11 @@
 package com.rubenmarin.eventhub.booking.domain.model;
 
+import com.rubenmarin.eventhub.booking.domain.event.BookingCreated;
 import com.rubenmarin.eventhub.event.domain.model.EventId;
-import com.rubenmarin.eventhub.event.domain.model.EventStatus;
+import com.rubenmarin.eventhub.shared.domain.event.DomainEvent;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
 
 public class Booking {
@@ -12,7 +15,7 @@ public class Booking {
     private final EventId eventId;
     private final int places;
     private BookingStatus status;
-
+    private final List<DomainEvent> domainEvents;
 
     private Booking(BookingId bookingId,
                     CustomerId customerId,
@@ -28,6 +31,7 @@ public class Booking {
         }
         this.places = places;
         this.status = Objects.requireNonNull(status);
+        this.domainEvents = new ArrayList<>();
     }
 
 
@@ -44,19 +48,36 @@ public class Booking {
                 customerId,
                 eventId,
                 places,
-                status);
+                status
+        );
     }
 
     public static Booking generate(
             CustomerId customerId,
             EventId eventId,
             int places) {
-        return new Booking(
-                BookingId.generate(),
+
+
+        BookingId bookingId = BookingId.generate();
+
+        Booking booking = new Booking(
+                bookingId,
                 customerId,
                 eventId,
                 places,
                 BookingStatus.CONFIRMED);
+
+        booking.domainEvents.add(
+                new BookingCreated(
+                        bookingId,
+                        customerId,
+                        eventId,
+                        places
+                ));
+
+
+        return booking;
+
     }
 
 
@@ -69,23 +90,28 @@ public class Booking {
         status = BookingStatus.CANCELLED;
     }
 
-    public BookingId getBookingId() {
+    public BookingId bookingId() {
         return bookingId;
     }
 
-    public CustomerId getCustomerId() {
+    public CustomerId customerId() {
         return customerId;
     }
 
-    public EventId getEventId() {
+    public EventId eventId() {
         return eventId;
     }
 
-    public int getPlaces() {
+    public int places() {
         return places;
     }
 
-    public BookingStatus getStatus() {
+    public BookingStatus status() {
         return status;
+    }
+
+    public List<DomainEvent> domainEvents() {
+        //Se puede leer pero no modificar
+        return List.copyOf(domainEvents);
     }
 }

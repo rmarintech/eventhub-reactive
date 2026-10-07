@@ -26,7 +26,7 @@ public class InMemoryBookingRepository implements BookingRepository {
 
         // Como es en memoria, no hace falta boundedElastic()
         return Mono.fromSupplier(() -> {
-            bookings.put(booking.getBookingId(), booking);
+            bookings.put(booking.bookingId(), booking);
             return booking;
         });
 
@@ -42,7 +42,7 @@ public class InMemoryBookingRepository implements BookingRepository {
 
         // Como es en memoria, no hace falta boundedElastic()
         return Mono.fromSupplier(() -> {
-            bookings.put(booking.getBookingId(), booking);
+            bookings.put(booking.bookingId(), booking);
             return booking;
         });
     }

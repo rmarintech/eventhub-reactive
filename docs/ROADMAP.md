@@ -91,8 +91,11 @@ architecture tests remain pending
 # 4. Domain Evolution
 
 -   [ ] Domain-specific exceptions
--   [ ] Domain events
--   [ ] Event domain-event tests
+-   [x] Domain events
+-   [x] Booking domain-event tests
+-   [x] Domain event publication port
+-   [x] Application coordination of Domain Event publication
+-   [x] In-memory Domain Event publisher adapter
 -   [x] Persistence rehydration strategy
 -   [ ] Additional Event use cases
 -   [ ] Domain documentation update
@@ -231,6 +234,10 @@ architecture tests remain pending
 
 # 11. Event-Driven Architecture
 
+-   [x] Domain Event fundamentals
+-   [x] `BookingCreated` Domain Event
+-   [x] Domain Event publisher output port
+-   [x] Internal in-memory Domain Event publication
 -   [ ] Domain Events vs Integration Events
 -   [ ] Apache Kafka fundamentals
 -   [ ] Kafka broker setup
@@ -551,7 +558,9 @@ Booking persistence                 ✅
         ↓
 Concurrency / optimistic locking    ✅
         ↓
-Kafka / Event-Driven                ⏳
+Domain Events                        ✅
+        ↓
+Kafka / Event-Driven                🚧 NEXT
         ↓# EventHub Reactive --- Project Roadmap
 
 This roadmap tracks the complete learning and implementation path for
@@ -645,8 +654,11 @@ architecture tests remain pending
 # 4. Domain Evolution
 
 -   [ ] Domain-specific exceptions
--   [ ] Domain events
--   [ ] Event domain-event tests
+-   [x] Domain events
+-   [x] Booking domain-event tests
+-   [x] Domain event publication port
+-   [x] Application coordination of Domain Event publication
+-   [x] In-memory Domain Event publisher adapter
 -   [x] Persistence rehydration strategy
 -   [ ] Additional Event use cases
 -   [ ] Domain documentation update
@@ -789,6 +801,10 @@ architecture tests remain pending
 
 # 11. Event-Driven Architecture
 
+-   [x] Domain Event fundamentals
+-   [x] `BookingCreated` Domain Event
+-   [x] Domain Event publisher output port
+-   [x] Internal in-memory Domain Event publication
 -   [ ] Domain Events vs Integration Events
 -   [ ] Apache Kafka fundamentals
 -   [ ] Kafka broker setup
@@ -1109,7 +1125,9 @@ Booking persistence                 ✅
         ↓
 Concurrency / optimistic locking    ✅
         ↓
-Kafka / Event-Driven                ⏳
+Domain Events                        ✅
+        ↓
+Kafka / Event-Driven                🚧 NEXT
         ↓
 Security                            ⏳
         ↓

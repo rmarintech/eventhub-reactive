@@ -697,3 +697,34 @@ update and verifies that the persisted Event capacity remains unchanged.
 Optimistic locking protects against stale concurrent updates; the transaction
 protects atomicity across related database writes. The complete test suite is
 green with both mechanisms enabled.
+
+
+## 33. Reactive Domain Event Publication
+
+Booking creation now composes Domain Event publication into the returned
+reactive pipeline:
+
+```text
+Mono<Booking>
+    ↓ flatMap
+Booking.domainEvents()
+    ↓
+Flux.fromIterable(...)
+    ↓ flatMap
+publishDomainEvent(...) → Mono<Void>
+    ↓
+then() → Mono<Void>
+    ↓
+then(Mono.just(bookingCreated))
+    ↓
+Mono<Booking>
+```
+
+`Flux.fromIterable(...)` creates a cold `Flux` from the Aggregate's recorded
+events. `then()` represents completion of all upstream publication work as a
+`Mono<Void>`. `then(Mono.just(bookingCreated))` then re-emits the already
+created Booking so the use case still returns `Mono<Booking>`.
+
+This also reinforced that `Mono<Void>` is a Publisher, not `null`.
+`Mono.empty()` represents successful completion without an emitted value.
+The complete test suite is green with Domain Event publication included.
