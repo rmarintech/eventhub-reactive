@@ -1,7 +1,8 @@
-# Reactive Programming --- EventHub
+# Reactive Programming — EventHub
 
-This document contains only the Reactive Programming concepts already
-studied and tested in EventHub.
+This document records **only concepts studied and behaviour implemented or tested** in EventHub. It is organized by topic rather than by dated progress snapshots. Kafka remains the next learning milestone, not an implemented feature.
+
+# Reactor fundamentals
 
 ## 1. Core model
 
@@ -162,7 +163,30 @@ Mono.fromCallable(() -> oldBlockingLibrary.call())
 `boundedElastic()` does not make blocking code non-blocking; it isolates
 that blocking work.
 
-## 11. Event loop and blocking
+## 11. Current learning tests
+
+`ReactorBasicsTest` covers Mono/Flux creation, Consumer and
+signals, lazy execution, map/filter, flatMap/concatMap, `switchIfEmpty`,
+`zip`, error propagation, retry/timeout/fallback, cold/hot publishers,
+StepVerifier, default threading, subscribeOn, publishOn, parallel and
+boundedElastic.
+
+## 12. `fromSupplier` vs `defer` in the repository
+
+The in-memory repository was used to reinforce lazy execution:
+
+``` text
+fromSupplier → execute lazily and produce a VALUE
+
+defer        → execute lazily and produce/select a PUBLISHER
+```
+
+`Mono.justOrEmpty(...)` was also used to model a possibly absent value
+without emitting `null`. Reactor publishers do not emit `null` values.
+
+# WebFlux and reactive HTTP
+
+## 13. Event loop and blocking
 
 The WebFlux event-loop model was introduced conceptually to understand
 why blocking work is dangerous. With non-blocking I/O, an event-loop
@@ -186,17 +210,9 @@ R2DBC → non-blocking → stays in reactive flow
 JDBC  → blocking     → isolate if used from WebFlux
 ```
 
-R2DBC has now been implemented for Event persistence in EventHub.
+R2DBC is implemented for both Event and Booking persistence in EventHub.
 
-## 12. Current learning tests
-
-`ReactorBasicsTest` currently covers Mono/Flux creation, Consumer and
-signals, lazy execution, map/filter, flatMap/concatMap, `switchIfEmpty`,
-`zip`, error propagation, retry/timeout/fallback, cold/hot publishers,
-StepVerifier, default threading, subscribeOn, publishOn, parallel and
-boundedElastic.
-
-## 13. Spring WebFlux fundamentals
+## 14. Spring WebFlux fundamentals
 
 Spring WebFlux has now been added to EventHub. Project Reactor provides
 the reactive programming model (`Mono`, `Flux`, operators, schedulers),
@@ -218,7 +234,7 @@ created. When unavoidable blocking work must be isolated, the studied
 pattern is `fromCallable(...).subscribeOn(boundedElastic())`; the target
 persistence stack for EventHub remains R2DBC.
 
-## 14. Reactive application boundary
+## 15. Reactive application boundary
 
 The EventHub application ports now expose reactive results:
 
@@ -235,19 +251,6 @@ EventRepository.findAll()            → Flux<Event>
 
 The domain remains synchronous. `Event.create(...)` and domain behaviour
 do not return `Mono` or `Flux`.
-
-## 15. `fromSupplier` vs `defer` in the repository
-
-The in-memory repository was used to reinforce lazy execution:
-
-``` text
-fromSupplier → execute lazily and produce a VALUE
-
-defer        → execute lazily and produce/select a PUBLISHER
-```
-
-`Mono.justOrEmpty(...)` was also used to model a possibly absent value
-without emitting `null`. Reactor publishers do not emit `null` values.
 
 ## 16. WebFlux HTTP input adapter
 
@@ -310,7 +313,7 @@ The create endpoint consumes and produces JSON and returns
 
 `WebTestClient` is now used for Spring WebFlux HTTP integration tests.
 
-The tests currently verify:
+The initial HTTP integration tests verified:
 
 ``` text
 POST /events                       → 201 Created + JSON EventResponse
@@ -366,37 +369,7 @@ A generic handler for every `IllegalArgumentException` was tested and
 then narrowed. Domain invariants also use `IllegalArgumentException`, so
 globally translating the base exception to HTTP 400 would be too broad.
 
-## 21. Integration-test state
-
-The Spring `InMemoryEventRepository` is a singleton in the test
-`ApplicationContext`, so its map may retain Events created by other
-integration-test methods. The list test therefore does not assert that
-exactly one Event exists or rely on list order. It captures the Event ID
-created by the current POST, finds that Event in the GET result using
-`filter(...).findFirst().orElseThrow()`, and verifies its fields.
-
-This keeps the test focused on its actual requirement while leaving the
-production repository scope unchanged.
-
-## 22. Current position
-
-``` text
-Reactive Programming Fundamentals   ✅
-        ↓
-Spring WebFlux fundamentals          ✅
-        ↓
-Reactive HTTP input adapter          ✅
-        ↓
-HTTP error handling                  ✅
-        ↓
-Request validation                   ✅
-        ↓
-Booking reactive flow / HTTP API     ✅
-        ↓
-Event R2DBC / PostgreSQL             ✅ CURRENT
-```
-
-## 23. Reactive coordination between Event and Booking
+## 21. Reactive coordination between Event and Booking
 
 The Booking application flow has now provided a practical use of
 `flatMap()` across application use cases.
@@ -432,7 +405,7 @@ exceeds Event capacity.
 JUnit 5 `@BeforeEach` is used to recreate the stateful in-memory fake
 repositories and application services before each test.
 
-## 24. Booking HTTP API and controller isolation
+## 22. Booking HTTP API and controller isolation
 
 The reactive Booking flow is now exposed through `POST /bookings`.
 
@@ -473,31 +446,11 @@ Mono<Event>
 The publish service is tested with `StepVerifier` for both successful
 publication and `EventNotFoundException`.
 
-## 25. Current position
+# Reactive PostgreSQL persistence
 
-``` text
-Reactive Programming Fundamentals   ✅
-        ↓
-Spring WebFlux fundamentals          ✅
-        ↓
-Reactive HTTP input adapters         ✅
-        ↓
-HTTP error handling                  ✅
-        ↓
-Request validation                   ✅
-        ↓
-Booking reactive application flow    ✅
-        ↓
-Booking HTTP API                     ✅
-        ↓
-Publish Event API                    ✅
-        ↓
-R2DBC / PostgreSQL                   ✅ EVENT PERSISTENCE
-```
+## 23. Spring Data R2DBC and PostgreSQL
 
-## 26. Spring Data R2DBC and PostgreSQL
-
-Event persistence now stays reactive through Spring Data R2DBC and the
+Event persistence stays reactive through Spring Data R2DBC and the
 PostgreSQL R2DBC driver.
 
 ``` text
@@ -531,7 +484,7 @@ Flux<EventEntity> → map(toDomain) → Flux<Event>
 
 No manual `subscribe()` is used in the repository adapter.
 
-## 27. Reactive Create and Update
+## 24. Reactive Create and Update
 
 A generated UUID means a new Event already has a non-null ID before it
 reaches Spring Data. `EventEntity` therefore implements
@@ -568,23 +521,7 @@ PostgreSQL database, so tests that create Events can currently leave
 rows in the development database. PostgreSQL Testcontainers has not yet
 been implemented.
 
-## 28. Current position
-
-``` text
-Reactive Programming Fundamentals   ✅
-        ↓
-Spring WebFlux                      ✅
-        ↓
-HTTP / validation / Booking API     ✅
-        ↓
-Event R2DBC / PostgreSQL            ✅
-        ↓
-Booking R2DBC / PostgreSQL          ✅
-        ↓
-Concurrency / optimistic locking      🚧 CURRENT
-```
-
-## 29. Booking R2DBC persistence
+## 25. Booking R2DBC persistence
 
 Booking persistence now also reaches PostgreSQL through the reactive
 persistence stack.
@@ -607,11 +544,11 @@ R2DBC / PostgreSQL
 Booking persisted
 ```
 
-Both operations were manually verified against PostgreSQL. Reactive
-transaction management across the two writes has not yet been
-implemented or studied.
+Both operations were manually verified against PostgreSQL. Reactive transaction management across the two writes is now implemented and tested (see the transaction section).
 
-## 30. Concurrent reactive updates and optimistic locking
+# Concurrency and transactions
+
+## 26. Concurrent reactive updates and optimistic locking
 
 The Booking flow has now been tested with simultaneous operations that
 can read the same Event state before either persistence update
@@ -643,7 +580,7 @@ persistence-agnostic `ConcurrentUpdateException`, while the R2DBC
 adapter owns translation from the Spring Data optimistic-locking
 exception.
 
-## 31. Sequencing verification with `then()` and `count()`
+## 27. Sequencing verification with `then()` and `count()`
 
 The final concurrency test introduced `then(...)` to sequence a
 verification Publisher after the concurrent booking attempt.
@@ -684,7 +621,7 @@ Booking exists and the Event has one available place.
 Reactive transaction management across the Event update and Booking
 insert has now been implemented and tested.
 
-## 32. Reactive transaction and atomicity
+## 28. Reactive transaction and atomicity
 
 Booking creation performs two database writes that form one business
 operation:
@@ -721,7 +658,9 @@ Optimistic locking protects against stale concurrent updates; the
 transaction protects atomicity across related database writes. The
 complete test suite is green with both mechanisms enabled.
 
-## 33. Reactive Domain Event Publication
+# Domain and integration event pipelines
+
+## 29. Reactive Domain Event Publication
 
 Booking creation now composes Domain Event publication into the returned
 reactive pipeline:
@@ -753,7 +692,7 @@ This also reinforced that `Mono<Void>` is a Publisher, not `null`.
 value. The complete test suite is green with Domain Event publication
 included.
 
-## 34. Reactive Domain Event Dispatching
+## 30. Reactive Domain Event Dispatching
 
 Domain Event publication now continues through a reactive dispatcher
 instead of completing immediately in the in-memory publisher.
@@ -778,3 +717,17 @@ handler is invoked.
 `BookingCreatedIntegrationEvent` and delegates to the reactive
 `IntegrationEventPublisher` output port. Kafka has not yet been
 introduced.
+
+# Current project state
+
+- Reactor fundamentals, reactive composition, schedulers and `StepVerifier`: studied and tested.
+- Spring WebFlux Event/Booking HTTP adapters and focused tests: implemented.
+- Event and Booking persistence through PostgreSQL/R2DBC: implemented.
+- Optimistic locking and bounded conflict recovery: implemented and tested.
+- Reactive transaction around Booking creation, including rollback verification: implemented and tested.
+- Booking Domain Events, reactive dispatcher/handler and Integration Event mapping: implemented and tested.
+- `IntegrationEventPublisher` currently uses an in-memory adapter; **Kafka is not yet implemented**.
+
+## Deferred roadmap work
+
+Database migrations, PostgreSQL Testcontainers, further architecture/API tests and other unfinished roadmap items remain deferred. This document does not mark them complete.
