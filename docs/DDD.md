@@ -2035,3 +2035,99 @@ complete test suite is green.
 
 Kafka is still the next transport to be studied; no Kafka implementation
 is documented yet.
+
+
+---
+
+# 55. Independent Booking Service — DDD and Hexagonal Architecture (October 2026)
+
+> **Evolution through extraction and redesign.** Sections 37–54 document Booking **when it belonged to the original reactive monolith** (`CustomerId`, `places`, `CONFIRMED` on creation, Event-capacity orchestration, R2DBC and events). The new imperative `booking-service` is the **intended successor**, not a second permanent implementation. It intentionally uses **Spring MVC**, `UserId`, `PENDING` and an in-memory repository while its design is developed. Historical and current domain contracts are different and must not be conflated. This architecture is selected to learn both paradigms, not claimed as an ideal production decomposition.
+
+## 55.1 New Booking aggregate and identifiers
+
+The independent service's business concepts are:
+
+```text
+Booking (domain entity)
+├── BookingId (strongly typed UUID identifier)
+├── EventId (strongly typed UUID identifier)
+├── UserId (strongly typed UUID identifier)
+└── BookingStatus = PENDING | CONFIRMED | CANCELLED
+```
+
+`new Booking(eventId, userId)` generates a Booking ID and creates a `PENDING` booking. `booking.confirm()` and `booking.cancel()` express lifecycle transitions through domain behavior instead of an arbitrary status setter. The repository tests verify that `confirm()` returns a different instance retaining the same ID and leaves the original booking in `PENDING`. The exact set of invalid transitions must remain grounded in the domain code/tests when expanded.
+
+`BookingId`, `EventId` and `UserId` are value-object wrappers over UUIDs; equality by value makes the controller's newly constructed identifiers match Mockito test arguments when implemented as Java records.
+
+## 55.2 Active booking uniqueness is a business rule
+
+An *active* booking has the same `EventId` and `UserId` and a status other than `CANCELLED`. As currently implemented, both `PENDING` and `CONFIRMED` are active. Cancelling one permits a new booking for that pair at the application-rule level.
+
+```java
+public Booking createBooking(EventId eventId, UserId userId) {
+    if (repository.existsActiveBooking(eventId, userId)) {
+        throw new BookingAlreadyExistsException(eventId, userId);
+    }
+    return repository.save(new Booking(eventId, userId));
+}
+```
+
+`BookingAlreadyExistsException` is in `application.exception`: it reports a rejected use case without depending on Spring HTTP. `BookingNotFoundException` is also an application exception. Both are mapped by infrastructure, not embedded in the domain.
+
+**Concurrency limitation:** This read-before-save check is vulnerable to a check-then-act race. Neither an in-memory map nor `synchronized` across independent JVMs guarantees distributed uniqueness; a future PostgreSQL implementation will require an atomic database strategy, potentially a partial unique index for active statuses, plus careful exception translation. Optimistic locking on an existing versioned row addresses a different concurrent-update problem, not arbitrary duplicate inserts.
+
+## 55.3 Ports and adapters (current implementation)
+
+```text
+HTTP / OpenAPI DTOs
+        ↓
+BookingController implements generated BookingApi   [infrastructure, inbound]
+        ↓
+BookingUseCase                                  [application, input port]
+        ↓
+BookingService                                  [application, use-case logic]
+        ↓
+BookingRepository                               [application, output port]
+        ↓
+InMemoryBookingRepository                       [infrastructure, outbound]
+```
+
+The input port has `getBooking`, `createBooking`, `confirmBooking`, `cancelBooking`. The output port provides `findById`, `save` and `existsActiveBooking`. `BookingService` takes a `BookingRepository` in its constructor. The controller delegates via `BookingUseCase`; `BookingMapper` converts the returned domain entity into the generated response DTO. Dependency direction stays toward domain/application; Spring and HTTP are confined to adapters.
+
+Actual package paths discussed for the new service include:
+
+```text
+com.rubenmarin.bookingservice
+├── domain.model
+├── application.exception
+├── application.port.in
+├── application.port.out
+├── application.service
+└── infrastructure
+    ├── adapter.in (BookingController)
+    ├── adapter.in.mapper (BookingMapper)
+    ├── adapter.in.exception (GlobalExceptionHandler)
+    ├── adapter.out.persistence (InMemoryBookingRepository)
+    └── web.generated.api / web.generated.model
+```
+
+## 55.4 API-first boundary and error translation
+
+The new service's OpenAPI-generated `BookingApi`, `CreateBookingRequest`, `BookingResponse` and `ProblemDetail` are transport models, **not domain types**. The controller wraps incoming UUIDs in `EventId` and `UserId` and returns `ResponseEntity<BookingResponse>`. No `Mono`/`Flux` is needed in this **imperative** Booking Service.
+
+- `POST /api/bookings` → `201 Created`; missing required `eventId` → `400 Bad Request`; active duplicate → `409 Conflict`.
+- `GET /api/bookings/{id}` → `200 OK`; absent booking → `404 Not Found`.
+- `GlobalExceptionHandler` returns `application/problem+json` using the **generated** `ProblemDetail` (distinct from Spring's class of the same name), with `type`, `title`, `status`, `detail`, `code` and `timestamp`.
+- Validation errors use `MethodArgumentNotValidException`; a readable `detail` can be built from binding field errors. A malformed JSON body may require a separate `HttpMessageNotReadableException` handler; do not assume it is covered.
+
+## 55.5 Tested boundaries
+
+- `@WebMvcTest(BookingController.class)` + `MockMvc` + `@MockitoBean` isolate the HTTP controller, request deserialization, mapper and advice from the real service/persistence. Tested response families: 200, 201, 400, 404 and 409.
+- Mockito unit test of `BookingService` checks active duplicate rejection and `save()` never invoked.
+- Real `InMemoryBookingRepository` tests run with pure JUnit and `@BeforeEach`, covering save/find, missing ID, replacing state and matching/nonmatching booking checks. Extra active/cancelled cases were supplied as exercises; distinguish code supplied from verified runs.
+
+## 55.6 Decision record — why imperative Spring MVC?
+
+The new `booking-service` deliberately uses synchronous Spring MVC and plans JPA, to practice transactional persistence, concurrency and a classic Java stack alongside the **separate** EventHub WebFlux/R2DBC implementation. Reactive programming is not an intrinsic DDD or hexagonal requirement. It is a technology choice at the port/adapter boundary; the domain remains framework-independent in either approach.
+
+**Not implemented yet in this service:** JPA, PostgreSQL, distributed locking/uniqueness, Kafka, reliable cross-service capacity coordination and full deployment.

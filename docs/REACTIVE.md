@@ -210,7 +210,7 @@ R2DBC → non-blocking → stays in reactive flow
 JDBC  → blocking     → isolate if used from WebFlux
 ```
 
-R2DBC is implemented for both Event and Booking persistence in EventHub.
+R2DBC is implemented for both Event and the **original reactive Booking module** in EventHub. The **new independent `booking-service`** is imperative (Spring MVC, currently in-memory), and does not yet use JPA/PostgreSQL.
 
 ## 14. Spring WebFlux fundamentals
 
@@ -266,7 +266,7 @@ GET  /events/{id}
 POST /events/{id}/publish
 ```
 
-The Booking HTTP adapter now also exposes:
+The **original reactive Booking module** HTTP adapter also exposes:
 
 ``` text
 POST /bookings
@@ -731,3 +731,16 @@ introduced.
 ## Deferred roadmap work
 
 Database migrations, PostgreSQL Testcontainers, further architecture/API tests and other unfinished roadmap items remain deferred. This document does not mark them complete.
+
+
+---
+
+# Boundary note — independent Booking Service (October 2026)
+
+The sections above describe the **original reactive EventHub modules**, including their `Mono<Booking>` flow, `POST /bookings`, reactive event-capacity coordination, R2DBC persistence and WebTestClient/StepVerifier tests. This material is kept as a record of what was built and learned in that implementation.
+
+Booking is **being extracted/redesigned from that monolith into a replacement `booking-service`**, implemented separately using **Spring MVC, synchronous `BookingUseCase` methods returning `Booking`, OpenAPI-generated `BookingApi`, `ResponseEntity<BookingResponse>`, `MockMvc` and `InMemoryBookingRepository`**. Its actual REST path is `/api/bookings` and it uses `UserId`, not the original module's `CustomerId`.
+
+There is **no Reactor/WebFlux/R2DBC flow in the new service at this stage**. Do not interpret statements such as “Booking R2DBC persistence implemented” earlier in this document as progress on its new JPA adapter. See `DDD.md` §55 and `ROADMAP.md` §26.
+
+The portfolio deliberately combines **reactive Event development with imperative Booking development** to learn and demonstrate both technologies, even though introducing heterogeneous stacks would not necessarily be an optimal production decision. The old reactive Booking examples are historical study material, **not a second intended live Booking service**. Both approaches can retain DDD/hexagonal boundaries. Kafka remains unimplemented for the new service, and no cross-service reactive communication has been demonstrated yet.

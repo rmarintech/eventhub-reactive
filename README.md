@@ -13,6 +13,46 @@ architectural patterns are introduced when they are needed, and the
 documentation is updated only after they have been studied and
 implemented.
 
+> **Architecture update — 14 October 2026:** EventHub is deliberately **evolving from a reactive monolith to a mixed-paradigm microservices learning project**. The Booking capability is being **extracted and redesigned** as an independent **imperative Spring MVC service**, rather than retained as a second active Booking implementation. Historical WebFlux/R2DBC Booking material remains in the documentation as evidence of earlier work, **not as a parallel current service**. This is a conscious portfolio/learning decision to practise both paradigms; it is **not presented as an optimal production architecture**. The new service has no JPA/PostgreSQL or distributed integration yet.
+
+## Current components and ownership
+
+| Component | Programming model | Persistence | Verified/documented capabilities |
+| --- | --- | --- | --- |
+| Event module (original EventHub application) | WebFlux / Reactor | PostgreSQL via R2DBC | Event API, event capacity, reactive transactions and optimistic locking |
+| Booking module (historical, being replaced by extraction) | WebFlux / Reactor | PostgreSQL via R2DBC (historical) | `CustomerId` + places, `POST /bookings`, Event-capacity orchestration, reactive domain events |
+| **`booking-service` (target replacement, in progress)** | **Spring MVC / imperative** | **In-memory only** | `UserId`, PENDING/CONFIRMED/CANCELLED, API-first endpoints, 200/201/400/404/409 MVC tests, duplicate-active rule |
+
+The extracted service's build/deployment integration with the original application has **not been verified from the four documentation files alone**. Separate repository/module boundaries and exact startup commands should be confirmed in source before presenting them as runnable.
+
+### Architecture decision — deliberate mixed reactive/imperative portfolio
+
+**Motivation:** develop both non-blocking/reactive and synchronous/imperative backend expertise within one coherent EventHub portfolio. The Event side remains the reactive learning track (WebFlux, Reactor, R2DBC); Booking is moving out of the original reactive monolith into its own **Spring MVC** application, with **JPA/PostgreSQL planned but not implemented**.
+
+**Migration interpretation:** this is an **evolution/replacement of the Booking capability**, not a deliberate long-term duplication of active Booking services. The old reactive Booking implementation, coordination, concurrency and event-flow examples are retained **as historical learning milestones**. No production migration, deletion of old source, successful end-to-end inter-service integration, or independent deployment is asserted without repository verification.
+
+**Trade-off:** mixing stacks introduces extra maintenance, operations and integration complexity, and would not automatically be the preferred architecture in a real production system. Here the educational/portfolio value is the explicit reason for the choice. Both approaches retain DDD and hexagonal boundaries.
+
+### New independent Booking Service — API-first workflow
+
+```text
+POST /api/bookings                       → 201 Created
+POST /api/bookings (missing eventId)     → 400 Bad Request
+POST /api/bookings (active duplicate)    → 409 Conflict
+GET  /api/bookings/{id}                  → 200 OK / 404 Not Found
+```
+
+`BookingController` implements OpenAPI-generated `BookingApi`, converts the request's IDs into domain Value Objects, calls `BookingUseCase` and maps `Booking` to a generated `BookingResponse`. Errors use the generated RFC 9457 `ProblemDetail` and `application/problem+json`. `BookingService` uses the `BookingRepository` port and an `InMemoryBookingRepository` adapter; active duplicates are rejected by checking matching `(eventId, userId)` where status is not `CANCELLED`.
+
+**Current limitation:** the `existsActiveBooking()` then `save()` sequence is not atomic; concurrency-safe database uniqueness, JPA/PostgreSQL and cross-service workflows are future milestones, not completed work.
+
+### Documentation map
+
+- [`docs/ROADMAP.md`](docs/ROADMAP.md): complete project progress; new independent service in section 26.
+- [`docs/DDD.md`](docs/DDD.md): original domain and architecture, plus new service model/hexagonal boundaries in section 55.
+- [`docs/REACTIVE.md`](docs/REACTIVE.md): original EventHub reactive learning and code only; ends with explicit separation of the new imperative service.
+
+
 ------------------------------------------------------------------------
 
 # 🚀 Tech Stack
@@ -132,7 +172,7 @@ as each topic is actually studied.
 | --- | --- |
 | Project progress | [ROADMAP.md](docs/ROADMAP.md) |
 | Domain-Driven Design | [DDD.md](docs/DDD.md) |
-| Hexagonal Architecture | [DDD.md](docs/DDD.md#23-ddd-and-hexagonal-architecture) |
+| Hexagonal Architecture | [DDD.md](docs/DDD.md#23-ddd-and-hexagonal-architecture) and [independent service design](docs/DDD.md#55-independent-booking-service--ddd-and-hexagonal-architecture-october-2026) |
 | Reactive Programming | [REACTIVE.md](docs/REACTIVE.md) |
 
 Additional documentation will be created when the corresponding topics
@@ -192,7 +232,7 @@ For the complete project plan, check [ROADMAP.md](docs/ROADMAP.md).
 
 # 🏗️ Technical Picture
 
-The project now contains framework-independent Event and Booking domain
+The original EventHub application contains framework-independent Event and Booking domain
 models, reactive application ports, R2DBC/PostgreSQL output adapters for
 Event and Booking, Spring WebFlux HTTP input adapters for Event and
 Booking, and Spring IoC configuration for dependency wiring. Booking
@@ -352,7 +392,7 @@ Database migrations and PostgreSQL Testcontainers are still pending.
 
 ------------------------------------------------------------------------
 
-# 🗄️ Reactive Booking Persistence
+# 🗄️ Original Reactive Booking Module — Persistence
 
 Booking persistence is now also backed by PostgreSQL through Spring Data
 R2DBC.
@@ -390,7 +430,7 @@ a partial business state.
 
 ------------------------------------------------------------------------
 
-# 🔒 Concurrent Booking and Optimistic Locking
+# 🔒 Original Reactive Booking Module — Optimistic Locking
 
 Concurrent booking operations can read the same Event capacity before
 either update is persisted. The project now reproduces this race
@@ -498,7 +538,7 @@ Current tested behaviour includes:
 -   Domain Event dispatch to the matching BookingCreated handler
 -   BookingCreated Domain Event → BookingCreatedIntegrationEvent mapping
 
-The current build can be verified with:
+The original EventHub application build was verified with (execute from its project root):
 
 ``` powershell
 .\mvnw.cmd clean test
