@@ -7,7 +7,21 @@ import java.util.UUID;
 
 class BookingTest {
 
+    @Test
+    void shouldCreateBookingWithPendingStatus() {
 
+        EventId eventId = new EventId(UUID.randomUUID());
+        UserId userId = new UserId(UUID.randomUUID());
+
+        Booking booking = new Booking(eventId, userId);
+
+        Assertions.assertAll(
+                () -> Assertions.assertNotNull(booking.getBookingId()),
+                () -> Assertions.assertEquals(eventId, booking.getEventId()),
+                () -> Assertions.assertEquals(userId, booking.getUserId()),
+                () -> Assertions.assertEquals(BookingStatus.PENDING, booking.getStatus())
+        );
+    }
 
     @Test
     void shouldConfirmPendingBooking() {
@@ -29,9 +43,9 @@ class BookingTest {
         );
     }
 
-    @Test
     // comprueba que una reserva pendiente pasa a cancelada.
-    public void shouldCancelPendingBooking() {
+    @Test
+    void shouldCancelPendingBooking() {
 
         Booking booking = new Booking(
                 new EventId(UUID.randomUUID()),
@@ -52,9 +66,9 @@ class BookingTest {
 
     }
 
-    @Test
     //comprueba que una reserva confirmada pasa a cancelada.
-    public void shouldCancelConfirmedBooking() {
+    @Test
+    void shouldCancelConfirmedBooking() {
 
         Booking booking = new Booking(
                 new EventId(UUID.randomUUID()),
@@ -79,9 +93,9 @@ class BookingTest {
 
     }
 
-    @Test
     // comprueba que se lanza IllegalStateException.
-    public void shouldRejectAlreadyCancelledBooking() {
+    @Test
+    void shouldRejectAlreadyCancelledBooking() {
 
         Booking booking = new Booking(
                 new EventId(UUID.randomUUID()),
@@ -99,8 +113,8 @@ class BookingTest {
 
     }
 
+    // comprueba que se lanza IllegalStateException.
     @Test
-        // comprueba que se lanza IllegalStateException.
     void shouldRejectConfirmationOfCancelledBooking() {
 
         Booking booking = new Booking(
@@ -118,8 +132,8 @@ class BookingTest {
         Assertions.assertNotSame(booking, cancelled);
     }
 
+    // comprueba que se lanza IllegalStateException.
     @Test
-        // comprueba que se lanza IllegalStateException.
     void shouldRejectConfirmationOfConfirmedBooking() {
 
         Booking booking = new Booking(
