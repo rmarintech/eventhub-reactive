@@ -1,5 +1,6 @@
 package com.rubenmarin.bookingservice.application.service;
 
+import com.rubenmarin.bookingservice.application.exception.BookingAlreadyExistsException;
 import com.rubenmarin.bookingservice.application.exception.BookingNotFoundException;
 import com.rubenmarin.bookingservice.application.port.in.BookingUseCase;
 import com.rubenmarin.bookingservice.application.port.out.BookingRepository;
@@ -27,6 +28,11 @@ public class BookingService implements BookingUseCase {
     @Override
     public Booking createBooking(EventId eventId, UserId userId) {
         Booking booking = new Booking(eventId, userId);
+
+        if (repository.existsActiveBooking(eventId, userId)) {
+            throw new BookingAlreadyExistsException(eventId, userId);
+        }
+
         return repository.save(booking);
     }
 

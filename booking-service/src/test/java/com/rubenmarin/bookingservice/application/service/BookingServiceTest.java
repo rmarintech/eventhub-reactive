@@ -1,5 +1,6 @@
 package com.rubenmarin.bookingservice.application.service;
 
+import com.rubenmarin.bookingservice.application.exception.BookingAlreadyExistsException;
 import com.rubenmarin.bookingservice.application.exception.BookingNotFoundException;
 import com.rubenmarin.bookingservice.application.port.out.BookingRepository;
 import com.rubenmarin.bookingservice.domain.model.*;
@@ -24,6 +25,7 @@ class BookingServiceTest {
     @InjectMocks
     BookingService service;
 
+
     @Test
     void shouldCreateBooking() {
 
@@ -37,8 +39,7 @@ class BookingServiceTest {
 
         ArgumentCaptor<Booking> captor = ArgumentCaptor.forClass(Booking.class);
 
-        Mockito.verify(repository, Mockito.times(1))
-                .save(captor.capture());
+        Mockito.verify(repository, Mockito.times(1)).save(captor.capture());
 
         Booking saved = captor.getValue();
 
@@ -53,6 +54,21 @@ class BookingServiceTest {
         );
     }
 
+
+    void shouldThrowExceptionWhenActiveBookingAlreadyExists() {
+
+        EventId eventId = new EventId(UUID.randomUUID());
+        UserId userId = new UserId(UUID.randomUUID());
+
+        Mockito.when(repository.existsActiveBooking(eventId, userId)).thenReturn(true);
+
+        Assertions.assertThrows(BookingAlreadyExistsException.class, () -> service.createBooking(eventId, userId));
+
+        Mockito.verify(repository).existsActiveBooking(eventId, userId);
+
+        Mockito.verify(repository, Mockito.never()).save(Mockito.any(Booking.class));
+    }
+
     @Test
     void shouldReturnBookingWhenExists() {
         Booking booking = new Booking(
@@ -61,8 +77,7 @@ class BookingServiceTest {
         );
 
         BookingId bookingId = booking.getBookingId();
-        Mockito.when(repository.findById(bookingId))
-                .thenReturn(Optional.of(booking));
+        Mockito.when(repository.findById(bookingId)).thenReturn(Optional.of(booking));
 
         Booking found = service.getBooking(bookingId);
         Assertions.assertAll(
@@ -83,8 +98,7 @@ class BookingServiceTest {
 
         BookingId bookingId = new BookingId(UUID.randomUUID());
 
-        Mockito.when(repository.findById(bookingId))
-                .thenReturn(Optional.empty());
+        Mockito.when(repository.findById(bookingId)).thenReturn(Optional.empty());
 
         Assertions.assertThrows(BookingNotFoundException.class, () -> service.getBooking(bookingId));
 
@@ -102,16 +116,14 @@ class BookingServiceTest {
 
         BookingId bookingId = booking.getBookingId();
 
-        Mockito.when(repository.findById(bookingId))
-                .thenReturn(Optional.of(booking));
+        Mockito.when(repository.findById(bookingId)).thenReturn(Optional.of(booking));
 
         Mockito.when(repository.save(Mockito.any(Booking.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
 
         Booking confirmed = service.confirmBooking(bookingId);
 
-        ArgumentCaptor<Booking> captor =
-                ArgumentCaptor.forClass(Booking.class);
+        ArgumentCaptor<Booking> captor = ArgumentCaptor.forClass(Booking.class);
 
         Mockito.verify(repository).findById(bookingId);
         Mockito.verify(repository).save(captor.capture());
@@ -138,22 +150,14 @@ class BookingServiceTest {
         Booking cancelled = booking.cancel();
         BookingId bookingId = cancelled.getBookingId();
 
-        Mockito.when(repository.findById(bookingId))
-                .thenReturn(Optional.of(cancelled));
+        Mockito.when(repository.findById(bookingId)).thenReturn(Optional.of(cancelled));
 
-        Assertions.assertThrows(
-                IllegalStateException.class,
-                () -> service.confirmBooking(bookingId)
-        );
+        Assertions.assertThrows(IllegalStateException.class, () -> service.confirmBooking(bookingId));
 
         Mockito.verify(repository).findById(bookingId);
-        Mockito.verify(repository, Mockito.never())
-                .save(Mockito.any(Booking.class));
+        Mockito.verify(repository, Mockito.never()).save(Mockito.any(Booking.class));
 
-        Assertions.assertEquals(
-                BookingStatus.CANCELLED,
-                cancelled.getStatus()
-        );
+        Assertions.assertEquals(BookingStatus.CANCELLED, cancelled.getStatus());
     }
 
     @Test
@@ -224,4 +228,5 @@ class BookingServiceTest {
         Mockito.verify(repository).findById(bookingId);
         Mockito.verify(repository, Mockito.never()).save(Mockito.any(Booking.class));
     }
+
 }

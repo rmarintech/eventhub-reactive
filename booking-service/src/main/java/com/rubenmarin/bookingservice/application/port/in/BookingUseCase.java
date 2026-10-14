@@ -7,7 +7,7 @@ import com.rubenmarin.bookingservice.domain.model.UserId;
 
 public interface BookingUseCase {
 
-    public Booking getBooking(BookingId id);
+    public Booking getBooking(BookingId bookingId);
 
     Booking createBooking(EventId eventId, UserId userId);
 

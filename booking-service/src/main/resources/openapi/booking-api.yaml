@@ -1,0 +1,131 @@
+
+openapi: 3.0.3
+
+info:
+  title: EventHub Booking API
+  version: 1.0.0
+  description: REST API for managing event bookings
+
+servers:
+  - url: /
+
+tags:
+  - name: Booking
+    description: Booking management operations
+
+paths:
+
+  /api/bookings/{id}:
+    get:
+      tags:
+        - Booking
+      operationId: getBooking
+      summary: Get booking by ID
+      description: Retrieves an existing booking
+
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Booking identifier
+          schema:
+            type: string
+            format: uuid
+
+      responses:
+        '200':
+          description: Booking found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BookingResponse'
+
+        '400':
+          description: Invalid booking identifier
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+
+        '404':
+          description: Booking not found
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+
+        '500':
+          description: Internal server error
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+
+  /api/bookings:
+    post:
+      tags:
+        - Booking
+      operationId: createBooking
+      summary: Create booking
+      description: Creates a new booking with PENDING status
+
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateBookingRequest'
+
+      responses:
+        '201':
+          description: Booking successfully created
+          headers:
+            Location:
+              description: URI of the newly created booking
+              schema:
+                type: string
+                format: uri-reference
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BookingResponse'
+
+        '400':
+          description: Invalid booking request
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+
+        '404':
+          description: Event not found
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+
+        '409':
+          description: Booking conflict
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+
+        '500':
+          description: Internal server error
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+
+components:
+  schemas:
+
+    BookingResponse:
+      $ref: './schemas/BookingResponse.yaml'
+
+    CreateBookingRequest:
+      $ref: './schemas/CreateBookingRequest.yaml'
+
+    ProblemDetail:
+      $ref: './schemas/ProblemDetail.yaml'

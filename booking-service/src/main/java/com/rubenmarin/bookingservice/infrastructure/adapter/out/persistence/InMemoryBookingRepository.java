@@ -1,8 +1,7 @@
-package com.rubenmarin.bookingservice.infrastructure.persistence;
+package com.rubenmarin.bookingservice.infrastructure.adapter.out.persistence;
 
 import com.rubenmarin.bookingservice.application.port.out.BookingRepository;
-import com.rubenmarin.bookingservice.domain.model.Booking;
-import com.rubenmarin.bookingservice.domain.model.BookingId;
+import com.rubenmarin.bookingservice.domain.model.*;
 
 import java.util.Map;
 import java.util.Optional;
@@ -24,4 +23,19 @@ public class InMemoryBookingRepository implements BookingRepository {
         bookings.put(booking.getBookingId(), booking);
         return booking;
     }
+
+    @Override
+    public boolean existsActiveBooking(EventId eventId, UserId userId) {
+
+       return bookings.values()
+               .stream()
+               .anyMatch(b ->
+                       b.getEventId().equals(eventId)
+                       && b.getUserId().equals(userId)
+                       && b.getStatus() != BookingStatus.CANCELLED
+               );
+
+    }
+
+
 }

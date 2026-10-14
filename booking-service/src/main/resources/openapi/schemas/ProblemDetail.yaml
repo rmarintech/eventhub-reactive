@@ -1,0 +1,44 @@
+type: object
+
+description: Error response following RFC 9457
+
+required:
+  - type
+  - title
+  - status
+
+properties:
+  type:
+    type: string
+    format: uri-reference
+    example: "https://api.eventhub.example/problems/booking-not-found"
+
+  title:
+    type: string
+    example: "Booking not found"
+
+  status:
+    type: integer
+    format: int32
+    example: 404
+
+  detail:
+    type: string
+    example: "The requested booking does not exist"
+
+  instance:
+    type: string
+    format: uri-reference
+    example: "/api/bookings/08a92d4f-76fb-4bd9-aa50-18f31c6d78aa"
+
+  code:
+    type: string
+    example: "BOOKING_NOT_FOUND"
+
+  timestamp:
+    type: string
+    format: date-time
+
+  traceId:
+    type: string
+    example: "4bf92f3577b34da6a3ce929d0e0e4736"

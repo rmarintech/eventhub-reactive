@@ -1,0 +1,27 @@
+type: object
+required:
+  - bookingId
+  - eventId
+  - userId
+  - status
+
+properties:
+
+  bookingId:
+    type: string
+    format: uuid
+
+  eventId:
+    type: string
+    format: uuid
+
+  userId:
+    type: string
+    format: uuid
+
+  status:
+    type: string
+    enum:
+      - PENDING
+      - CONFIRMED
+      - CANCELLED
