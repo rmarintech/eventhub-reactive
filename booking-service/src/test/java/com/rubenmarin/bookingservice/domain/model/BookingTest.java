@@ -7,27 +7,48 @@ import java.util.UUID;
 
 class BookingTest {
 
+    @Test
+    void shouldConfirmPendingBooking() {
+
+        Booking booking = new Booking(
+                new BookingId(UUID.randomUUID()),
+                new EventId(UUID.randomUUID()),
+                new UserId(UUID.randomUUID())
+        );
+
+        Booking confirmed = booking.confirm();
+
+        Assertions.assertAll(
+                () -> Assertions.assertEquals(BookingStatus.CONFIRMED, confirmed.getStatus()),
+                () -> Assertions.assertEquals(BookingStatus.PENDING, booking.getStatus()),
+                () -> Assertions.assertEquals(booking.getBookingId(), confirmed.getBookingId()),
+                () -> Assertions.assertEquals(booking.getEventId(), confirmed.getEventId()),
+                () -> Assertions.assertEquals(booking.getUserId(), confirmed.getUserId()),
+                () -> Assertions.assertNotSame(booking, confirmed)
+        );
+    }
 
     @Test
     // comprueba que una reserva pendiente pasa a cancelada.
     public void shouldCancelPendingBooking() {
 
+        Booking booking = new Booking(
+                new BookingId(UUID.randomUUID()),
+                new EventId(UUID.randomUUID()),
+                new UserId(UUID.randomUUID())
+        );
 
-        BookingId bookingId = new BookingId(UUID.randomUUID());
-        EventId eventId = new EventId(UUID.randomUUID());
-        UserId userId = new UserId(UUID.randomUUID());
-        BookingStatus status = BookingStatus.PENDING;
-
-        Booking booking = new Booking(bookingId, eventId, userId, status);
         Booking cancelled = booking.cancel();
 
-        Assertions.assertEquals(BookingStatus.CANCELLED, cancelled.status());
+        Assertions.assertEquals(BookingStatus.CANCELLED, cancelled.getStatus());
 
-        Assertions.assertEquals(booking.id(), cancelled.id());
-        Assertions.assertEquals(booking.eventId(), cancelled.eventId());
-        Assertions.assertEquals(booking.userId(), cancelled.userId());
+        Assertions.assertEquals(booking.getBookingId(), cancelled.getBookingId());
+        Assertions.assertEquals(booking.getEventId(), cancelled.getEventId());
+        Assertions.assertEquals(booking.getUserId(), cancelled.getUserId());
 
-        Assertions.assertEquals(BookingStatus.PENDING, booking.status());
+        Assertions.assertEquals(BookingStatus.PENDING, booking.getStatus());
+
+        Assertions.assertNotSame(booking, cancelled);
 
     }
 
@@ -35,21 +56,27 @@ class BookingTest {
     //comprueba que una reserva confirmada pasa a cancelada.
     public void shouldCancelConfirmedBooking() {
 
-        BookingId bookingId = new BookingId(UUID.randomUUID());
-        EventId eventId = new EventId(UUID.randomUUID());
-        UserId userId = new UserId(UUID.randomUUID());
-        BookingStatus status = BookingStatus.CONFIRMED;
+        Booking booking = new Booking(
+                new BookingId(UUID.randomUUID()),
+                new EventId(UUID.randomUUID()),
+                new UserId(UUID.randomUUID())
+        );
+        Booking confirmed = booking.confirm();
+        Booking cancelled = confirmed.cancel();
 
-        Booking booking = new Booking(bookingId, eventId, userId, status);
-        Booking cancelled = booking.cancel();
+        Assertions.assertEquals(booking.getBookingId(), cancelled.getBookingId());
+        Assertions.assertEquals(booking.getEventId(), cancelled.getEventId());
+        Assertions.assertEquals(booking.getUserId(), cancelled.getUserId());
 
-        Assertions.assertEquals(BookingStatus.CANCELLED, cancelled.status());
+        Assertions.assertNotSame(booking, confirmed);
+        Assertions.assertNotSame(booking, cancelled);
+        Assertions.assertNotSame(confirmed, cancelled);
 
-        Assertions.assertEquals(booking.id(), cancelled.id());
-        Assertions.assertEquals(booking.eventId(), cancelled.eventId());
-        Assertions.assertEquals(booking.userId(), cancelled.userId());
-
-        Assertions.assertEquals(BookingStatus.CONFIRMED, booking.status());
+        Assertions.assertAll(
+                () -> Assertions.assertEquals(BookingStatus.PENDING, booking.getStatus()),
+                () -> Assertions.assertEquals(BookingStatus.CONFIRMED, confirmed.getStatus()),
+                () -> Assertions.assertEquals(BookingStatus.CANCELLED, cancelled.getStatus())
+        );
 
     }
 
@@ -57,15 +84,60 @@ class BookingTest {
     // comprueba que se lanza IllegalStateException.
     public void shouldRejectAlreadyCancelledBooking() {
 
-        BookingId bookingId = new BookingId(UUID.randomUUID());
-        EventId eventId = new EventId(UUID.randomUUID());
-        UserId userId = new UserId(UUID.randomUUID());
-        BookingStatus status = BookingStatus.CANCELLED;
+        Booking booking = new Booking(
+                new BookingId(UUID.randomUUID()),
+                new EventId(UUID.randomUUID()),
+                new UserId(UUID.randomUUID())
+        );
+        Booking cancelled = booking.cancel();
 
-        Booking booking = new Booking(bookingId, eventId, userId, status);
+        Assertions.assertThrows(IllegalStateException.class, () -> cancelled.cancel());
 
-        Assertions.assertThrows(IllegalStateException.class, () -> booking.cancel());
-        Assertions.assertEquals(BookingStatus.CANCELLED, booking.status());
+        Assertions.assertEquals(BookingStatus.CANCELLED, cancelled.getStatus());
+        Assertions.assertEquals(BookingStatus.PENDING, booking.getStatus());
 
+        Assertions.assertNotSame(booking, cancelled);
+
+
+    }
+
+    @Test
+        // comprueba que se lanza IllegalStateException.
+    void shouldRejectConfirmationOfCancelledBooking() {
+
+        Booking booking = new Booking(
+                new BookingId(UUID.randomUUID()),
+                new EventId(UUID.randomUUID()),
+                new UserId(UUID.randomUUID())
+        );
+
+        Booking cancelled = booking.cancel();
+
+        Assertions.assertThrows(IllegalStateException.class, () -> cancelled.confirm());
+
+        Assertions.assertEquals(BookingStatus.PENDING, booking.getStatus());
+        Assertions.assertEquals(BookingStatus.CANCELLED, cancelled.getStatus());
+
+        Assertions.assertNotSame(booking, cancelled);
+    }
+
+    @Test
+        // comprueba que se lanza IllegalStateException.
+    void shouldRejectConfirmationOfConfirmedBooking() {
+
+        Booking booking = new Booking(
+                new BookingId(UUID.randomUUID()),
+                new EventId(UUID.randomUUID()),
+                new UserId(UUID.randomUUID())
+        );
+
+        Booking confirmed = booking.confirm();
+
+        Assertions.assertThrows(IllegalStateException.class, () -> confirmed.confirm());
+
+        Assertions.assertEquals(BookingStatus.PENDING, booking.getStatus());
+        Assertions.assertEquals(BookingStatus.CONFIRMED, confirmed.getStatus());
+
+        Assertions.assertNotSame(booking, confirmed);
     }
 }

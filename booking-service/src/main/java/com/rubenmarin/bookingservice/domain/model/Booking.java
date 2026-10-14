@@ -1,13 +1,37 @@
 package com.rubenmarin.bookingservice.domain.model;
 
-import java.util.UUID;
 
-public record Booking(
-        BookingId id,
-        EventId eventId,
-        UserId userId,
-        BookingStatus status
-) {
+import java.util.Objects;
+
+public class Booking {
+
+    private final BookingId bookingId;
+    private final EventId eventId;
+    private final UserId userId;
+    private final BookingStatus status;
+
+
+    public Booking(
+            BookingId bookingId,
+            EventId eventId,
+            UserId userId
+
+    ) {
+        this(bookingId, eventId, userId, BookingStatus.PENDING);
+    }
+
+    private Booking(
+            BookingId bookingId,
+            EventId eventId,
+            UserId userId,
+            BookingStatus status
+
+    ) {
+        this.bookingId = Objects.requireNonNull(bookingId, "Booking Id cannot be null");
+        this.eventId = Objects.requireNonNull(eventId, "Event Id cannot be null");
+        this.userId = Objects.requireNonNull(userId, "User Id cannot be null");
+        this.status = Objects.requireNonNull(status, "Status cannot be null");
+    }
 
     public Booking confirm() {
         if (status != BookingStatus.PENDING) {
@@ -17,7 +41,7 @@ public record Booking(
         }
 
         return new Booking(
-                id,
+                bookingId,
                 eventId,
                 userId,
                 BookingStatus.CONFIRMED
@@ -31,10 +55,26 @@ public record Booking(
             );
         }
         return new Booking(
-                id,
+                bookingId,
                 eventId,
                 userId,
                 BookingStatus.CANCELLED
         );
+    }
+
+    public BookingStatus getStatus() {
+        return status;
+    }
+
+    public BookingId getBookingId() {
+        return bookingId;
+    }
+
+    public EventId getEventId() {
+        return eventId;
+    }
+
+    public UserId getUserId() {
+        return userId;
     }
 }
