@@ -2,6 +2,7 @@ package com.rubenmarin.bookingservice.domain.model;
 
 
 import java.util.Objects;
+import java.util.UUID;
 
 public class Booking {
 
@@ -12,12 +13,15 @@ public class Booking {
 
 
     public Booking(
-            BookingId bookingId,
             EventId eventId,
             UserId userId
 
     ) {
-        this(bookingId, eventId, userId, BookingStatus.PENDING);
+        this(new BookingId(UUID.randomUUID()),
+                 eventId,
+                userId,
+                BookingStatus.PENDING
+        );
     }
 
     private Booking(

@@ -7,11 +7,12 @@ import java.util.UUID;
 
 class BookingTest {
 
+
+
     @Test
     void shouldConfirmPendingBooking() {
 
         Booking booking = new Booking(
-                new BookingId(UUID.randomUUID()),
                 new EventId(UUID.randomUUID()),
                 new UserId(UUID.randomUUID())
         );
@@ -33,7 +34,6 @@ class BookingTest {
     public void shouldCancelPendingBooking() {
 
         Booking booking = new Booking(
-                new BookingId(UUID.randomUUID()),
                 new EventId(UUID.randomUUID()),
                 new UserId(UUID.randomUUID())
         );
@@ -57,7 +57,6 @@ class BookingTest {
     public void shouldCancelConfirmedBooking() {
 
         Booking booking = new Booking(
-                new BookingId(UUID.randomUUID()),
                 new EventId(UUID.randomUUID()),
                 new UserId(UUID.randomUUID())
         );
@@ -85,7 +84,6 @@ class BookingTest {
     public void shouldRejectAlreadyCancelledBooking() {
 
         Booking booking = new Booking(
-                new BookingId(UUID.randomUUID()),
                 new EventId(UUID.randomUUID()),
                 new UserId(UUID.randomUUID())
         );
@@ -106,7 +104,6 @@ class BookingTest {
     void shouldRejectConfirmationOfCancelledBooking() {
 
         Booking booking = new Booking(
-                new BookingId(UUID.randomUUID()),
                 new EventId(UUID.randomUUID()),
                 new UserId(UUID.randomUUID())
         );
@@ -126,7 +123,6 @@ class BookingTest {
     void shouldRejectConfirmationOfConfirmedBooking() {
 
         Booking booking = new Booking(
-                new BookingId(UUID.randomUUID()),
                 new EventId(UUID.randomUUID()),
                 new UserId(UUID.randomUUID())
         );
