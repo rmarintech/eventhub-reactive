@@ -2074,7 +2074,7 @@ public Booking createBooking(EventId eventId, UserId userId) {
 
 `BookingAlreadyExistsException` is in `application.exception`: it reports a rejected use case without depending on Spring HTTP. `BookingNotFoundException` is also an application exception. Both are mapped by infrastructure, not embedded in the domain.
 
-**Concurrency limitation:** This read-before-save check is vulnerable to a check-then-act race. Neither an in-memory map nor `synchronized` across independent JVMs guarantees distributed uniqueness; PostgreSQL requires an atomic database strategy, potentially a partial unique index for active statuses, plus careful exception translation. Optimistic locking on an existing versioned row addresses a different concurrent-update problem, not arbitrary duplicate inserts.
+**Concurrency safeguard:** This read-before-save check remains vulnerable to a check-then-act race. PostgreSQL now provides an atomic guarantee through a partial unique index for active statuses, with selective persistence-error translation. Optimistic locking on an existing versioned row addresses a different concurrent-update problem, not arbitrary duplicate inserts. See §55.9–55.10.
 
 ## 55.3 Ports and adapters (current implementation)
 
@@ -2136,7 +2136,7 @@ The new service's OpenAPI-generated `BookingApi`, `CreateBookingRequest`, `Booki
 
 The new `booking-service` deliberately uses synchronous Spring MVC and JPA, to practice transactional persistence, concurrency and a classic Java stack alongside the **separate** EventHub WebFlux/R2DBC implementation. Reactive programming is not an intrinsic DDD or hexagonal requirement. It is a technology choice at the port/adapter boundary; the domain remains framework-independent in either approach.
 
-**Not implemented yet in this service:** database-enforced active-booking uniqueness, dedicated concurrency tests, Kafka, reliable cross-service capacity coordination and full deployment.
+**Not implemented yet in this service:** deterministic forcing of both concurrent existence checks to return false, Kafka, reliable cross-service capacity coordination and full deployment. Database-level uniqueness and a two-thread concurrent-start test have been implemented and verified.
 
 
 ## 55.7 JPA/PostgreSQL persistence and Flyway (15 October 2026)
@@ -2174,6 +2174,33 @@ The positive run with the decorator annotation returned green (rollback). As a n
 
 `TransactionalBookingUseCaseIT` separately verifies that a successful `createBooking` can be read afterward without a test-wide transaction. Persistence on its own does **not** prove that the decorator opened the transaction, because Spring Data repository writes can be transactional independently; the negative-control rollback test provides stronger evidence.
 
-### Remaining concurrency limitation
+### Concurrency principle (subsequently addressed)
 
-A service-level transaction at the usual `READ_COMMITTED` isolation does **not** make `existsActiveBooking(eventId, userId)` followed by `save()` a database-level uniqueness guarantee. Two concurrent transactions can both observe no active booking and insert separate IDs. Next milestone: a PostgreSQL **partial unique index** on `(event_id, user_id)` where `status <> 'CANCELLED'`, plus a Flyway migration, concurrency tests and translation of database uniqueness violations to a domain-appropriate application/HTTP conflict. A simple `UNIQUE(event_id, user_id)` would also block rebooking after cancellation.
+A service-level transaction at the usual `READ_COMMITTED` isolation does **not** make `existsActiveBooking(eventId, userId)` followed by `save()` a database-level uniqueness guarantee. Two concurrent transactions can both observe no active booking and attempt to insert separate IDs. Flyway V2 now establishes the PostgreSQL partial unique index described below. A simple `UNIQUE(event_id, user_id)` would also block rebooking after cancellation.
+
+
+## 55.9 Active-booking uniqueness and persistence error translation (15 October 2026)
+
+`V2__unique_active_booking.sql` adds:
+
+```sql
+CREATE UNIQUE INDEX uq_bookings_active_event_user
+ON bookings (event_id, user_id)
+WHERE status <> 'CANCELLED';
+```
+
+The database therefore rejects multiple active (`PENDING` / `CONFIRMED`) reservations for the same event/user while preserving the ability to book again after cancellation. Integration tests against PostgreSQL Testcontainers passed for `PENDING + PENDING` (rejected) and `CANCELLED + PENDING` (allowed). This constraint, not the application's pre-check or `@Transactional` alone, provides the concurrency-safe uniqueness guarantee.
+
+`JpaBookingRepositoryAdapter.save()` uses Spring Data `saveAndFlush()` to trigger the database check while the adapter can handle the failure. `flush()` executes pending SQL but does **not** commit the surrounding transaction. The adapter catches Spring's `DataIntegrityViolationException`, searches its cause chain for Hibernate's `ConstraintViolationException`, and translates **only** constraint `uq_bookings_active_event_user` into the application exception `BookingAlreadyExistsException`. Unrelated integrity exceptions remain unchanged; a Mockito unit test verified this using a different constraint name. The inbound `GlobalExceptionHandler` already maps the application exception to HTTP `409 Conflict`.
+
+The regular application-level `existsActiveBooking()` pre-check is retained for a clear business response in the common sequential case, but is **not** a race-condition guarantee.
+
+## 55.10 Concurrent-start and end-to-end tests (15 October 2026)
+
+`ConcurrentBookingIT` uses a two-thread `ExecutorService`, a readiness `CountDownLatch(2)` and a start `CountDownLatch(1)` to release two independent booking requests for the same event/user. Without test-level `@Transactional`, each call runs through the Spring-managed transactional decorator. The test passed with exactly one successful booking and one `BookingAlreadyExistsException`, and an active booking present afterward. **Limitation:** synchronizing the start does not force both threads to observe `existsActiveBooking() == false`; a deterministic barrier at that read remains an optional stronger race test.
+
+`TransactionalBookingUseCaseIT` (without test-level `@Transactional`) verifies committed creation and the valid transitions `PENDING → CONFIRMED`, `PENDING → CANCELLED` and `PENDING → CONFIRMED → CANCELLED` against PostgreSQL. It checks the persisted state and that the original immutable domain instances retain their prior statuses.
+
+`BookingHttpIT` uses `@SpringBootTest`, `@AutoConfigureMockMvc`, Testcontainers and the real application beans (no mocks). The end-to-end-in-process HTTP tests passed for initial `POST /api/bookings` → `201 Created` with `PENDING` persisted, and a repeated request → `409 Conflict` with `BOOKING_ALREADY_EXISTS`. The repeated request exercises the sequential duplicate path; the concurrent-start test exercises concurrent application calls rather than HTTP concurrency.
+
+**Next architectural learning track:** communication between the reactive Event module/service and the imperative Booking service. Remote Event-capacity coordination, failure handling, Kafka, outbox and distributed consistency are not yet implemented.

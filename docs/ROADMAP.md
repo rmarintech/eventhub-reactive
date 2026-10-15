@@ -575,7 +575,7 @@ Domain Events                        ✅
         ↓
 Domain vs Integration Events         ✅
         ↓
-Kafka fundamentals                   🚧 NEXT
+Kafka fundamentals                   ⏸ DEFERRED (original reactive track)
         ↓
 Booking Service (Spring MVC / API)       ✅
         ↓
@@ -585,7 +585,11 @@ Flyway / PostgreSQL Testcontainers       ✅
         ↓
 Transaction decorator / rollback tests  ✅
         ↓
-Active-booking DB uniqueness            🚧 NEXT
+Active-booking DB uniqueness            ✅
+        ↓
+Concurrency / HTTP integration tests     ✅
+        ↓
+Event ↔ Booking service integration       🚧 NEXT
         ↓
 Cross-service integration / Kafka        ⬜ PLANNED
 ```
@@ -629,22 +633,29 @@ Cross-service integration / Kafka        ⬜ PLANNED
 - [ ] Define and test POST/GET error cases beyond the existing MVC scenarios
 - [x] Spring Data JPA and PostgreSQL persistence adapter (`JpaBookingRepositoryAdapter`)
 - [x] Domain-to-JPA mapping and `Booking.rehydrate(...)` round-trip test
-- [x] DB schema management with Flyway `V1__create_bookings_table.sql`
-- [ ] Database-level duplicate protection and concurrent-request tests
-- [ ] Implement and verify PostgreSQL partial unique index allowing rebooking after `CANCELLED`
+- [x] DB schema management with Flyway `V1__create_bookings_table.sql` and `V2__unique_active_booking.sql`
+- [x] Database-level duplicate protection and concurrent-request test (two threads, start synchronized; not forced simultaneous pre-check)
+- [x] Implement and verify PostgreSQL partial unique index (Flyway V2) allowing rebooking after `CANCELLED`
 - [x] PostgreSQL 17 Testcontainers database integration tests (`@ServiceConnection`)
 - [x] JPA integration tests: insert, fetch, active-status checks and state update
 - [x] Infrastructure transaction decorator (`TransactionalBookingUseCase`)
 - [x] Commit-visibility test with no test-level `@Transactional`
 - [x] Rollback test with a failing use-case delegate and negative control removing `@Transactional`
+- [x] JPA adapter `saveAndFlush()` and selective constraint-name translation to `BookingAlreadyExistsException`
+- [x] Unit test preserving unrelated `DataIntegrityViolationException` (Mockito)
+- [x] PostgreSQL integration tests: reject duplicate active booking; permit `CANCELLED` + `PENDING`
+- [x] `ConcurrentBookingIT`: exactly one successful and one rejected concurrent-start request
+- [x] `TransactionalBookingUseCaseIT`: committed create, confirm, cancel from pending and cancel after confirmation
+- [x] `BookingHttpIT`: real Spring MVC/MockMvc + PostgreSQL HTTP 201 and duplicate 409
+- [ ] Optional deterministic concurrency test forcing both pre-checks to report no booking
 - [ ] Decide how the extracted Booking service coordinates Event availability/capacity (previous monolith logic does not transfer automatically)
 - [ ] Service-to-service Event availability and capacity coordination
 - [ ] Cross-service consistency, failures and compensation strategy
 - [ ] Kafka-based integration events / reliable outbox (if selected)
 - [ ] Containerization, deployment and CI/CD for the independent service
 
-**Concurrency caveat:** the `existsActiveBooking()` then `save()` sequence remains vulnerable to concurrent duplicate inserts even inside a `@Transactional` use case. JPA persistence and transactional rollback are complete, **not** database-enforced active uniqueness. `@Version` by itself does not prevent duplicate inserts with distinct Booking IDs.
+**Concurrency caveat:** the `existsActiveBooking()` then `save()` sequence can still race even inside `@Transactional`, but PostgreSQL now prevents two active duplicates through Flyway V2's partial unique index. `@Version` alone would not prevent inserts with distinct Booking IDs. The two-thread test did not deterministically force both pre-checks to return false.
 
 ## Next milestone
 
-Add database-enforced active-booking uniqueness via Flyway (partial unique index excluding `CANCELLED`), test concurrent creates against PostgreSQL, and map uniqueness violations to a 409 response. Cross-service Event coordination remains a later milestone.
+Design and implement communication between the reactive Event side and imperative Booking service, beginning with clear ownership of Event availability/capacity and defining service-to-service contracts. Distributed consistency, failure recovery, Kafka and outbox remain pending.

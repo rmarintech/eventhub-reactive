@@ -1,17 +1,20 @@
 package com.rubenmarin.bookingservice.infrastructure.adapter.out.persistence.jpa;
 
 
+import com.rubenmarin.bookingservice.application.exception.BookingAlreadyExistsException;
 import com.rubenmarin.bookingservice.application.port.out.BookingRepository;
 import com.rubenmarin.bookingservice.domain.model.Booking;
 import com.rubenmarin.bookingservice.domain.model.BookingStatus;
 import com.rubenmarin.bookingservice.domain.model.EventId;
 import com.rubenmarin.bookingservice.domain.model.UserId;
 import jakarta.persistence.EntityManager;
+import org.hibernate.exception.ConstraintViolationException;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.transaction.annotation.Transactional;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -133,4 +136,63 @@ class JpaBookingRepositoryAdapterIT {
         );
 
     }
+
+    // PENDING + PENDING	Rechazado
+    @Test
+    void shouldRejectDuplicateActiveBooking() {
+
+        EventId eventId = new EventId(UUID.randomUUID());
+        UserId userId = new UserId(UUID.randomUUID());
+
+        Booking booking1 = new Booking(eventId, userId);
+        Booking booking2 = new Booking(eventId, userId);
+
+        repository.save(booking1);
+
+        // el repo ahora hace saveAndFlush por lo que ya no es necesario
+        // Sin flush Hibernate puede aplazar la ejecución del INSERT
+        //entityManager.flush();
+
+        Assertions.assertThrows(
+                                                        // PostgreSQL detecta la violación de uq_bookings_active_event_user.
+                //DataIntegrityViolationException.class,// Spring la traduce a DataIntegrityViolationException.
+                // ConstraintViolationException.class, // Hibernate lanza ConstraintViolationException.
+                BookingAlreadyExistsException.class, // Nuestro adaptador la convierte en BookingAlreadyExistsException.
+                () -> repository.save(booking2));
+
+
+    }
+
+    // CANCELLED + PENDING	Permitido
+    @Test
+    void shouldAllowNewBookingAfterCancellation() {
+
+        EventId eventId = new EventId(UUID.randomUUID());
+        UserId userId = new UserId(UUID.randomUUID());
+
+        // Primera reserva: CANCELLED
+        Booking booking1 = new Booking(eventId, userId);
+        repository.save(booking1.cancel());
+
+        entityManager.flush();
+        entityManager.clear();
+
+        // Segunda reserva: PENDING
+        Booking booking2 = new Booking(eventId, userId);
+        repository.save(booking2);
+
+        entityManager.flush();
+        entityManager.clear();
+
+        Booking found = repository.findById(booking2.getBookingId())
+                .orElseThrow();
+
+        Assertions.assertAll(
+                () -> Assertions.assertNotEquals(booking1.getBookingId(), found.getBookingId()),
+                () -> Assertions.assertEquals(eventId, found.getEventId()),
+                () -> Assertions.assertEquals(userId, found.getUserId()),
+                () -> Assertions.assertEquals(BookingStatus.PENDING, found.getStatus())
+        );
+    }
+
 }

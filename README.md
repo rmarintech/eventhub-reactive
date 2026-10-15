@@ -21,7 +21,7 @@ implemented.
 | --- | --- | --- | --- |
 | Event module (original EventHub application) | WebFlux / Reactor | PostgreSQL via R2DBC | Event API, event capacity, reactive transactions and optimistic locking |
 | Booking module (historical, being replaced by extraction) | WebFlux / Reactor | PostgreSQL via R2DBC (historical) | `CustomerId` + places, `POST /bookings`, Event-capacity orchestration, reactive domain events |
-| **`booking-service` (replacement under development)** | **Spring MVC / imperative** | **Spring Data JPA / PostgreSQL 17; Flyway** | `UserId`, PENDING/CONFIRMED/CANCELLED, API-first endpoints, MVC tests, JPA integration tests with Testcontainers, transactional decorator and verified rollback |
+| **`booking-service` (replacement under development)** | **Spring MVC / imperative** | **Spring Data JPA / PostgreSQL 17; Flyway V1/V2** | `UserId`, PENDING/CONFIRMED/CANCELLED, API-first HTTP (201/409), real JPA/HTTP integration tests, transactional rollback, active-booking uniqueness and concurrency checks |
 
 The extracted service's build/deployment integration with the original application has **not been verified from the four documentation files alone**. Separate repository/module boundaries and exact startup commands should be confirmed in source before presenting them as runnable.
 
@@ -44,7 +44,7 @@ GET  /api/bookings/{id}                  → 200 OK / 404 Not Found
 
 `BookingController` implements OpenAPI-generated `BookingApi`, converts the request's IDs into domain Value Objects, calls `BookingUseCase` and maps `Booking` to a generated `BookingResponse`. Errors use the generated RFC 9457 `ProblemDetail` and `application/problem+json`. `BookingService` uses the `BookingRepository` port backed by `JpaBookingRepositoryAdapter` (the in-memory adapter remains as a historical/test implementation); active duplicates are rejected by checking matching `(eventId, userId)` where status is not `CANCELLED`.
 
-**Current limitation:** the `existsActiveBooking()` then `save()` check is not sufficient to guarantee uniqueness under concurrent requests, even when the application operation is transactional. A database-level partial unique index, concurrency tests and cross-service workflows are still pending.
+**Concurrency approach:** `existsActiveBooking()` improves normal-path feedback but cannot prevent a check-then-insert race. PostgreSQL now enforces active-booking uniqueness through Flyway V2 (`uq_bookings_active_event_user`), and the JPA adapter translates only this constraint failure into `BookingAlreadyExistsException`. A two-thread integration test passed; it coordinates starting the requests but does **not** force both initial existence checks to return false. Cross-service workflows remain pending.
 
 ### Booking persistence and transaction milestone — 15 October 2026
 
@@ -55,7 +55,11 @@ GET  /api/bookings/{id}                  → 200 OK / 404 Not Found
 - PostgreSQL Testcontainers with `@ServiceConnection` runs integration tests on an isolated database; Flyway initializes its schema.
 - The Spring-managed `TransactionalBookingUseCase` decorator implements `BookingUseCase` and declares `@Transactional` boundaries without adding Spring dependencies to `BookingService`. `BookingConfiguration` wraps the plain-Java service in this decorator.
 - Integration tests **without test-level `@Transactional`** verified booking persistence and rollback after a deliberately failing delegate. A negative control removing the decorator's `@Transactional` caused the expected failure (the previously saved booking remained in PostgreSQL).
-- **Still pending:** concurrency-safe uniqueness, a PostgreSQL partial unique index for active bookings, corresponding error translation, distributed Event-capacity coordination and Kafka integration.
+- Flyway `V2__unique_active_booking.sql` adds a partial unique index on `(event_id, user_id)` for statuses other than `CANCELLED`; tested rejection of two active bookings and successful rebooking after cancellation.
+- `JpaBookingRepositoryAdapter.save()` now uses `saveAndFlush()` to surface database errors inside the adapter. The adapter inspects the Hibernate constraint name nested in Spring’s `DataIntegrityViolationException`, translates only `uq_bookings_active_event_user` to `BookingAlreadyExistsException` and propagates unrelated failures unchanged (Mockito test). `flush()` is not a commit.
+- Two-thread `ConcurrentBookingIT` with `ExecutorService`/`CountDownLatch` passed: one creation succeeded and the other was rejected. This is a concurrent-start test, not a deterministic forcing of both existence reads to false.
+- `TransactionalBookingUseCaseIT` verified persisted creation and the transitions `PENDING → CONFIRMED`, `PENDING → CANCELLED`, `CONFIRMED → CANCELLED`. `BookingHttpIT` verified real `POST /api/bookings` → `201`, and repeated POST → `409` with `BOOKING_ALREADY_EXISTS`, through MockMvc and Testcontainers, without mocks of application services.
+- **Still pending:** distributed Event-capacity coordination, Kafka integration, deterministic race-barrier test and full deployment.
 
 ### Documentation map
 
@@ -245,7 +249,11 @@ Flyway / JPA integration tests      ✅
         ↓
 Transactional decorator / rollback ✅
         ↓
-Concurrent duplicate protection    🚧 NEXT
+Concurrent duplicate protection    ✅
+        ↓
+HTTP + use-case integration tests    ✅
+        ↓
+Cross-service Event ↔ Booking       🚧 NEXT
 ```
 
 For the complete project plan, check [ROADMAP.md](docs/ROADMAP.md).
@@ -560,10 +568,10 @@ Current tested behaviour includes:
 -   Domain Event dispatch to the matching BookingCreated handler
 -   BookingCreated Domain Event → BookingCreatedIntegrationEvent mapping
 
-The independent Booking service additionally has JPA repository integration tests, PostgreSQL Testcontainers and tests of the transactional decorator (commit visibility, exception-triggered rollback and negative control without `@Transactional`). The Booking integration-test classes ending in `IT` should be run explicitly unless Maven Failsafe is configured. For example, from `booking-service/`:
+The independent Booking service additionally has JPA repository integration tests, partial-unique-index and exception-translation tests, a concurrent-start test, full HTTP integration tests, PostgreSQL Testcontainers and transactional-decorator tests (commit visibility, exception-triggered rollback and negative control without `@Transactional`). The Booking integration-test classes ending in `IT` should be run explicitly unless Maven Failsafe is configured. For example, from `booking-service/`:
 
 ```powershell
-.\mvnw.cmd test "-Dtest=JpaBookingRepositoryAdapterIT,TransactionalBookingUseCaseIT,TransactionalBookingRollbackIT"
+.\mvnw.cmd test "-Dtest=JpaBookingRepositoryAdapterIT,TransactionalBookingUseCaseIT,TransactionalBookingRollbackIT,ConcurrentBookingIT,BookingHttpIT"
 ```
 
 The original EventHub application build was verified with (execute from its project root):
