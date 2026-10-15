@@ -13,7 +13,7 @@ architectural patterns are introduced when they are needed, and the
 documentation is updated only after they have been studied and
 implemented.
 
-> **Architecture update — 15 October 2026:** EventHub is deliberately **evolving from a reactive monolith to a mixed-paradigm microservices learning project**. The Booking capability is being **extracted and redesigned** as an independent **imperative Spring MVC service**, rather than retained as a second active Booking implementation. Historical WebFlux/R2DBC Booking material remains in the documentation as evidence of earlier work, **not as a parallel current service**. This is a conscious portfolio/learning decision to practise both paradigms; it is **not presented as an optimal production architecture**. The independent Booking service now has JPA/PostgreSQL persistence, Flyway migrations, Testcontainers integration tests and a transactional use-case decorator; distributed integration remains pending.
+> **Architecture update — 15 October 2026:** EventHub is deliberately **evolving from a reactive monolith to a mixed-paradigm microservices learning project**. The Booking capability is being **extracted and redesigned** as an independent **imperative Spring MVC service**, rather than retained as a second active Booking implementation. Historical WebFlux/R2DBC Booking material remains in the documentation as evidence of earlier work, **not as a parallel current service**. This is a conscious portfolio/learning decision to practise both paradigms; it is **not presented as an optimal production architecture**. The independent Booking service now has JPA/PostgreSQL persistence, Flyway migrations, Testcontainers integration tests and a transactional use-case decorator; a first synchronous REST integration for Event availability is implemented and tested; distributed capacity reservation remains pending.
 
 ## Current components and ownership
 
@@ -60,6 +60,21 @@ GET  /api/bookings/{id}                  → 200 OK / 404 Not Found
 - Two-thread `ConcurrentBookingIT` with `ExecutorService`/`CountDownLatch` passed: one creation succeeded and the other was rejected. This is a concurrent-start test, not a deterministic forcing of both existence reads to false.
 - `TransactionalBookingUseCaseIT` verified persisted creation and the transitions `PENDING → CONFIRMED`, `PENDING → CANCELLED`, `CONFIRMED → CANCELLED`. `BookingHttpIT` verified real `POST /api/bookings` → `201`, and repeated POST → `409` with `BOOKING_ALREADY_EXISTS`, through MockMvc and Testcontainers, without mocks of application services.
 - **Still pending:** distributed Event-capacity coordination, Kafka integration, deterministic race-barrier test and full deployment.
+
+### Cross-service REST availability — 15 October 2026
+
+Booking Service (Spring MVC, port 8081) synchronously queries Event Service (WebFlux, port 8080) through application output port `EventAvailabilityPort` and infrastructure `RestEventAvailabilityAdapter` using Spring `RestClient`. The client requests `GET /events/{id}` and considers an event available only if `status == PUBLISHED` and `available > 0`. A reduced `EventResponse` DTO reads only the fields needed by Booking. The call validates availability but **does not reserve Event capacity**, so distributed overselling protection is still pending.
+
+`BookingService.createBooking` checks for an existing active booking first, then calls `EventAvailabilityPort`, and saves a new `PENDING` booking only if available. Errors are translated at infrastructure boundaries: a missing remote event becomes `EventNotFoundException` and HTTP `404 EVENT_NOT_FOUND`; an existing but unavailable event becomes `409 EVENT_NOT_AVAILABLE`; remote HTTP 5xx and connection/read failures become `EventServiceUnavailableException` and HTTP `503 EVENT_SERVICE_UNAVAILABLE`. Error bodies use generated RFC 9457 `ProblemDetail`. `RestClient` has a 2-second connection timeout and 3-second read timeout configured with `SimpleClientHttpRequestFactory`; expiration of those limits has **not** been independently verified with a timing test.
+
+Testing includes `RestEventAvailabilityAdapterTest` with `MockRestServiceServer` for published/full/draft/cancelled events, extra JSON properties, 404, 500 and simulated I/O failure; `BookingServiceTest` with mocked ports; `BookingHttpIT` with real Spring MVC/PostgreSQL and mocked Event availability for 201/409/404/503; `ConcurrentBookingIT` and transaction integration tests with the external port mocked. A manual cross-service GET has also been exercised. Maven Failsafe now runs `*IT` tests during `verify`:
+
+```powershell
+cd booking-service
+.\mvnw.cmd clean verify
+```
+
+Remaining: independently test actual timeout expiration; design retry/circuit breaker and connection-failure isolation; decide whether remote 429/other 4xx need explicit mappings; implement **atomic Event capacity reservation** and cross-service consistency/compensation. A reusable communication checklist is planned once those topics have been studied.
 
 ### Documentation map
 
@@ -253,7 +268,9 @@ Concurrent duplicate protection    ✅
         ↓
 HTTP + use-case integration tests    ✅
         ↓
-Cross-service Event ↔ Booking       🚧 NEXT
+Cross-service Event availability REST ✅
+        ↓
+Distributed capacity coordination    🚧 NEXT
 ```
 
 For the complete project plan, check [ROADMAP.md](docs/ROADMAP.md).
@@ -568,7 +585,7 @@ Current tested behaviour includes:
 -   Domain Event dispatch to the matching BookingCreated handler
 -   BookingCreated Domain Event → BookingCreatedIntegrationEvent mapping
 
-The independent Booking service additionally has JPA repository integration tests, partial-unique-index and exception-translation tests, a concurrent-start test, full HTTP integration tests, PostgreSQL Testcontainers and transactional-decorator tests (commit visibility, exception-triggered rollback and negative control without `@Transactional`). The Booking integration-test classes ending in `IT` should be run explicitly unless Maven Failsafe is configured. For example, from `booking-service/`:
+The independent Booking service additionally has JPA repository integration tests, partial-unique-index and exception-translation tests, a concurrent-start test, full HTTP integration tests, PostgreSQL Testcontainers and transactional-decorator tests (commit visibility, exception-triggered rollback and negative control without `@Transactional`). Maven Failsafe is configured to run the Booking integration-test classes ending in `IT` during `verify`. To run a specific subset of tests manually from `booking-service/`:
 
 ```powershell
 .\mvnw.cmd test "-Dtest=JpaBookingRepositoryAdapterIT,TransactionalBookingUseCaseIT,TransactionalBookingRollbackIT,ConcurrentBookingIT,BookingHttpIT"

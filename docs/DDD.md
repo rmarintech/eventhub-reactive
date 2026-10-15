@@ -2204,3 +2204,24 @@ The regular application-level `existsActiveBooking()` pre-check is retained for 
 `BookingHttpIT` uses `@SpringBootTest`, `@AutoConfigureMockMvc`, Testcontainers and the real application beans (no mocks). The end-to-end-in-process HTTP tests passed for initial `POST /api/bookings` → `201 Created` with `PENDING` persisted, and a repeated request → `409 Conflict` with `BOOKING_ALREADY_EXISTS`. The repeated request exercises the sequential duplicate path; the concurrent-start test exercises concurrent application calls rather than HTTP concurrency.
 
 **Next architectural learning track:** communication between the reactive Event module/service and the imperative Booking service. Remote Event-capacity coordination, failure handling, Kafka, outbox and distributed consistency are not yet implemented.
+
+
+# 56. Booking Service → Event Service: REST output adapter (October 2026)
+
+The new imperative Booking service defines `EventAvailabilityPort` in `application.port.out` with `boolean isAvailable(EventId eventId)`. Its infrastructure HTTP adapter, `RestEventAvailabilityAdapter`, implements the port using Spring `RestClient` and a deliberately small `EventResponse(UUID id, String status, int available)` projection. The Event service is still implemented with WebFlux/R2DBC, but Booking's call is synchronous; inter-service HTTP does not change either service's programming paradigm.
+
+```text
+BookingController (infrastructure, inbound)
+  → BookingUseCase → BookingService (application)
+    → BookingRepository (outbound port) → JPA adapter
+    → EventAvailabilityPort (outbound port) → RestEventAvailabilityAdapter
+        → RestClient → GET Event Service /events/{id}
+```
+
+Creation first checks `BookingRepository.existsActiveBooking(eventId, userId)` to reject duplicates without unnecessary remote calls. If there is no active duplicate it asks Event Service for availability, requiring `PUBLISHED` and `available > 0`, then persists `Booking` in `PENDING`. This is a **read-only availability check**, not a cross-service reservation; a race for the final capacity unit is still possible.
+
+The adapter translates transport-specific failures to application-specific exceptions: HTTP 404 → `EventNotFoundException` (preserving cause); HTTP 5xx and `ResourceAccessException` → `EventServiceUnavailableException` (preserving cause). `GlobalExceptionHandler` maps these to RFC 9457 HTTP responses `404 EVENT_NOT_FOUND` and `503 EVENT_SERVICE_UNAVAILABLE`, while valid but unavailable events produce `409 EVENT_NOT_AVAILABLE`. Technical causes stay available to internal diagnostics, not public API error bodies.
+
+Infrastructure `EventClientConfiguration` provides the `RestClient` with a configurable Event Service base URL, 2-second connection timeout and 3-second read timeout. `BookingConfiguration` wires the port into `BookingService`, retained behind `TransactionalBookingUseCase`; currently a blocking remote call occurs while the transactional decorator is active. That transaction does **not** extend into Event Service.
+
+Tests: `RestEventAvailabilityAdapterTest` uses `MockRestServiceServer` for business-state responses, JSON with extra fields, remote 404, remote 500 and simulated I/O exceptions. `BookingServiceTest` tests rule decisions with mocked ports. `BookingHttpIT`, `TransactionalBookingUseCaseIT` and `ConcurrentBookingIT` use a Spring `@MockitoBean` for the external port while retaining real Spring/JPA/PostgreSQL integration where appropriate. Maven Failsafe executes `*IT` during `mvn verify` / `mvnw.cmd verify`. A real manual Event Service GET was validated. Actual timeout expiry, retry/circuit breaker, service-to-service tracing, and atomic distributed capacity updates have not been implemented/tested.

@@ -1,7 +1,6 @@
 package com.rubenmarin.bookingservice.infrastructure.adapter.in;
 
-import com.rubenmarin.bookingservice.application.exception.BookingAlreadyExistsException;
-import com.rubenmarin.bookingservice.application.exception.BookingNotFoundException;
+import com.rubenmarin.bookingservice.application.exception.*;
 import com.rubenmarin.bookingservice.infrastructure.web.generated.model.ProblemDetail;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -64,6 +63,48 @@ public class GlobalExceptionHandler {
                 .body(problem);
     }
 
+    @ExceptionHandler(EventNotAvailableException.class)
+    public ResponseEntity<ProblemDetail> handleEventNotAvailableException(EventNotAvailableException ex) {
+
+
+        ProblemDetail problem = new ProblemDetail(
+                "about:blank",
+                "Event not available",
+                HttpStatus.CONFLICT.value()
+        );
+
+        problem.setDetail(ex.getMessage());
+        problem.setCode("EVENT_NOT_AVAILABLE");
+        problem.setTimestamp(OffsetDateTime.now());
+
+
+        return ResponseEntity
+                .status(HttpStatus.CONFLICT)
+                .contentType(MediaType.APPLICATION_PROBLEM_JSON)
+                .body(problem);
+    }
+
+    @ExceptionHandler(EventNotFoundException.class)
+    public ResponseEntity<ProblemDetail> handleEventNotFoundException(EventNotFoundException ex) {
+
+
+        ProblemDetail problem = new ProblemDetail(
+                "about:blank",
+                "Event not found",
+                HttpStatus.NOT_FOUND.value()
+        );
+
+        problem.setDetail(ex.getMessage());
+        problem.setCode("EVENT_NOT_FOUND");
+        problem.setTimestamp(OffsetDateTime.now());
+
+
+        return ResponseEntity
+                .status(HttpStatus.NOT_FOUND)
+                .contentType(MediaType.APPLICATION_PROBLEM_JSON)
+                .body(problem);
+    }
+
     @ExceptionHandler(BookingAlreadyExistsException.class)
     public ResponseEntity<ProblemDetail> handleBookingAlreadyExistsException(BookingAlreadyExistsException ex) {
 
@@ -84,4 +125,27 @@ public class GlobalExceptionHandler {
                 .contentType(MediaType.APPLICATION_PROBLEM_JSON)
                 .body(problem);
     }
+
+    @ExceptionHandler(EventServiceUnavailableException.class)
+    public ResponseEntity<ProblemDetail> handleEventServiceUnavailableException(EventServiceUnavailableException ex) {
+
+
+        ProblemDetail problem = new ProblemDetail(
+                "about:blank",
+                "Event Service not available",
+                HttpStatus.SERVICE_UNAVAILABLE.value()
+        );
+
+        problem.setDetail(ex.getMessage());
+        problem.setCode("EVENT_SERVICE_UNAVAILABLE");
+        problem.setTimestamp(OffsetDateTime.now());
+
+
+        return ResponseEntity
+                .status(HttpStatus.SERVICE_UNAVAILABLE)
+                .contentType(MediaType.APPLICATION_PROBLEM_JSON)
+                .body(problem);
+    }
+
+
 }

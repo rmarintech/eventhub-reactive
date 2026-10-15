@@ -484,10 +484,12 @@ architecture tests remain pending
 -   [ ] Verify full independent service deployment/extraction integration
 -   [ ] Independent persistence ownership
 -   [ ] Independent deployment
--   [ ] Reactive service-to-service communication
+-   [x] HTTP communication from imperative Booking to reactive Event (synchronous RestClient)
+-   [ ] Reactive/nonblocking service-to-service client (only if separately justified)
 -   [ ] Event-driven service communication
--   [ ] Failure isolation
--   [ ] Timeouts
+-   [x] Translate remote HTTP 5xx and connection failures to application exception/HTTP 503
+-   [ ] Full failure isolation (retry/circuit breaker/bulkhead)
+-   [x] Configure REST connection/read timeouts (2s/3s; expiry tests pending)
 -   [ ] Retries
 -   [ ] Circuit Breaker
 -   [ ] Distributed consistency
@@ -647,9 +649,27 @@ Cross-service integration / Kafka        ⬜ PLANNED
 - [x] `ConcurrentBookingIT`: exactly one successful and one rejected concurrent-start request
 - [x] `TransactionalBookingUseCaseIT`: committed create, confirm, cancel from pending and cancel after confirmation
 - [x] `BookingHttpIT`: real Spring MVC/MockMvc + PostgreSQL HTTP 201 and duplicate 409
+- [x] `EventAvailabilityPort` output port and `RestEventAvailabilityAdapter` with `RestClient`
+- [x] Spring HTTP client bean configured through `EventClientConfiguration`
+- [x] Check Event is `PUBLISHED` and has `available > 0` before creating Booking
+- [x] `EventNotAvailableException` → HTTP 409 `EVENT_NOT_AVAILABLE`
+- [x] Remote 404 → `EventNotFoundException` → HTTP 404 `EVENT_NOT_FOUND`
+- [x] Remote 5xx and connection/I/O failure → `EventServiceUnavailableException` → HTTP 503
+- [x] Configure client connection/read timeout 2s/3s
+- [x] `MockRestServiceServer` tests for event statuses, empty capacity, additional JSON fields, 404, 500 and I/O failure
+- [x] Unit and Spring HTTP integration tests with mocked Event availability; no external service required in CI
+- [x] Maven Failsafe integration-test execution: `booking-service/.\mvnw.cmd clean verify`
+- [x] Manual real Event Service GET smoke test
+- [ ] Automated test that explicitly triggers configured timeouts
+- [ ] Retry strategy, backoff and idempotency review
+- [ ] Circuit Breaker and appropriate recovery/failure isolation
+- [ ] Handle additional upstream statuses (such as 429 and unexpected 4xx) by explicit policy
+- [ ] Reusable cross-service communication checklist (`docs/MICROSERVICES-CHECKLIST.md`) after resilience topics
 - [ ] Optional deterministic concurrency test forcing both pre-checks to report no booking
-- [ ] Decide how the extracted Booking service coordinates Event availability/capacity (previous monolith logic does not transfer automatically)
-- [ ] Service-to-service Event availability and capacity coordination
+- [x] Implement synchronous Event availability validation (read-only)
+- [ ] Design atomic Event capacity reservation (read-only availability is insufficient)
+- [x] Service-to-service Event availability query via REST
+- [ ] Service-to-service Event capacity coordination and compensation
 - [ ] Cross-service consistency, failures and compensation strategy
 - [ ] Kafka-based integration events / reliable outbox (if selected)
 - [ ] Containerization, deployment and CI/CD for the independent service
@@ -658,4 +678,4 @@ Cross-service integration / Kafka        ⬜ PLANNED
 
 ## Next milestone
 
-Design and implement communication between the reactive Event side and imperative Booking service, beginning with clear ownership of Event availability/capacity and defining service-to-service contracts. Distributed consistency, failure recovery, Kafka and outbox remain pending.
+Continue with resilient REST communication: choose bounded retry/backoff rules, introduce Circuit Breaker only where justified and test the actual timeout behavior. Event capacity reservation, cross-service consistency/compensation, Kafka and outbox remain pending.

@@ -120,6 +120,11 @@
             <scope>test</scope>
         </dependency>
 
+        <!-- restclient -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-restclient</artifactId>
+        </dependency>
 
     </dependencies>
 
@@ -128,6 +133,27 @@
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
+            </plugin>
+
+            <!-- Failsafe	*IT.java	integration-test + verify -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-failsafe-plugin</artifactId>
+                <version>3.5.4</version>
+
+                <configuration>
+                    <!-- @tag("external") en com.rubenmarin.bookingservice.infrastructure.adapter.out.http.RestEventAvailabilityAdapterIT-->
+                    <excludedGroups>external</excludedGroups>
+                </configuration>
+
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>integration-test</goal>
+                            <goal>verify</goal>
+                        </goals>
+                    </execution>
+                </executions>
             </plugin>
 
             <plugin>

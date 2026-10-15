@@ -24,4 +24,9 @@ management:
         include: health,info
 
 
+clients:
+  event-service:
+    base-url: http://localhost:8080
+
+
 

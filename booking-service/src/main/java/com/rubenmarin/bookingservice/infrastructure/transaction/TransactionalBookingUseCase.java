@@ -1,4 +1,4 @@
-package com.rubenmarin.bookingservice.infrastructure.configuration;
+package com.rubenmarin.bookingservice.infrastructure.transaction;
 
 import com.rubenmarin.bookingservice.application.port.in.BookingUseCase;
 import com.rubenmarin.bookingservice.domain.model.Booking;
