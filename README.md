@@ -74,7 +74,19 @@ cd booking-service
 .\mvnw.cmd clean verify
 ```
 
-Remaining: independently test actual timeout expiration; design retry/circuit breaker and connection-failure isolation; decide whether remote 429/other 4xx need explicit mappings; implement **atomic Event capacity reservation** and cross-service consistency/compensation. A reusable communication checklist is planned once those topics have been studied.
+Remaining: independently test actual timeout expiration; refine bounded Retry policy and add Circuit Breaker / failure isolation; decide whether remote 429/other 4xx need explicit mappings; implement **atomic Event capacity reservation** and cross-service consistency/compensation. A reusable communication checklist is planned once those topics have been studied.
+
+### Bounded Retry for Event availability — 15 October 2026
+
+Booking Service now wraps `RestEventAvailabilityAdapter` with `RetryableEventAvailabilityAdapter` (both implement the application output port `EventAvailabilityPort`). `EventClientConfiguration` builds and injects the wrapper, using the core **Resilience4j Retry** API without `@Retry` or Spring AOP. The application service remains unaware of Retry/HTTP.
+
+- **3 total attempts** (first request plus 2 retries), with **500 ms between attempts**.
+- Retry **only** `EventServiceUnavailableException` (currently raised for remote HTTP 5xx and transport failures).
+- Never retry normal `true`/`false` availability results or `EventNotFoundException` (remote HTTP 404).
+- After the final failure, propagate `EventServiceUnavailableException`, which the inbound exception handler maps to **503**.
+- `RetryableEventAvailabilityAdapterTest` exercises five unit scenarios with mocked delegate and zero test delay: immediate `true`, immediate `false`, two failures then recovery, three failures, and 404 without retry. `EventClientConfigurationTest` verifies the existence of configured beans; ensure the injected port is the decorator when verifying wiring.
+
+**Boundaries/limitations:** retries are currently synchronous and can increase request latency; timeouts apply to each HTTP attempt, but no overall request deadline is implemented or timing-tested. Broad retry on all mapped HTTP 5xx may be refined later (e.g. 500 vs 503). Circuit Breaker, backoff/jitter tuning, observability, and atomic distributed capacity coordination are still pending.
 
 ### Documentation map
 

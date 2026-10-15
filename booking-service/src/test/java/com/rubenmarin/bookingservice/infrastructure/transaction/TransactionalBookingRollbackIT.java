@@ -1,10 +1,9 @@
-package com.rubenmarin.bookingservice.infrastructure.configuration;
+package com.rubenmarin.bookingservice.infrastructure.transaction;
 
 
 import com.rubenmarin.bookingservice.application.port.in.BookingUseCase;
 import com.rubenmarin.bookingservice.application.port.out.BookingRepository;
 import com.rubenmarin.bookingservice.domain.model.*;
-import com.rubenmarin.bookingservice.infrastructure.transaction.TransactionalBookingUseCase;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;

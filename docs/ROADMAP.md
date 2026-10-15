@@ -488,9 +488,10 @@ architecture tests remain pending
 -   [ ] Reactive/nonblocking service-to-service client (only if separately justified)
 -   [ ] Event-driven service communication
 -   [x] Translate remote HTTP 5xx and connection failures to application exception/HTTP 503
--   [ ] Full failure isolation (retry/circuit breaker/bulkhead)
+-   [ ] Full failure isolation (Circuit Breaker / bulkhead / retry policy refinements)
 -   [x] Configure REST connection/read timeouts (2s/3s; expiry tests pending)
--   [ ] Retries
+-   [x] Resilience4j bounded Retry via EventAvailabilityPort decorator (3 attempts, 500 ms)
+-   [x] Retry unit tests (success, failure, no retry for 404/false)
 -   [ ] Circuit Breaker
 -   [ ] Distributed consistency
 -   [x] Document Booking Service status and architecture
@@ -661,7 +662,9 @@ Cross-service integration / Kafka        ⬜ PLANNED
 - [x] Maven Failsafe integration-test execution: `booking-service/.\mvnw.cmd clean verify`
 - [x] Manual real Event Service GET smoke test
 - [ ] Automated test that explicitly triggers configured timeouts
-- [ ] Retry strategy, backoff and idempotency review
+- [x] Implement bounded Retry for Event availability (`EventServiceUnavailableException`, 3 total attempts)
+- [x] Unit tests for retry/no-retry behavior
+- [ ] Refine failure-classification, backoff/jitter, overall timeout budget and idempotency review
 - [ ] Circuit Breaker and appropriate recovery/failure isolation
 - [ ] Handle additional upstream statuses (such as 429 and unexpected 4xx) by explicit policy
 - [ ] Reusable cross-service communication checklist (`docs/MICROSERVICES-CHECKLIST.md`) after resilience topics
@@ -678,4 +681,4 @@ Cross-service integration / Kafka        ⬜ PLANNED
 
 ## Next milestone
 
-Continue with resilient REST communication: choose bounded retry/backoff rules, introduce Circuit Breaker only where justified and test the actual timeout behavior. Event capacity reservation, cross-service consistency/compensation, Kafka and outbox remain pending.
+Continue with resilient REST communication: bounded Resilience4j Retry and five unit tests are implemented. Introduce Circuit Breaker, refine retry/backoff and verify actual timeout behavior. Event capacity reservation, cross-service consistency/compensation, Kafka and outbox remain pending.

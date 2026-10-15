@@ -2224,4 +2224,32 @@ The adapter translates transport-specific failures to application-specific excep
 
 Infrastructure `EventClientConfiguration` provides the `RestClient` with a configurable Event Service base URL, 2-second connection timeout and 3-second read timeout. `BookingConfiguration` wires the port into `BookingService`, retained behind `TransactionalBookingUseCase`; currently a blocking remote call occurs while the transactional decorator is active. That transaction does **not** extend into Event Service.
 
-Tests: `RestEventAvailabilityAdapterTest` uses `MockRestServiceServer` for business-state responses, JSON with extra fields, remote 404, remote 500 and simulated I/O exceptions. `BookingServiceTest` tests rule decisions with mocked ports. `BookingHttpIT`, `TransactionalBookingUseCaseIT` and `ConcurrentBookingIT` use a Spring `@MockitoBean` for the external port while retaining real Spring/JPA/PostgreSQL integration where appropriate. Maven Failsafe executes `*IT` during `mvn verify` / `mvnw.cmd verify`. A real manual Event Service GET was validated. Actual timeout expiry, retry/circuit breaker, service-to-service tracing, and atomic distributed capacity updates have not been implemented/tested.
+Tests: `RestEventAvailabilityAdapterTest` uses `MockRestServiceServer` for business-state responses, JSON with extra fields, remote 404, remote 500 and simulated I/O exceptions. `BookingServiceTest` tests rule decisions with mocked ports. `BookingHttpIT`, `TransactionalBookingUseCaseIT` and `ConcurrentBookingIT` use a Spring `@MockitoBean` for the external port while retaining real Spring/JPA/PostgreSQL integration where appropriate. Maven Failsafe executes `*IT` during `mvn verify` / `mvnw.cmd verify`. A real manual Event Service GET was validated. Actual timeout expiry, Circuit Breaker, service-to-service tracing, and atomic distributed capacity updates have not been implemented/tested. Retry is documented in §57.
+
+# 57. Booking Service: Resilience4j Retry decorator (15 October 2026)
+
+Retry is implemented as a **separate infrastructure decorator** around the Event availability output port, not inside the application service or the HTTP adapter. This keeps policy independent of the HTTP transport and preserves the inward dependency direction.
+
+```text
+BookingService → EventAvailabilityPort
+                    ↑
+            RetryableEventAvailabilityAdapter
+                    ↓ delegates
+            RestEventAvailabilityAdapter
+                    ↓
+             RestClient → Event Service
+```
+
+`EventClientConfiguration` creates the `Retry` and wires the decorated port. The core Resilience4j `resilience4j-retry` API is used directly (`Retry.decorateSupplier`), without Spring AOP annotations. The configuration uses `maxAttempts(3)` (**initial attempt + two retries**), `waitDuration(500 ms)`, and `retryExceptions(EventServiceUnavailableException.class)`.
+
+The retry policy treats these outcomes differently:
+
+| Delegate outcome | Attempts | Final result |
+| --- | --- | --- |
+| `true` / `false` | 1 | Return boolean unchanged |
+| `EventNotFoundException` (HTTP 404) | 1 | Propagate application exception |
+| Transient `EventServiceUnavailableException`, then success | Up to 3 | Return success result |
+| Three consecutive `EventServiceUnavailableException` | 3 | Propagate last failure (HTTP 503 at inbound boundary) |
+
+`RetryableEventAvailabilityAdapterTest` covers five scenarios with Mockito and `Duration.ZERO` to avoid sleeping. These are **decorator unit tests**, not live-network tests. Client connect/read timeouts remain 2s/3s **per attempt**; total call latency may accumulate across attempts and waits. The timeout expiry and overall budget have not been tested. A finer-grained policy for HTTP 5xx, backoff/jitter, Circuit Breaker and distributed Event capacity reservation remain pending.
+
