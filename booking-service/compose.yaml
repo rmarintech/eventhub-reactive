@@ -1,0 +1,17 @@
+services:
+
+  booking-db:
+    image: postgres:17
+
+    environment:
+      POSTGRES_DB: bookingdb
+      POSTGRES_USER: booking_user
+      POSTGRES_PASSWORD: booking_dev
+
+    ports:
+      - "127.0.0.1:5433:5432"
+    volumes:
+      - booking_postgres_data:/var/lib/postgresql/data
+
+volumes:
+  booking_postgres_data:

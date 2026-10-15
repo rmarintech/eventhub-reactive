@@ -24,6 +24,21 @@ public class Booking {
         );
     }
 
+    //Recuperar una reserva persistida
+    public static Booking rehydrate(
+            BookingId bookingId,
+            EventId eventId,
+            UserId userId,
+            BookingStatus status
+    ) {
+        return new Booking(
+                bookingId,
+                eventId,
+                userId,
+                status
+        );
+    }
+
     private Booking(
             BookingId bookingId,
             EventId eventId,

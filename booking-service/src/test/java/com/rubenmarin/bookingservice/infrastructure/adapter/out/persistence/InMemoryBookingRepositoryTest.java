@@ -1,4 +1,4 @@
-package com.rubenmarin.bookingservice.infrastructure.persistence;
+package com.rubenmarin.bookingservice.infrastructure.adapter.out.persistence;
 
 import com.rubenmarin.bookingservice.domain.model.*;
 import com.rubenmarin.bookingservice.infrastructure.adapter.out.persistence.InMemoryBookingRepository;

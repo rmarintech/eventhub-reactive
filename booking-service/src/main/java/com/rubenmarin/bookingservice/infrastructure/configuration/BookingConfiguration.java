@@ -10,14 +10,31 @@ import org.springframework.context.annotation.Configuration;
 @Configuration
 public class BookingConfiguration {
 
-    @Bean
-    public BookingRepository bookingRepository() {
-        return new InMemoryBookingRepository();
-    }
+    // Implementación inicial en memoria.
+    // Ya no la registramos como bean porque ahora utilizamos
+    // JpaBookingRepositoryAdapter para persistir en PostgreSQL.
+    // Se conserva como referencia de la evolución del proyecto.
+//    @Bean
+//    public BookingRepository bookingRepository() {
+//        return new InMemoryBookingRepository();
+//    }
 
+    // Antes registrábamos directamente BookingService como BookingUseCase.
+    // Para mantener la capa de aplicación independiente de Spring,
+    // ahora envolvemos el servicio en un decorador transaccional.
+//    @Bean
+//    public BookingUseCase bookingUseCase(BookingRepository repository) {
+//        return new BookingService(repository);
+//    }
+
+
+    // Registramos un único bean BookingUseCase: el decorador.
+    // Spring aplica @Transactional al decorador mediante un proxy AOP.
+    // BookingService mantiene la lógica de aplicación sin depender de Spring.
     @Bean
     public BookingUseCase bookingUseCase(BookingRepository repository) {
-        return new BookingService(repository);
+        BookingUseCase service = new BookingService(repository);
+        return new TransactionalBookingUseCase(service);
     }
 
 }
