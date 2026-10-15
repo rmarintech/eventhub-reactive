@@ -13,7 +13,7 @@ architectural patterns are introduced when they are needed, and the
 documentation is updated only after they have been studied and
 implemented.
 
-> **Architecture update — 14 October 2026:** EventHub is deliberately **evolving from a reactive monolith to a mixed-paradigm microservices learning project**. The Booking capability is being **extracted and redesigned** as an independent **imperative Spring MVC service**, rather than retained as a second active Booking implementation. Historical WebFlux/R2DBC Booking material remains in the documentation as evidence of earlier work, **not as a parallel current service**. This is a conscious portfolio/learning decision to practise both paradigms; it is **not presented as an optimal production architecture**. The new service has no JPA/PostgreSQL or distributed integration yet.
+> **Architecture update — 15 October 2026:** EventHub is deliberately **evolving from a reactive monolith to a mixed-paradigm microservices learning project**. The Booking capability is being **extracted and redesigned** as an independent **imperative Spring MVC service**, rather than retained as a second active Booking implementation. Historical WebFlux/R2DBC Booking material remains in the documentation as evidence of earlier work, **not as a parallel current service**. This is a conscious portfolio/learning decision to practise both paradigms; it is **not presented as an optimal production architecture**. The independent Booking service now has JPA/PostgreSQL persistence, Flyway migrations, Testcontainers integration tests and a transactional use-case decorator; distributed integration remains pending.
 
 ## Current components and ownership
 
@@ -21,13 +21,13 @@ implemented.
 | --- | --- | --- | --- |
 | Event module (original EventHub application) | WebFlux / Reactor | PostgreSQL via R2DBC | Event API, event capacity, reactive transactions and optimistic locking |
 | Booking module (historical, being replaced by extraction) | WebFlux / Reactor | PostgreSQL via R2DBC (historical) | `CustomerId` + places, `POST /bookings`, Event-capacity orchestration, reactive domain events |
-| **`booking-service` (target replacement, in progress)** | **Spring MVC / imperative** | **In-memory only** | `UserId`, PENDING/CONFIRMED/CANCELLED, API-first endpoints, 200/201/400/404/409 MVC tests, duplicate-active rule |
+| **`booking-service` (replacement under development)** | **Spring MVC / imperative** | **Spring Data JPA / PostgreSQL 17; Flyway** | `UserId`, PENDING/CONFIRMED/CANCELLED, API-first endpoints, MVC tests, JPA integration tests with Testcontainers, transactional decorator and verified rollback |
 
 The extracted service's build/deployment integration with the original application has **not been verified from the four documentation files alone**. Separate repository/module boundaries and exact startup commands should be confirmed in source before presenting them as runnable.
 
 ### Architecture decision — deliberate mixed reactive/imperative portfolio
 
-**Motivation:** develop both non-blocking/reactive and synchronous/imperative backend expertise within one coherent EventHub portfolio. The Event side remains the reactive learning track (WebFlux, Reactor, R2DBC); Booking is moving out of the original reactive monolith into its own **Spring MVC** application, with **JPA/PostgreSQL planned but not implemented**.
+**Motivation:** develop both non-blocking/reactive and synchronous/imperative backend expertise within one coherent EventHub portfolio. The Event side remains the reactive learning track (WebFlux, Reactor, R2DBC); Booking is moving out of the original reactive monolith into its own **Spring MVC** application, with **JPA/PostgreSQL implemented and integration-tested**.
 
 **Migration interpretation:** this is an **evolution/replacement of the Booking capability**, not a deliberate long-term duplication of active Booking services. The old reactive Booking implementation, coordination, concurrency and event-flow examples are retained **as historical learning milestones**. No production migration, deletion of old source, successful end-to-end inter-service integration, or independent deployment is asserted without repository verification.
 
@@ -42,9 +42,20 @@ POST /api/bookings (active duplicate)    → 409 Conflict
 GET  /api/bookings/{id}                  → 200 OK / 404 Not Found
 ```
 
-`BookingController` implements OpenAPI-generated `BookingApi`, converts the request's IDs into domain Value Objects, calls `BookingUseCase` and maps `Booking` to a generated `BookingResponse`. Errors use the generated RFC 9457 `ProblemDetail` and `application/problem+json`. `BookingService` uses the `BookingRepository` port and an `InMemoryBookingRepository` adapter; active duplicates are rejected by checking matching `(eventId, userId)` where status is not `CANCELLED`.
+`BookingController` implements OpenAPI-generated `BookingApi`, converts the request's IDs into domain Value Objects, calls `BookingUseCase` and maps `Booking` to a generated `BookingResponse`. Errors use the generated RFC 9457 `ProblemDetail` and `application/problem+json`. `BookingService` uses the `BookingRepository` port backed by `JpaBookingRepositoryAdapter` (the in-memory adapter remains as a historical/test implementation); active duplicates are rejected by checking matching `(eventId, userId)` where status is not `CANCELLED`.
 
-**Current limitation:** the `existsActiveBooking()` then `save()` sequence is not atomic; concurrency-safe database uniqueness, JPA/PostgreSQL and cross-service workflows are future milestones, not completed work.
+**Current limitation:** the `existsActiveBooking()` then `save()` check is not sufficient to guarantee uniqueness under concurrent requests, even when the application operation is transactional. A database-level partial unique index, concurrency tests and cross-service workflows are still pending.
+
+### Booking persistence and transaction milestone — 15 October 2026
+
+- Independent `booking-service/` application: Spring MVC / imperative HTTP adapter, Spring Data JPA / Hibernate, and PostgreSQL 17.
+- Flyway migration `V1__create_bookings_table.sql` creates `bookings(booking_id, event_id, user_id, status)`; schema managed by migrations, not Hibernate auto-DDL.
+- `BookingJpaEntity` maps persisted UUIDs and status to and from the immutable `Booking` domain model using `Booking.rehydrate(...)`. `JpaBookingRepositoryAdapter` implements the existing `BookingRepository` output port.
+- JPA integration tests verified insert/read, active-booking lookup, exclusion of cancelled bookings, and update `PENDING → CONFIRMED` using `flush()`/`clear()`.
+- PostgreSQL Testcontainers with `@ServiceConnection` runs integration tests on an isolated database; Flyway initializes its schema.
+- The Spring-managed `TransactionalBookingUseCase` decorator implements `BookingUseCase` and declares `@Transactional` boundaries without adding Spring dependencies to `BookingService`. `BookingConfiguration` wraps the plain-Java service in this decorator.
+- Integration tests **without test-level `@Transactional`** verified booking persistence and rollback after a deliberately failing delegate. A negative control removing the decorator's `@Transactional` caused the expected failure (the previously saved booking remained in PostgreSQL).
+- **Still pending:** concurrency-safe uniqueness, a PostgreSQL partial unique index for active bookings, corresponding error translation, distributed Event-capacity coordination and Kafka integration.
 
 ### Documentation map
 
@@ -129,6 +140,8 @@ Currently introduced:
 -   PostgreSQL 17
 -   Spring Data R2DBC
 -   PostgreSQL R2DBC driver
+-   Spring Data JPA / Hibernate (independent Booking service)
+-   Flyway schema migrations (independent Booking service)
 -   ReactiveCrudRepository
 -   Domain ↔ persistence mapping
 -   SQL schema initialization
@@ -139,6 +152,7 @@ Currently introduced:
 Currently introduced:
 
 -   Docker Compose for local PostgreSQL
+-   Testcontainers + PostgreSQL 17 (`booking-service` integration tests)
 
 Planned:
 
@@ -223,7 +237,15 @@ Domain Events                       ✅
         ↓
 Domain Events vs Integration Events ✅
         ↓
-Kafka fundamentals                  🚧 NEXT
+Kafka fundamentals                  ⏸ DEFERRED (original reactive roadmap)
+        ↓
+Booking Service JPA / PostgreSQL    ✅
+        ↓
+Flyway / JPA integration tests      ✅
+        ↓
+Transactional decorator / rollback ✅
+        ↓
+Concurrent duplicate protection    🚧 NEXT
 ```
 
 For the complete project plan, check [ROADMAP.md](docs/ROADMAP.md).
@@ -388,7 +410,7 @@ Events are persisted as `DRAFT`, and publication updates the same row to
 `PUBLISHED`.
 
 Reactive transaction management is now implemented for Booking creation.
-Database migrations and PostgreSQL Testcontainers are still pending.
+For the **original reactive Event module**, migrations and Testcontainers remain pending; these are implemented separately for the **imperative `booking-service`**.
 
 ------------------------------------------------------------------------
 
@@ -537,6 +559,12 @@ Current tested behaviour includes:
     publication
 -   Domain Event dispatch to the matching BookingCreated handler
 -   BookingCreated Domain Event → BookingCreatedIntegrationEvent mapping
+
+The independent Booking service additionally has JPA repository integration tests, PostgreSQL Testcontainers and tests of the transactional decorator (commit visibility, exception-triggered rollback and negative control without `@Transactional`). The Booking integration-test classes ending in `IT` should be run explicitly unless Maven Failsafe is configured. For example, from `booking-service/`:
+
+```powershell
+.\mvnw.cmd test "-Dtest=JpaBookingRepositoryAdapterIT,TransactionalBookingUseCaseIT,TransactionalBookingRollbackIT"
+```
 
 The original EventHub application build was verified with (execute from its project root):
 

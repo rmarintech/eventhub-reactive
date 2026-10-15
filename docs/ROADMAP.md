@@ -577,9 +577,15 @@ Domain vs Integration Events         ✅
         ↓
 Kafka fundamentals                   🚧 NEXT
         ↓
-Booking Service (Spring MVC / in-memory)  ✅ core API
+Booking Service (Spring MVC / API)       ✅
         ↓
-Booking Service JPA / PostgreSQL         ⬜ NEXT
+Booking Service JPA / PostgreSQL         ✅
+        ↓
+Flyway / PostgreSQL Testcontainers       ✅
+        ↓
+Transaction decorator / rollback tests  ✅
+        ↓
+Active-booking DB uniqueness            🚧 NEXT
         ↓
 Cross-service integration / Kafka        ⬜ PLANNED
 ```
@@ -617,23 +623,28 @@ Cross-service integration / Kafka        ⬜ PLANNED
 
 ## Next / not yet implemented in the new service
 
-- [ ] Finish and run the expanded pending/confirmed/cancelled repository test set (not independently confirmed here)
-- [ ] Finish `BookingService` success and transition tests
-- [ ] Verify the `BookingController` is wired to the concrete service in a full application context
+- [x] Run pending/confirmed/cancelled repository tests (reported green)
+- [x] Run `BookingService` success and transition tests (reported green)
+- [x] Verify Spring wiring and persistence through the `BookingUseCase` in a full integration-test context
 - [ ] Define and test POST/GET error cases beyond the existing MVC scenarios
-- [ ] Spring Data JPA and PostgreSQL persistence adapter
-- [ ] DB schema management and migration tooling
+- [x] Spring Data JPA and PostgreSQL persistence adapter (`JpaBookingRepositoryAdapter`)
+- [x] Domain-to-JPA mapping and `Booking.rehydrate(...)` round-trip test
+- [x] DB schema management with Flyway `V1__create_bookings_table.sql`
 - [ ] Database-level duplicate protection and concurrent-request tests
-- [ ] Define cancellation-sensitive uniqueness constraint (if cancelled rebooking is allowed)
-- [ ] Testcontainers database integration tests
+- [ ] Implement and verify PostgreSQL partial unique index allowing rebooking after `CANCELLED`
+- [x] PostgreSQL 17 Testcontainers database integration tests (`@ServiceConnection`)
+- [x] JPA integration tests: insert, fetch, active-status checks and state update
+- [x] Infrastructure transaction decorator (`TransactionalBookingUseCase`)
+- [x] Commit-visibility test with no test-level `@Transactional`
+- [x] Rollback test with a failing use-case delegate and negative control removing `@Transactional`
 - [ ] Decide how the extracted Booking service coordinates Event availability/capacity (previous monolith logic does not transfer automatically)
 - [ ] Service-to-service Event availability and capacity coordination
 - [ ] Cross-service consistency, failures and compensation strategy
 - [ ] Kafka-based integration events / reliable outbox (if selected)
 - [ ] Containerization, deployment and CI/CD for the independent service
 
-**Concurrency caveat:** `existsActiveBooking()` followed by `save()` is not atomic. The in-memory adapter and application check establish functional intent, **not** concurrent uniqueness across requests or replicas. `@Version` by itself does not prevent duplicate inserts with distinct Booking IDs.
+**Concurrency caveat:** the `existsActiveBooking()` then `save()` sequence remains vulnerable to concurrent duplicate inserts even inside a `@Transactional` use case. JPA persistence and transactional rollback are complete, **not** database-enforced active uniqueness. `@Version` by itself does not prevent duplicate inserts with distinct Booking IDs.
 
 ## Next milestone
 
-Complete remaining `BookingService` and in-memory repository tests; then introduce the JPA/PostgreSQL adapter without changing the domain or application ports.
+Add database-enforced active-booking uniqueness via Flyway (partial unique index excluding `CANCELLED`), test concurrent creates against PostgreSQL, and map uniqueness violations to a 409 response. Cross-service Event coordination remains a later milestone.

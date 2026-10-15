@@ -210,7 +210,7 @@ R2DBC → non-blocking → stays in reactive flow
 JDBC  → blocking     → isolate if used from WebFlux
 ```
 
-R2DBC is implemented for both Event and the **original reactive Booking module** in EventHub. The **new independent `booking-service`** is imperative (Spring MVC, currently in-memory), and does not yet use JPA/PostgreSQL.
+R2DBC is implemented for both Event and the **original reactive Booking module** in EventHub. The **new independent `booking-service`** is imperative (Spring MVC) and now uses JPA/PostgreSQL. It does **not** use Reactor/WebFlux/R2DBC.
 
 ## 14. Spring WebFlux fundamentals
 
@@ -730,7 +730,7 @@ introduced.
 
 ## Deferred roadmap work
 
-Database migrations, PostgreSQL Testcontainers, further architecture/API tests and other unfinished roadmap items remain deferred. This document does not mark them complete.
+For the **original reactive EventHub modules**, database migrations, PostgreSQL Testcontainers, further architecture/API tests and other unfinished roadmap items remain deferred. This does not negate the **separately completed** Flyway/Testcontainers milestone in the imperative Booking service.
 
 
 ---
@@ -739,8 +739,8 @@ Database migrations, PostgreSQL Testcontainers, further architecture/API tests a
 
 The sections above describe the **original reactive EventHub modules**, including their `Mono<Booking>` flow, `POST /bookings`, reactive event-capacity coordination, R2DBC persistence and WebTestClient/StepVerifier tests. This material is kept as a record of what was built and learned in that implementation.
 
-Booking is **being extracted/redesigned from that monolith into a replacement `booking-service`**, implemented separately using **Spring MVC, synchronous `BookingUseCase` methods returning `Booking`, OpenAPI-generated `BookingApi`, `ResponseEntity<BookingResponse>`, `MockMvc` and `InMemoryBookingRepository`**. Its actual REST path is `/api/bookings` and it uses `UserId`, not the original module's `CustomerId`.
+Booking is **being extracted/redesigned from that monolith into a replacement `booking-service`**, implemented separately using **Spring MVC, synchronous `BookingUseCase` methods returning `Booking`, OpenAPI-generated `BookingApi`, `ResponseEntity<BookingResponse>`, `MockMvc` and JPA/PostgreSQL persistence**. The in-memory repository remains a previous learning/test adapter. Its actual REST path is `/api/bookings` and it uses `UserId`, not the original module's `CustomerId`.
 
-There is **no Reactor/WebFlux/R2DBC flow in the new service at this stage**. Do not interpret statements such as “Booking R2DBC persistence implemented” earlier in this document as progress on its new JPA adapter. See `DDD.md` §55 and `ROADMAP.md` §26.
+There is **no Reactor/WebFlux/R2DBC flow in the new service**. Its separate JPA adapter, Flyway migration, PostgreSQL Testcontainers and transaction decorator have now been implemented and tested. Do not interpret statements such as “Booking R2DBC persistence implemented” earlier in this document as describing the new service. See `DDD.md` §55 and `ROADMAP.md` §26.
 
 The portfolio deliberately combines **reactive Event development with imperative Booking development** to learn and demonstrate both technologies, even though introducing heterogeneous stacks would not necessarily be an optimal production decision. The old reactive Booking examples are historical study material, **not a second intended live Booking service**. Both approaches can retain DDD/hexagonal boundaries. Kafka remains unimplemented for the new service, and no cross-service reactive communication has been demonstrated yet.

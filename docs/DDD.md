@@ -2041,7 +2041,7 @@ is documented yet.
 
 # 55. Independent Booking Service — DDD and Hexagonal Architecture (October 2026)
 
-> **Evolution through extraction and redesign.** Sections 37–54 document Booking **when it belonged to the original reactive monolith** (`CustomerId`, `places`, `CONFIRMED` on creation, Event-capacity orchestration, R2DBC and events). The new imperative `booking-service` is the **intended successor**, not a second permanent implementation. It intentionally uses **Spring MVC**, `UserId`, `PENDING` and an in-memory repository while its design is developed. Historical and current domain contracts are different and must not be conflated. This architecture is selected to learn both paradigms, not claimed as an ideal production decomposition.
+> **Evolution through extraction and redesign.** Sections 37–54 document Booking **when it belonged to the original reactive monolith** (`CustomerId`, `places`, `CONFIRMED` on creation, Event-capacity orchestration, R2DBC and events). The new imperative `booking-service` is the **intended successor**, not a second permanent implementation. It intentionally uses **Spring MVC**, `UserId`, `PENDING` and **JPA/PostgreSQL persistence**. The former in-memory repository remains useful for learning and unit tests, but is no longer wired as the production repository. Historical and current domain contracts are different and must not be conflated. This architecture is selected to learn both paradigms, not claimed as an ideal production decomposition.
 
 ## 55.1 New Booking aggregate and identifiers
 
@@ -2074,25 +2074,29 @@ public Booking createBooking(EventId eventId, UserId userId) {
 
 `BookingAlreadyExistsException` is in `application.exception`: it reports a rejected use case without depending on Spring HTTP. `BookingNotFoundException` is also an application exception. Both are mapped by infrastructure, not embedded in the domain.
 
-**Concurrency limitation:** This read-before-save check is vulnerable to a check-then-act race. Neither an in-memory map nor `synchronized` across independent JVMs guarantees distributed uniqueness; a future PostgreSQL implementation will require an atomic database strategy, potentially a partial unique index for active statuses, plus careful exception translation. Optimistic locking on an existing versioned row addresses a different concurrent-update problem, not arbitrary duplicate inserts.
+**Concurrency limitation:** This read-before-save check is vulnerable to a check-then-act race. Neither an in-memory map nor `synchronized` across independent JVMs guarantees distributed uniqueness; PostgreSQL requires an atomic database strategy, potentially a partial unique index for active statuses, plus careful exception translation. Optimistic locking on an existing versioned row addresses a different concurrent-update problem, not arbitrary duplicate inserts.
 
 ## 55.3 Ports and adapters (current implementation)
 
 ```text
 HTTP / OpenAPI DTOs
         ↓
-BookingController implements generated BookingApi   [infrastructure, inbound]
+BookingController implements generated BookingApi  [infrastructure, inbound]
         ↓
-BookingUseCase                                  [application, input port]
+BookingUseCase (Spring proxy)                    [application input port]
         ↓
-BookingService                                  [application, use-case logic]
+TransactionalBookingUseCase                     [infrastructure decorator]
         ↓
-BookingRepository                               [application, output port]
+BookingService                                  [application, pure Java]
         ↓
-InMemoryBookingRepository                       [infrastructure, outbound]
+BookingRepository                               [application output port]
+        ↓
+JpaBookingRepositoryAdapter                     [infrastructure, outbound]
+        ↓
+SpringDataBookingRepository / Hibernate / PostgreSQL
 ```
 
-The input port has `getBooking`, `createBooking`, `confirmBooking`, `cancelBooking`. The output port provides `findById`, `save` and `existsActiveBooking`. `BookingService` takes a `BookingRepository` in its constructor. The controller delegates via `BookingUseCase`; `BookingMapper` converts the returned domain entity into the generated response DTO. Dependency direction stays toward domain/application; Spring and HTTP are confined to adapters.
+The input port has `getBooking`, `createBooking`, `confirmBooking`, `cancelBooking`. The output port provides `findById`, `save` and `existsActiveBooking`. `BookingService` takes a `BookingRepository` in its constructor. `BookingConfiguration` registers one `BookingUseCase` bean: a `TransactionalBookingUseCase` wrapping the plain-Java service. The production repository is the JPA adapter; the previous in-memory bean registration was removed. The controller delegates via `BookingUseCase`; `BookingMapper` converts the returned domain entity into the generated response DTO. Dependency direction stays toward domain/application; Spring and HTTP are confined to adapters.
 
 Actual package paths discussed for the new service include:
 
@@ -2107,7 +2111,9 @@ com.rubenmarin.bookingservice
     ├── adapter.in (BookingController)
     ├── adapter.in.mapper (BookingMapper)
     ├── adapter.in.exception (GlobalExceptionHandler)
-    ├── adapter.out.persistence (InMemoryBookingRepository)
+    ├── adapter.out.persistence (InMemoryBookingRepository, not wired in production)
+    ├── adapter.out.persistence.jpa (BookingJpaEntity, SpringDataBookingRepository, JpaBookingRepositoryAdapter)
+    ├── configuration (BookingConfiguration, TransactionalBookingUseCase)
     └── web.generated.api / web.generated.model
 ```
 
@@ -2124,10 +2130,50 @@ The new service's OpenAPI-generated `BookingApi`, `CreateBookingRequest`, `Booki
 
 - `@WebMvcTest(BookingController.class)` + `MockMvc` + `@MockitoBean` isolate the HTTP controller, request deserialization, mapper and advice from the real service/persistence. Tested response families: 200, 201, 400, 404 and 409.
 - Mockito unit test of `BookingService` checks active duplicate rejection and `save()` never invoked.
-- Real `InMemoryBookingRepository` tests run with pure JUnit and `@BeforeEach`, covering save/find, missing ID, replacing state and matching/nonmatching booking checks. Extra active/cancelled cases were supplied as exercises; distinguish code supplied from verified runs.
+- Real `InMemoryBookingRepository` tests run with pure JUnit and `@BeforeEach`, covering save/find, missing ID, replacing state and matching/nonmatching booking checks. Active and cancelled cases were subsequently reported green.
 
 ## 55.6 Decision record — why imperative Spring MVC?
 
-The new `booking-service` deliberately uses synchronous Spring MVC and plans JPA, to practice transactional persistence, concurrency and a classic Java stack alongside the **separate** EventHub WebFlux/R2DBC implementation. Reactive programming is not an intrinsic DDD or hexagonal requirement. It is a technology choice at the port/adapter boundary; the domain remains framework-independent in either approach.
+The new `booking-service` deliberately uses synchronous Spring MVC and JPA, to practice transactional persistence, concurrency and a classic Java stack alongside the **separate** EventHub WebFlux/R2DBC implementation. Reactive programming is not an intrinsic DDD or hexagonal requirement. It is a technology choice at the port/adapter boundary; the domain remains framework-independent in either approach.
 
-**Not implemented yet in this service:** JPA, PostgreSQL, distributed locking/uniqueness, Kafka, reliable cross-service capacity coordination and full deployment.
+**Not implemented yet in this service:** database-enforced active-booking uniqueness, dedicated concurrency tests, Kafka, reliable cross-service capacity coordination and full deployment.
+
+
+## 55.7 JPA/PostgreSQL persistence and Flyway (15 October 2026)
+
+The independent Booking service persists to PostgreSQL 17 through Spring Data JPA / Hibernate. `BookingJpaEntity` stores UUID fields (`booking_id`, `event_id`, `user_id`) and a string `status`; `BookingJpaEntity.fromDomain()` and `toDomain()` convert between persistence and the immutable domain. `Booking.rehydrate(...)` restores a booking with its existing ID and state; domain creation still starts in `PENDING`.
+
+`SpringDataBookingRepository extends JpaRepository<BookingJpaEntity, UUID>`. The `JpaBookingRepositoryAdapter` implements `BookingRepository`, including the Spring Data derived query `existsByEventIdAndUserIdAndStatusNot(..., CANCELLED)`. No JPA annotations leak into domain or application.
+
+Flyway migration `V1__create_bookings_table.sql` creates the database schema. `spring.jpa.hibernate.ddl-auto=none` prevents Hibernate from owning schema creation. PostgreSQL is also available locally with Docker Compose, but the integration tests use a separate Testcontainers PostgreSQL 17 database.
+
+Verified tests cover round-trip entity/domain mapping, insert and lookup, active lookup, exclusion of cancelled bookings, and updating an existing booking from `PENDING` to `CONFIRMED`. Integration tests used `EntityManager.flush()` followed by `clear()` so reads hit the database instead of only the persistence context. `@Transactional` test methods roll back automatically for repository-level tests; `flush()` is **not** `commit()`.
+
+## 55.8 Transaction boundaries: decorator pattern
+
+To maintain an application layer with **no Spring dependency**, transaction configuration lives in an infrastructure decorator, rather than annotating `BookingService`:
+
+```text
+Spring-managed BookingUseCase proxy
+    → TransactionalBookingUseCase (@Transactional)
+    → BookingService (pure Java)
+    → BookingRepository port
+    → JpaBookingRepositoryAdapter
+    → PostgreSQL
+```
+
+`BookingConfiguration` constructs `new BookingService(repository)` and returns `new TransactionalBookingUseCase(service)` as a single Spring-managed `BookingUseCase` bean. Spring AOP intercepts external calls to that bean and manages transaction boundaries. Writes (`createBooking`, `confirmBooking`, `cancelBooking`) use `@Transactional`; reads (`getBooking`) use `@Transactional(readOnly = true)`.
+
+This is the **Decorator** pattern: the object exposes the same `BookingUseCase` interface, delegates business logic, and adds cross-cutting transactional behavior. A manually instantiated decorator outside Spring would not by itself activate the Spring proxy.
+
+### Rollback proof with Testcontainers
+
+A dedicated integration test, `TransactionalBookingRollbackIT`, registers a test-specific `@Primary` `BookingUseCase` bean that wraps a failing delegate in the same decorator. The delegate calls `repository.save(new Booking(...))` and then throws `IllegalStateException`. The test deliberately **has no `@Transactional` annotation**; after asserting the exception, it queries the repository and expects no active booking.
+
+The positive run with the decorator annotation returned green (rollback). As a negative control, temporarily removing `@Transactional` from the decorator left the booking committed by the repository's own transaction; `assertFalse(exists)` failed with `Expected: false, Actual: true`. Restoring the annotation made the test green again. This shows the test detects the transaction boundary rather than only observing Spring Test's end-of-test cleanup.
+
+`TransactionalBookingUseCaseIT` separately verifies that a successful `createBooking` can be read afterward without a test-wide transaction. Persistence on its own does **not** prove that the decorator opened the transaction, because Spring Data repository writes can be transactional independently; the negative-control rollback test provides stronger evidence.
+
+### Remaining concurrency limitation
+
+A service-level transaction at the usual `READ_COMMITTED` isolation does **not** make `existsActiveBooking(eventId, userId)` followed by `save()` a database-level uniqueness guarantee. Two concurrent transactions can both observe no active booking and insert separate IDs. Next milestone: a PostgreSQL **partial unique index** on `(event_id, user_id)` where `status <> 'CANCELLED'`, plus a Flyway migration, concurrency tests and translation of database uniqueness violations to a domain-appropriate application/HTTP conflict. A simple `UNIQUE(event_id, user_id)` would also block rebooking after cancellation.
