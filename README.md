@@ -74,26 +74,27 @@ cd booking-service
 .\mvnw.cmd clean verify
 ```
 
-Remaining: independently test actual timeout expiration; refine Retry/Circuit Breaker policies and add other failure isolation (e.g. bulkhead); decide whether remote 429/other 4xx need explicit mappings; implement **atomic Event capacity reservation** and cross-service consistency/compensation. A reusable communication checklist is planned once those topics have been studied.
+Remaining: independently test actual timeout expiration; refine Retry/Circuit Breaker/Bulkhead policies; decide whether remote 429/other 4xx need explicit mappings; implement **atomic Event capacity reservation** and cross-service consistency/compensation. A reusable communication checklist is planned once those topics have been studied.
 
 ### Event availability resilience — 15–16 October 2026
 
-The independent Booking Service protects its synchronous Event availability HTTP call through **Resilience4j Circuit Breaker → Retry → RestClient**. All decorators implement the hexagonal `EventAvailabilityPort`; Booking application/domain code does not depend on Resilience4j.
+The independent Booking Service protects its synchronous Event availability HTTP call through **Resilience4j Bulkhead → Circuit Breaker → Retry → RestClient**. All decorators implement the hexagonal `EventAvailabilityPort`; Booking application/domain code does not depend on Resilience4j.
 
 - **HTTP:** connection timeout 2 s; read timeout 3 s (configured, expiry not timing-tested).
 - **Retry:** maximum 3 total attempts, 500 ms between attempts, only for `EventServiceUnavailableException`.
 - **Circuit Breaker:** 50% failure-rate threshold, count-based window of 10, minimum 10 calls, 10 s OPEN wait, 2 HALF_OPEN probes; remote 404 ignored.
-- **Error handling:** when OPEN, rejected calls are translated to `EventServiceUnavailableException` and returned as HTTP 503.
-- **Verified:** isolated Retry/Circuit Breaker unit tests and Spring bean wiring; automated timer transition, global latency budget and distributed capacity reservation remain pending.
+- **Bulkhead:** semaphore with 5 concurrent operations and zero wait; rejected calls are translated from `BulkheadFullException` to `EventServiceUnavailableException` (HTTP 503).
+- **Error handling:** Circuit Breaker OPEN or Bulkhead full are translated to `EventServiceUnavailableException` and returned as HTTP 503.
+- **Verified:** isolated Retry/Circuit Breaker tests, a latch-based Bulkhead concurrency test and Spring outer-bean wiring; automatic timer transition, global latency budget and distributed capacity reservation remain pending.
 
-**Full explanation, configuration, architecture diagram, test cases and known limitations:** [Resilience — Timeout, Retry & Circuit Breaker](docs/RESILIENCE.md).
+**Full explanation, configuration, architecture diagram, test cases and known limitations:** [Resilience — Timeout, Retry, Circuit Breaker & Bulkhead](docs/RESILIENCE.md).
 
 ### Documentation map
 
 - [`docs/ROADMAP.md`](docs/ROADMAP.md): complete project progress; new independent service in section 26.
 - [`docs/DDD.md`](docs/DDD.md): original domain and architecture, plus new service model/hexagonal boundaries in section 55.
 - [`docs/REACTIVE.md`](docs/REACTIVE.md): original EventHub reactive learning and code, distinguishing Reactor retry from imperative Resilience4j.
-- [`docs/RESILIENCE.md`](docs/RESILIENCE.md): synchronous inter-service timeout, Retry, Circuit Breaker, test coverage, and pending work.
+- [`docs/RESILIENCE.md`](docs/RESILIENCE.md): synchronous inter-service timeout, Retry, Circuit Breaker, Bulkhead, test coverage, and pending work.
 
 
 ------------------------------------------------------------------------
@@ -284,7 +285,7 @@ HTTP + use-case integration tests    ✅
         ↓
 Cross-service Event availability REST ✅
         ↓
-Bounded Retry + Circuit Breaker        ✅
+Retry + Circuit Breaker + Bulkhead      ✅
         ↓
 Distributed capacity coordination    🚧 NEXT
 ```

@@ -4,8 +4,11 @@ import com.rubenmarin.bookingservice.application.exception.EventNotFoundExceptio
 import com.rubenmarin.bookingservice.application.exception.EventServiceUnavailableException;
 import com.rubenmarin.bookingservice.application.port.out.EventAvailabilityPort;
 import com.rubenmarin.bookingservice.infrastructure.adapter.out.http.RestEventAvailabilityAdapter;
+import com.rubenmarin.bookingservice.infrastructure.adapter.out.resilience.BulkheadEventAvailabilityAdapter;
 import com.rubenmarin.bookingservice.infrastructure.adapter.out.resilience.CircuitBreakerEventAvailabilityAdapter;
 import com.rubenmarin.bookingservice.infrastructure.adapter.out.resilience.RetryableEventAvailabilityAdapter;
+import io.github.resilience4j.bulkhead.Bulkhead;
+import io.github.resilience4j.bulkhead.BulkheadConfig;
 import io.github.resilience4j.circuitbreaker.CircuitBreaker;
 import io.github.resilience4j.circuitbreaker.CircuitBreakerConfig;
 import io.github.resilience4j.retry.Retry;
@@ -21,6 +24,22 @@ import java.time.Duration;
 
 @Configuration
 public class EventClientConfiguration {
+
+/**
+    BookingService
+            ↓
+    EventAvailabilityPort
+            ↓
+    Bulkhead (máximo 5 operaciones)
+            ↓
+    Circuit Breaker
+            ↓
+    Retry (máximo 3 intentos)
+            ↓
+    RestClient (timeouts)
+            ↓
+    Event Service
+            */
 
     @Bean("eventRestClient")
     public RestClient eventRestClient(
@@ -94,7 +113,18 @@ public class EventClientConfiguration {
         return CircuitBreaker.of("eventAvailability", config);
     }
 
-//      1/3 - Versión inicial: comunicación REST directa.
+    @Bean
+    public Bulkhead eventAvailabilityBulkhead(){
+
+        BulkheadConfig config = BulkheadConfig.custom()
+                .maxConcurrentCalls(5)
+                .maxWaitDuration(Duration.ZERO)
+                .build();
+
+        return Bulkhead.of("eventAvailability", config);
+    }
+
+//      1/4 - Versión inicial: comunicación REST directa.
 //            RestEventAvailabilityAdapter implementa EventAvailabilityPort.
 //            No existe todavía ninguna política de resiliencia.
 //    @Bean
@@ -103,7 +133,7 @@ public class EventClientConfiguration {
 //        return new RestEventAvailabilityAdapter(restClient);
 //    }
 
-//      2/3 - Incorporación de Retry mediante el patrón Decorator.
+//      2/4 - Incorporación de Retry mediante el patrón Decorator.
 //            RetryableEventAvailabilityAdapter envuelve al adaptador REST.
 //            Reintenta fallos transitorios sin modificar la implementación HTTP.
 //    @Bean
@@ -114,17 +144,32 @@ public class EventClientConfiguration {
 //        return new RetryableEventAvailabilityAdapter(restAdapter, eventAvailabilityRetry);
 //    }
 
-//      3/3 - Incorporación de Circuit Breaker mediante otro Decorator.
+//      3/4 - Incorporación de Circuit Breaker mediante otro Decorator.
 //            CircuitBreakerEventAvailabilityAdapter envuelve a RetryableEventAvailabilityAdapter.
+//            Spring registra únicamente el decorador exterior como EventAvailabilityPort.
+
+    //      4/4 - Incorporación de Bulk Head mediante otro Decorator.
+//             BulkheadEventAvailabilityAdapter envuelve a CircuitBreakerEventAvailabilityAdapter.
 //            Spring registra únicamente el decorador exterior como EventAvailabilityPort.
     @Bean
     public EventAvailabilityPort eventAvailabilityPort(
             @Qualifier("eventRestClient") RestClient restClient,
             Retry eventAvailabilityRetry,
-            CircuitBreaker eventAvailabilityCircuitBreaker) {
+            CircuitBreaker eventAvailabilityCircuitBreaker,
+            Bulkhead eventAvailabilityBulkhead) {
 
         /**
-         *  El Circuit Breaker es el decorador exterior.
+         * Bulkhead es el decorador exterior.
+         *
+         * - Limita a 5 las operaciones concurrentes.
+         * - Si no hay permiso, rechaza sin ejecutar Circuit Breaker, Retry ni HTTP.
+         * - Circuit Breaker evalúa el resultado final de Retry.
+         * - Retry puede realizar hasta 3 intentos HTTP.
+         * - Un permiso de Bulkhead se mantiene durante toda la operación.
+         */
+
+        /**
+         *  El Circuit Breaker es el decorador interior de Bulkhead.
          *      Esto significa que:
          *          - Si el circuito está OPEN, no se ejecuta ni Retry ni HTTP.
          *          - Si está CLOSED, Retry puede realizar hasta tres intentos.
@@ -147,7 +192,13 @@ public class EventClientConfiguration {
                 eventAvailabilityCircuitBreaker
         );
 
-        return cbAdapter;
+        // 4. Bulk Head
+        BulkheadEventAvailabilityAdapter bhAdapter = new BulkheadEventAvailabilityAdapter(
+                cbAdapter,
+                eventAvailabilityBulkhead
+        );
+
+        return bhAdapter;
     }
 
 

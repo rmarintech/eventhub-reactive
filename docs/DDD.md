@@ -2232,18 +2232,19 @@ The application service depends on the `EventAvailabilityPort` abstraction. Infr
 
 The Retry policy is implemented and unit-tested. **Configuration values, error classifications, decorator code and test scenarios are documented in [`RESILIENCE.md`](RESILIENCE.md#retry--resilience4j).**
 
-# 58. Booking Service: Circuit Breaker as an outer adapter (16 October 2026)
+# 58. Booking Service: Circuit Breaker and resilience decorators (16 October 2026)
 
-`CircuitBreakerEventAvailabilityAdapter` wraps `RetryableEventAvailabilityAdapter`, which wraps `RestEventAvailabilityAdapter`; all implement `EventAvailabilityPort`. This illustrates the **Decorator pattern**, dependency inversion and a hexagonal infrastructure boundary:
+`BulkheadEventAvailabilityAdapter` now wraps `CircuitBreakerEventAvailabilityAdapter`, which wraps `RetryableEventAvailabilityAdapter` and then `RestEventAvailabilityAdapter`; all implement `EventAvailabilityPort`. This illustrates the **Decorator pattern**, dependency inversion and a hexagonal infrastructure boundary:
 
 ```text
 BookingService (application)
   → EventAvailabilityPort (outbound port)
-    → CircuitBreakerEventAvailabilityAdapter
-      → RetryableEventAvailabilityAdapter
-        → RestEventAvailabilityAdapter → Event Service
+    → BulkheadEventAvailabilityAdapter
+      → CircuitBreakerEventAvailabilityAdapter
+        → RetryableEventAvailabilityAdapter
+          → RestEventAvailabilityAdapter → Event Service
 ```
 
-The outer Circuit Breaker evaluates the final outcome of a logical call (including its retries). OPEN rejects before further Retry/REST calls; infrastructure maps `CallNotPermittedException` to the application exception `EventServiceUnavailableException`, keeping HTTP and Resilience4j out of the application layer. This protects availability, **not** atomic distributed Event-capacity reservation.
+The **outer Bulkhead** limits concurrent logical operations to five, including their retries. The Circuit Breaker inside it evaluates the final outcome of Retry. OPEN rejects before further Retry/REST calls; infrastructure maps `CallNotPermittedException` and `BulkheadFullException` to the application exception `EventServiceUnavailableException`, keeping HTTP and Resilience4j out of the application layer. This protects availability, **not** atomic distributed Event-capacity reservation.
 
-The decorators, their detailed failure policy, CLOSED/OPEN/HALF_OPEN transition tests and still-unverified behavior are explained in **[`RESILIENCE.md`](RESILIENCE.md#circuit-breaker--resilience4j)**. The matching work is tracked in [`ROADMAP.md`](ROADMAP.md#23-microservices-evolution).
+The decorators, their detailed failure policy, semaphore concurrency test, CLOSED/OPEN/HALF_OPEN transition tests and still-unverified behavior are explained in **[`RESILIENCE.md`](RESILIENCE.md#circuit-breaker--resilience4j)**. The matching work is tracked in [`ROADMAP.md`](ROADMAP.md#23-microservices-evolution).

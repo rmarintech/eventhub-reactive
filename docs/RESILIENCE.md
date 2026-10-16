@@ -1,6 +1,6 @@
 # Inter-service Resilience — EventHub
 
-This document explains the **synchronous Booking Service → Event Service** resilience work implemented and tested on 15–16 October 2026. It collects theory, concrete configuration, tested behavior and limitations in one place. It does **not** describe Reactor's reactive `retry()` operator; that belongs in [`REACTIVE.md`](REACTIVE.md).
+This document explains the **synchronous Booking Service → Event Service** resilience work implemented and tested on 15–16 October 2026, including Bulkhead. It collects theory, concrete configuration, tested behavior and limitations in one place. It does **not** describe Reactor's reactive `retry()` operator; that belongs in [`REACTIVE.md`](REACTIVE.md).
 
 ## Scope and architecture
 
@@ -13,17 +13,18 @@ This document explains the **synchronous Booking Service → Event Service** res
 ```text
 BookingService (application)
   → EventAvailabilityPort
-    → CircuitBreakerEventAvailabilityAdapter   [outermost]
-      → RetryableEventAvailabilityAdapter      [up to 3 attempts]
-        → RestEventAvailabilityAdapter
-          → RestClient → GET /events/{id} → Event Service
+    → BulkheadEventAvailabilityAdapter        [outermost; 5 permits]
+      → CircuitBreakerEventAvailabilityAdapter
+        → RetryableEventAvailabilityAdapter   [up to 3 attempts]
+          → RestEventAvailabilityAdapter
+            → RestClient → GET /events/{id} → Event Service
 ```
 
-All three adapters implement the same output port. `EventClientConfiguration` wires them using Resilience4j's **core Java API**, without Spring AOP/@Retry/@CircuitBreaker annotations. The application layer remains independent of HTTP and Resilience4j. See [`DDD.md`](DDD.md#58-booking-service-circuit-breaker-as-an-outer-adapter-16-october-2026) for the dependency-inversion decision.
+All four adapters implement the same output port. `EventClientConfiguration` wires them using Resilience4j's **core Java API**, without Spring AOP/@Retry/@CircuitBreaker annotations. The application layer remains independent of HTTP and Resilience4j. See [`DDD.md`](DDD.md#58-booking-service-circuit-breaker-as-an-outer-adapter-16-october-2026) for the dependency-inversion decision.
 
 ## What resilience means here
 
-**Transient failures** may recover after a short wait (e.g., temporary network/remote server failures); a bounded Retry can help. **Persistent or frequent failures** make repeated calls counterproductive; Circuit Breaker can stop new attempts temporarily. **Timeouts** cap the wait for an individual network operation. These mechanisms improve failure handling but are not substitutes for distributed transactions, capacity reservations, or resource isolation.
+**Transient failures** may recover after a short wait (e.g., temporary network/remote server failures); a bounded Retry can help. **Persistent or frequent failures** make repeated calls counterproductive; Circuit Breaker can stop new attempts temporarily. **Timeouts** cap the wait for an individual network operation. These mechanisms improve failure handling but are not substitutes for distributed transactions or atomic capacity reservations. Bulkhead adds bounded resource isolation for the caller.
 
 ## HTTP timeouts — RestClient
 
@@ -45,6 +46,7 @@ The HTTP adapter requests a minimal `EventResponse(UUID id, String status, int a
 | Remote Event not found (404) | `EventNotFoundException` | 404 `EVENT_NOT_FOUND` |
 | Remote HTTP 5xx / I/O failure | `EventServiceUnavailableException` | 503 `EVENT_SERVICE_UNAVAILABLE` |
 | Circuit Breaker OPEN | `EventServiceUnavailableException` (cause: `CallNotPermittedException`) | 503 `EVENT_SERVICE_UNAVAILABLE` |
+| Bulkhead full | `EventServiceUnavailableException` (cause: `BulkheadFullException`) | 503 `EVENT_SERVICE_UNAVAILABLE` |
 
 `RestEventAvailabilityAdapterTest` uses `MockRestServiceServer` for Event status/availability variants, extra JSON fields, HTTP 404/500 and simulated I/O failure. Other 4xx, especially 429, still need a deliberate mapping policy.
 
@@ -83,7 +85,7 @@ public boolean isAvailable(EventId eventId) {
 
 **Purpose:** stop sending new requests temporarily when recent calls indicate that the dependency is unhealthy. Unlike Retry, it does not repeat a failed call.
 
-Implemented with `resilience4j-circuitbreaker` **2.3.0**, `CircuitBreaker.decorateSupplier(...)` and `CircuitBreakerEventAvailabilityAdapter` as the **outer** decorator around Retry.
+Implemented with `resilience4j-circuitbreaker` **2.3.0**, `CircuitBreaker.decorateSupplier(...)` and `CircuitBreakerEventAvailabilityAdapter` around Retry, inside the outer Bulkhead.
 
 ### States
 
@@ -129,7 +131,7 @@ Exceptions outside the explicit recorded/ignored categories follow the configure
 
 ### Why Circuit Breaker wraps Retry
 
-The outer breaker receives **one final result from the logical operation**:
+The breaker (outside Retry, inside Bulkhead) receives **one final result from the logical operation**:
 
 ```text
 Circuit Breaker
@@ -142,7 +144,7 @@ Circuit Breaker
 
 If all three attempts fail, the breaker records **one** failure; if OPEN, no HTTP attempts take place. Reversing the order would alter failure accounting and the behavior of retries around OPEN rejections.
 
-The outer adapter translates OPEN rejection without counting that rejection as a fresh backend failure:
+The Circuit Breaker adapter translates OPEN rejection without counting that rejection as a fresh backend failure:
 
 ```java
 @Override
@@ -167,17 +169,61 @@ public boolean isAvailable(EventId eventId) {
 | Unsuccessful recovery | Force `HALF_OPEN`; one failure + one success → `OPEN` at 50%; next call rejected |
 | Ignored 404 | Repeated `EventNotFoundException` leaves `CLOSED` and does not count as a failure or success when ignored |
 
-`EventClientConfigurationTest` uses `@SpringBootTest` to check the relevant Spring beans and verify that the outer `EventAvailabilityPort` bean is the Circuit Breaker decorator. It does not independently inspect every nested adapter. For HALF_OPEN tests the transition is **forced manually**; the actual 10-second automatic transition is not verified.
+`EventClientConfigurationTest` uses `@SpringBootTest` to check the relevant Spring beans and verify that the outer `EventAvailabilityPort` bean is the Bulkhead decorator. It does not independently inspect every nested adapter. For HALF_OPEN tests the transition is **forced manually**; the actual 10-second automatic transition is not verified.
+
+## Bulkhead — Resilience4j (SemaphoreBulkhead)
+
+**Purpose:** bound the number of concurrent logical operations that Booking Service sends through its Event-availability dependency. Unlike Circuit Breaker, Bulkhead does not determine whether Event Service is healthy; it prevents too many ongoing requests from consuming Booking resources at the same time. It limits concurrent **operations**, not the total number of threads in the application.
+
+The imperative Booking service uses `resilience4j-bulkhead` **2.3.0** and `Bulkhead.decorateSupplier(...)` in `BulkheadEventAvailabilityAdapter`. The production configuration is:
+
+```java
+BulkheadConfig config = BulkheadConfig.custom()
+        .maxConcurrentCalls(5)
+        .maxWaitDuration(Duration.ZERO)
+        .build();
+
+return Bulkhead.of("eventAvailability", config);
+```
+
+- Up to **5 logical Event-availability operations at once**, per Booking Service instance. The sixth concurrent operation is rejected immediately when all permits are held; there is no waiting queue at this semaphore.
+- `BulkheadFullException` is translated to `EventServiceUnavailableException(ex)`, preserving the original rejection as the cause. Existing HTTP exception handling returns `503 EVENT_SERVICE_UNAVAILABLE`.
+- The decorator is the **outermost** layer: `Bulkhead → Circuit Breaker → Retry → REST`. A permit is held throughout the complete Retry operation, including waits between attempts. A Bulkhead rejection never reaches the inner breaker or HTTP adapter.
+- The configuration is **not a cluster-wide limit**. Multiple Booking replicas have independent permits. Event Service needs its own protection and capacity management when relevant.
+
+### Bulkhead adapter
+
+```java
+@Override
+public boolean isAvailable(EventId eventId) {
+    try {
+        return Bulkhead.decorateSupplier(
+                bulkhead, () -> delegate.isAvailable(eventId)).get();
+    } catch (BulkheadFullException ex) {
+        throw new EventServiceUnavailableException(ex);
+    }
+}
+```
+
+### Tests completed
+
+`BulkheadEventAvailabilityAdapterTest` uses Mockito, `ExecutorService`, `Future` and two `CountDownLatch` objects without Spring. Its test-specific limit is **1 permit**: one call enters the mocked delegate and waits; a concurrent second call is rejected with an `EventServiceUnavailableException` whose cause is `BulkheadFullException`; releasing the first call restores the permit; Mockito verifies that only the admitted call reached the delegate. Latches avoid reliance on `Thread.sleep()`. The test was reported green.
+
+`EventClientConfigurationTest` (`@SpringBootTest`) verifies that the Retry, Circuit Breaker, Bulkhead and RestClient beans load and that the `EventAvailabilityPort` bean exposed by Spring is a `BulkheadEventAvailabilityAdapter`. This verifies the outer bean type, not the complete nested chain by reflection. The full `booking-service` `clean verify` suite was reported green on 16 October 2026.
+
+### What Bulkhead does not guarantee
+
+Bulkhead does not replace an Event Service-side concurrency limit, a global request rate limit, an overall latency deadline, or atomic Event capacity reservation. The concurrency test checks a controlled local instance; a distributed load test and production tuning remain pending.
 
 ## Coverage and limitations
 
-**Implemented/tested:** inter-service availability HTTP adapter, exception mappings, configured per-attempt timeouts, bounded Retry, Circuit Breaker protection, fast OPEN rejection, successful/failed HALF_OPEN transitions, ignored 404, and outer Spring bean wiring. A manual cross-service GET has been exercised; resilience unit tests are not full distributed end-to-end fault tests.
+**Implemented/tested:** inter-service availability HTTP adapter, exception mappings, configured per-attempt timeouts, bounded Retry, Circuit Breaker protection, fast OPEN rejection, successful/failed HALF_OPEN transitions, ignored 404, Bulkhead concurrency/rejection/permit release, and outer Spring bean wiring. A manual cross-service GET has been exercised; resilience unit tests are not full distributed end-to-end fault tests.
 
 **Not yet implemented or verified:**
 
 - Measured expiration of connection/read timeouts and an **overall call deadline** across retries.
 - Real-time automatic OPEN→HALF_OPEN timing test; refined backoff/jitter and selective HTTP 5xx/429 retry policy.
-- **Bulkhead** / resource isolation, observability (metrics, logging, distributed traces), and production tuning.
+- Resilience observability (metrics, logging, distributed traces), production tuning and capacity limits across replicas. Bulkhead is implemented at the individual Booking Service instance, not as a distributed global limit.
 - Atomic **Event-capacity reservation**, distributed consistency/compensation, and distributed integration tests.
 - Reusable `docs/MICROSERVICES-CHECKLIST.md` after studying the remaining cross-service reliability concerns.
 

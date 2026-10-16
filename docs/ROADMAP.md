@@ -488,12 +488,15 @@ architecture tests remain pending
 -   [ ] Reactive/nonblocking service-to-service client (only if separately justified)
 -   [ ] Event-driven service communication
 -   [x] Translate remote HTTP 5xx and connection failures to application exception/HTTP 503
--   [ ] Complete failure isolation (bulkhead, policy refinements, latency budget; Circuit Breaker and bounded Retry implemented)
+-   [ ] Complete failure isolation (Bulkhead implemented; policy refinements, end-to-end latency budget and operational tuning remain)
 -   [x] Configure REST connection/read timeouts (2s/3s; expiry tests pending)
 -   [x] Resilience4j bounded Retry via EventAvailabilityPort decorator (3 attempts, 500 ms)
 -   [x] Retry unit tests (success, failure, no retry for 404/false)
 -   [x] Resilience4j Circuit Breaker decorator around Retry (Event availability)
 -   [x] Circuit Breaker state/recovery/ignored-exception unit tests
+-   [x] Resilience4j SemaphoreBulkhead outer decorator (5 permits; zero wait; 503 translation)
+-   [x] Bulkhead deterministic concurrency unit test (one permit, second call rejected, permit released)
+-   [x] Spring bean wiring test verifies Bulkhead as outer `EventAvailabilityPort`
 -   [x] Consolidate implemented HTTP resilience patterns in `docs/RESILIENCE.md`
 -   [ ] Distributed consistency
 -   [x] Document Booking Service status and architecture
@@ -594,7 +597,7 @@ Active-booking DB uniqueness            ✅
         ↓
 Concurrency / HTTP integration tests     ✅
         ↓
-Event availability REST + resilience     ✅
+Event REST + Retry + CB + Bulkhead        ✅
         ↓
 Distributed capacity reservation         🚧 NEXT
         ↓
@@ -671,8 +674,12 @@ Cross-service integration / Kafka        ⬜ PLANNED
 - [ ] Refine failure-classification, backoff/jitter, overall timeout budget and idempotency review
 - [x] Circuit Breaker outer decorator around Retry, including 503 translation for OPEN rejection
 - [x] Circuit Breaker unit tests: CLOSED/OPEN/HALF_OPEN, failed recovery, ignored 404
+- [x] Bulkhead outer decorator around Circuit Breaker (5 concurrent operations, zero wait)
+- [x] `BulkheadFullException` translated to `EventServiceUnavailableException` → HTTP 503
+- [x] Concurrency test with `CountDownLatch`, `Future` and Mockito; permit released after completion
+- [x] `EventClientConfigurationTest` verifies Bulkhead as the outer port bean
 - [x] Detailed resilience documentation moved to `docs/RESILIENCE.md`
-- [ ] Additional recovery/failure isolation (e.g. bulkhead), automatic transition timing tests
+- [ ] Automatic Circuit Breaker OPEN→HALF_OPEN timing tests, overall timeout budget and resilience policy refinements
 - [ ] Handle additional upstream statuses (such as 429 and unexpected 4xx) by explicit policy
 - [ ] Reusable cross-service communication checklist (`docs/MICROSERVICES-CHECKLIST.md`) after resilience topics
 - [ ] Optional deterministic concurrency test forcing both pre-checks to report no booking
@@ -688,4 +695,4 @@ Cross-service integration / Kafka        ⬜ PLANNED
 
 ## Next milestone
 
-Bounded Resilience4j Retry **and** Circuit Breaker have been implemented and unit-tested for Event availability; the Circuit Breaker wraps Retry and rejects OPEN-state calls before they reach the delegate. **Next:** refine retry/error classification, backoff/jitter and overall time budget; test actual HTTP timeout expiration and automatic OPEN→HALF_OPEN timing; evaluate bulkhead and reusable communication checklist. Event capacity reservation, cross-service consistency/compensation, Kafka and outbox remain pending.
+Bounded Resilience4j **Retry, Circuit Breaker and SemaphoreBulkhead** are implemented and tested for Event availability. Bulkhead is the outer decorator (5 concurrent operations, no wait), Circuit Breaker wraps Retry, and the REST adapter remains innermost. **Next:** design and test atomic Event-capacity reservation between services, then address consistency/compensation. Measured HTTP timeouts, overall latency budget, automatic OPEN→HALF_OPEN timing, error classification and the communication checklist remain follow-up work; Kafka and outbox are not yet implemented.
