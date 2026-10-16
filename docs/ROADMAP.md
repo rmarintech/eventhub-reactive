@@ -488,11 +488,13 @@ architecture tests remain pending
 -   [ ] Reactive/nonblocking service-to-service client (only if separately justified)
 -   [ ] Event-driven service communication
 -   [x] Translate remote HTTP 5xx and connection failures to application exception/HTTP 503
--   [ ] Full failure isolation (Circuit Breaker / bulkhead / retry policy refinements)
+-   [ ] Complete failure isolation (bulkhead, policy refinements, latency budget; Circuit Breaker and bounded Retry implemented)
 -   [x] Configure REST connection/read timeouts (2s/3s; expiry tests pending)
 -   [x] Resilience4j bounded Retry via EventAvailabilityPort decorator (3 attempts, 500 ms)
 -   [x] Retry unit tests (success, failure, no retry for 404/false)
--   [ ] Circuit Breaker
+-   [x] Resilience4j Circuit Breaker decorator around Retry (Event availability)
+-   [x] Circuit Breaker state/recovery/ignored-exception unit tests
+-   [x] Consolidate implemented HTTP resilience patterns in `docs/RESILIENCE.md`
 -   [ ] Distributed consistency
 -   [x] Document Booking Service status and architecture
 -   [ ] Microservices documentation (complete distributed architecture)
@@ -592,7 +594,9 @@ Active-booking DB uniqueness            ✅
         ↓
 Concurrency / HTTP integration tests     ✅
         ↓
-Event ↔ Booking service integration       🚧 NEXT
+Event availability REST + resilience     ✅
+        ↓
+Distributed capacity reservation         🚧 NEXT
         ↓
 Cross-service integration / Kafka        ⬜ PLANNED
 ```
@@ -665,7 +669,10 @@ Cross-service integration / Kafka        ⬜ PLANNED
 - [x] Implement bounded Retry for Event availability (`EventServiceUnavailableException`, 3 total attempts)
 - [x] Unit tests for retry/no-retry behavior
 - [ ] Refine failure-classification, backoff/jitter, overall timeout budget and idempotency review
-- [ ] Circuit Breaker and appropriate recovery/failure isolation
+- [x] Circuit Breaker outer decorator around Retry, including 503 translation for OPEN rejection
+- [x] Circuit Breaker unit tests: CLOSED/OPEN/HALF_OPEN, failed recovery, ignored 404
+- [x] Detailed resilience documentation moved to `docs/RESILIENCE.md`
+- [ ] Additional recovery/failure isolation (e.g. bulkhead), automatic transition timing tests
 - [ ] Handle additional upstream statuses (such as 429 and unexpected 4xx) by explicit policy
 - [ ] Reusable cross-service communication checklist (`docs/MICROSERVICES-CHECKLIST.md`) after resilience topics
 - [ ] Optional deterministic concurrency test forcing both pre-checks to report no booking
@@ -681,4 +688,4 @@ Cross-service integration / Kafka        ⬜ PLANNED
 
 ## Next milestone
 
-Continue with resilient REST communication: bounded Resilience4j Retry and five unit tests are implemented. Introduce Circuit Breaker, refine retry/backoff and verify actual timeout behavior. Event capacity reservation, cross-service consistency/compensation, Kafka and outbox remain pending.
+Bounded Resilience4j Retry **and** Circuit Breaker have been implemented and unit-tested for Event availability; the Circuit Breaker wraps Retry and rejects OPEN-state calls before they reach the delegate. **Next:** refine retry/error classification, backoff/jitter and overall time budget; test actual HTTP timeout expiration and automatic OPEN→HALF_OPEN timing; evaluate bulkhead and reusable communication checklist. Event capacity reservation, cross-service consistency/compensation, Kafka and outbox remain pending.

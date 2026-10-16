@@ -1,0 +1,184 @@
+# Inter-service Resilience — EventHub
+
+This document explains the **synchronous Booking Service → Event Service** resilience work implemented and tested on 15–16 October 2026. It collects theory, concrete configuration, tested behavior and limitations in one place. It does **not** describe Reactor's reactive `retry()` operator; that belongs in [`REACTIVE.md`](REACTIVE.md).
+
+## Scope and architecture
+
+- Caller: independent **Booking Service** (Spring MVC, blocking `RestClient`, port 8081).
+- Callee: **Event Service** (WebFlux/R2DBC, port 8080), queried through `GET /events/{id}`.
+- Application contract: `EventAvailabilityPort.isAvailable(EventId)` returns `boolean`.
+- `true` means Event has `PUBLISHED` status and `available > 0`; `false` is a *valid technical response* for a non-bookable Event.
+- REST availability checks **do not reserve capacity atomically**. Cross-service overselling prevention is not implemented.
+
+```text
+BookingService (application)
+  → EventAvailabilityPort
+    → CircuitBreakerEventAvailabilityAdapter   [outermost]
+      → RetryableEventAvailabilityAdapter      [up to 3 attempts]
+        → RestEventAvailabilityAdapter
+          → RestClient → GET /events/{id} → Event Service
+```
+
+All three adapters implement the same output port. `EventClientConfiguration` wires them using Resilience4j's **core Java API**, without Spring AOP/@Retry/@CircuitBreaker annotations. The application layer remains independent of HTTP and Resilience4j. See [`DDD.md`](DDD.md#58-booking-service-circuit-breaker-as-an-outer-adapter-16-october-2026) for the dependency-inversion decision.
+
+## What resilience means here
+
+**Transient failures** may recover after a short wait (e.g., temporary network/remote server failures); a bounded Retry can help. **Persistent or frequent failures** make repeated calls counterproductive; Circuit Breaker can stop new attempts temporarily. **Timeouts** cap the wait for an individual network operation. These mechanisms improve failure handling but are not substitutes for distributed transactions, capacity reservations, or resource isolation.
+
+## HTTP timeouts — RestClient
+
+`EventClientConfiguration` configures `SimpleClientHttpRequestFactory`:
+
+```java
+factory.setConnectTimeout(Duration.ofSeconds(2));
+factory.setReadTimeout(Duration.ofSeconds(3));
+```
+
+Connect timeout limits establishing a connection; read timeout limits blocking reads according to the chosen request factory. These are **per-attempt** settings, *not* a verified overall operation deadline. Real timeout expiration has not been timing-tested.
+
+The HTTP adapter requests a minimal `EventResponse(UUID id, String status, int available)` and maps outcomes:
+
+| Outcome | Application result | HTTP response from Booking |
+| --- | --- | --- |
+| PUBLISHED, places available | `true` | Booking may proceed |
+| DRAFT, CANCELLED, or no places | `false` | 409 `EVENT_NOT_AVAILABLE` |
+| Remote Event not found (404) | `EventNotFoundException` | 404 `EVENT_NOT_FOUND` |
+| Remote HTTP 5xx / I/O failure | `EventServiceUnavailableException` | 503 `EVENT_SERVICE_UNAVAILABLE` |
+| Circuit Breaker OPEN | `EventServiceUnavailableException` (cause: `CallNotPermittedException`) | 503 `EVENT_SERVICE_UNAVAILABLE` |
+
+`RestEventAvailabilityAdapterTest` uses `MockRestServiceServer` for Event status/availability variants, extra JSON fields, HTTP 404/500 and simulated I/O failure. Other 4xx, especially 429, still need a deliberate mapping policy.
+
+## Retry — Resilience4j
+
+**Purpose:** handle a failure that may be temporary, without infinite repeated calls.
+
+Implemented with `resilience4j-retry` **2.3.0**, `RetryConfig` and `Retry.decorateSupplier(...)` in `RetryableEventAvailabilityAdapter`, surrounding the REST port delegate.
+
+```java
+RetryConfig config = RetryConfig.custom()
+        .maxAttempts(3)
+        .waitDuration(Duration.ofMillis(500))
+        .retryExceptions(EventServiceUnavailableException.class)
+        .build();
+```
+
+- **3 total attempts** means one initial execution and at most **2 retries**, not three additional retries.
+- Wait **500 ms** between attempts, currently fixed rather than exponential/jittered.
+- Retry `EventServiceUnavailableException` only (remote 5xx and transport failures as currently mapped).
+- Do not retry successful `true`, valid `false`, or remote 404 represented by `EventNotFoundException`.
+- Once attempts are exhausted, propagate `EventServiceUnavailableException` to the existing 503 handler.
+
+The adapter uses the **Decorator pattern**:
+
+```java
+@Override
+public boolean isAvailable(EventId eventId) {
+    return Retry.decorateSupplier(retry, () -> delegate.isAvailable(eventId)).get();
+}
+```
+
+**Verified:** `RetryableEventAvailabilityAdapterTest` tests immediate `true`, immediate `false`, two transient failures then recovery, three failures, and remote 404 without retry. It uses zero delay in unit-test configuration to keep tests fast. Retries are synchronous and may increase request latency.
+
+## Circuit Breaker — Resilience4j
+
+**Purpose:** stop sending new requests temporarily when recent calls indicate that the dependency is unhealthy. Unlike Retry, it does not repeat a failed call.
+
+Implemented with `resilience4j-circuitbreaker` **2.3.0**, `CircuitBreaker.decorateSupplier(...)` and `CircuitBreakerEventAvailabilityAdapter` as the **outer** decorator around Retry.
+
+### States
+
+```text
+CLOSED    calls are permitted; record relevant outcomes
+   │ failure rate reaches threshold after sufficient calls
+   ▼
+OPEN      reject immediately; do not call Retry/HTTP
+   │ waiting interval passes; on the next permitted state check/call
+   ▼
+HALF_OPEN allow a limited number of probe calls
+   ├─ healthy enough → CLOSED
+   └─ threshold met → OPEN
+```
+
+A single failure does not automatically open the production circuit: the configured minimum call count matters. `false` is still a technically successful call and does not count as a server failure.
+
+### Production configuration
+
+```java
+CircuitBreakerConfig config = CircuitBreakerConfig.custom()
+        .failureRateThreshold(50)
+        .slidingWindowSize(10)
+        .minimumNumberOfCalls(10)
+        .waitDurationInOpenState(Duration.ofSeconds(10))
+        .permittedNumberOfCallsInHalfOpenState(2)
+        .recordExceptions(EventServiceUnavailableException.class)
+        .ignoreExceptions(EventNotFoundException.class)
+        .build();
+```
+
+| Setting | Meaning |
+| --- | --- |
+| Failure threshold 50% | Open when recorded technical failures reach 50% of evaluated calls |
+| Count-based window 10 | Evaluate a rolling window of the most recent 10 recorded calls |
+| Minimum calls 10 | Do not apply failure-rate threshold before 10 recorded calls |
+| OPEN wait 10 s | Wait before allowing a HALF_OPEN transition |
+| HALF_OPEN permitted calls 2 | Allow 2 probes to assess recovery |
+| Record `EventServiceUnavailableException` | Count mapped HTTP 5xx/transport failures as technical errors |
+| Ignore `EventNotFoundException` | Remote 404 is neither a technical success nor a technical failure in breaker statistics |
+
+Exceptions outside the explicit recorded/ignored categories follow the configured Resilience4j defaults; this is not a blanket assertion that all exceptions other than the listed ones are ignored.
+
+### Why Circuit Breaker wraps Retry
+
+The outer breaker receives **one final result from the logical operation**:
+
+```text
+Circuit Breaker
+ └─ Retry
+     ├─ HTTP attempt 1: 503
+     ├─ HTTP attempt 2: 503
+     └─ HTTP attempt 3: success
+ Circuit Breaker records: one successful logical call
+```
+
+If all three attempts fail, the breaker records **one** failure; if OPEN, no HTTP attempts take place. Reversing the order would alter failure accounting and the behavior of retries around OPEN rejections.
+
+The outer adapter translates OPEN rejection without counting that rejection as a fresh backend failure:
+
+```java
+@Override
+public boolean isAvailable(EventId eventId) {
+    try {
+        return CircuitBreaker.decorateSupplier(
+                circuitBreaker, () -> delegate.isAvailable(eventId)).get();
+    } catch (CallNotPermittedException ex) {
+        throw new EventServiceUnavailableException(ex);
+    }
+}
+```
+
+### Tests completed
+
+`CircuitBreakerEventAvailabilityAdapterTest` uses JUnit 5 + Mockito **without Spring**, with a simplified `slidingWindowSize(2)`/`minimumNumberOfCalls(2)` to exercise state transitions quickly:
+
+| Scenario | Assertions |
+| --- | --- |
+| Two failures | `CLOSED → OPEN`; next call translated from `CallNotPermittedException`; delegate called twice |
+| Successful recovery | Force `HALF_OPEN`; two successes → `CLOSED` |
+| Unsuccessful recovery | Force `HALF_OPEN`; one failure + one success → `OPEN` at 50%; next call rejected |
+| Ignored 404 | Repeated `EventNotFoundException` leaves `CLOSED` and does not count as a failure or success when ignored |
+
+`EventClientConfigurationTest` uses `@SpringBootTest` to check the relevant Spring beans and verify that the outer `EventAvailabilityPort` bean is the Circuit Breaker decorator. It does not independently inspect every nested adapter. For HALF_OPEN tests the transition is **forced manually**; the actual 10-second automatic transition is not verified.
+
+## Coverage and limitations
+
+**Implemented/tested:** inter-service availability HTTP adapter, exception mappings, configured per-attempt timeouts, bounded Retry, Circuit Breaker protection, fast OPEN rejection, successful/failed HALF_OPEN transitions, ignored 404, and outer Spring bean wiring. A manual cross-service GET has been exercised; resilience unit tests are not full distributed end-to-end fault tests.
+
+**Not yet implemented or verified:**
+
+- Measured expiration of connection/read timeouts and an **overall call deadline** across retries.
+- Real-time automatic OPEN→HALF_OPEN timing test; refined backoff/jitter and selective HTTP 5xx/429 retry policy.
+- **Bulkhead** / resource isolation, observability (metrics, logging, distributed traces), and production tuning.
+- Atomic **Event-capacity reservation**, distributed consistency/compensation, and distributed integration tests.
+- Reusable `docs/MICROSERVICES-CHECKLIST.md` after studying the remaining cross-service reliability concerns.
+
+See [`ROADMAP.md`](ROADMAP.md#23-microservices-evolution) for current/pending implementation milestones. None of the above pending items are described as implemented.

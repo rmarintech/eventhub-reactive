@@ -40,10 +40,10 @@ public class RestEventAvailabilityAdapter implements EventAvailabilityPort {
 
         } catch (HttpServerErrorException | ResourceAccessException ex) {
 
-//            Problema-----------------------------------------Excepción de Spring
-//            Event Service devuelve HTTP 500---------------------HttpServerErrorException
-//            Conexión rechazada----------------------------------ResourceAccessException
-//            Timeout de conexión o lectura-----------------------Habitualmente ResourceAccessException
+//            Event Service devuelve HTTP 500--------HttpServerErrorException
+//            Conexión rechazada---------------------ResourceAccessException
+//            Timeout de conexión o lectura----------Habitualmente ResourceAccessException
+
             throw new EventServiceUnavailableException(ex);
         }
     }

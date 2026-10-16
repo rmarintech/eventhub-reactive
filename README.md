@@ -74,25 +74,26 @@ cd booking-service
 .\mvnw.cmd clean verify
 ```
 
-Remaining: independently test actual timeout expiration; refine bounded Retry policy and add Circuit Breaker / failure isolation; decide whether remote 429/other 4xx need explicit mappings; implement **atomic Event capacity reservation** and cross-service consistency/compensation. A reusable communication checklist is planned once those topics have been studied.
+Remaining: independently test actual timeout expiration; refine Retry/Circuit Breaker policies and add other failure isolation (e.g. bulkhead); decide whether remote 429/other 4xx need explicit mappings; implement **atomic Event capacity reservation** and cross-service consistency/compensation. A reusable communication checklist is planned once those topics have been studied.
 
-### Bounded Retry for Event availability — 15 October 2026
+### Event availability resilience — 15–16 October 2026
 
-Booking Service now wraps `RestEventAvailabilityAdapter` with `RetryableEventAvailabilityAdapter` (both implement the application output port `EventAvailabilityPort`). `EventClientConfiguration` builds and injects the wrapper, using the core **Resilience4j Retry** API without `@Retry` or Spring AOP. The application service remains unaware of Retry/HTTP.
+The independent Booking Service protects its synchronous Event availability HTTP call through **Resilience4j Circuit Breaker → Retry → RestClient**. All decorators implement the hexagonal `EventAvailabilityPort`; Booking application/domain code does not depend on Resilience4j.
 
-- **3 total attempts** (first request plus 2 retries), with **500 ms between attempts**.
-- Retry **only** `EventServiceUnavailableException` (currently raised for remote HTTP 5xx and transport failures).
-- Never retry normal `true`/`false` availability results or `EventNotFoundException` (remote HTTP 404).
-- After the final failure, propagate `EventServiceUnavailableException`, which the inbound exception handler maps to **503**.
-- `RetryableEventAvailabilityAdapterTest` exercises five unit scenarios with mocked delegate and zero test delay: immediate `true`, immediate `false`, two failures then recovery, three failures, and 404 without retry. `EventClientConfigurationTest` verifies the existence of configured beans; ensure the injected port is the decorator when verifying wiring.
+- **HTTP:** connection timeout 2 s; read timeout 3 s (configured, expiry not timing-tested).
+- **Retry:** maximum 3 total attempts, 500 ms between attempts, only for `EventServiceUnavailableException`.
+- **Circuit Breaker:** 50% failure-rate threshold, count-based window of 10, minimum 10 calls, 10 s OPEN wait, 2 HALF_OPEN probes; remote 404 ignored.
+- **Error handling:** when OPEN, rejected calls are translated to `EventServiceUnavailableException` and returned as HTTP 503.
+- **Verified:** isolated Retry/Circuit Breaker unit tests and Spring bean wiring; automated timer transition, global latency budget and distributed capacity reservation remain pending.
 
-**Boundaries/limitations:** retries are currently synchronous and can increase request latency; timeouts apply to each HTTP attempt, but no overall request deadline is implemented or timing-tested. Broad retry on all mapped HTTP 5xx may be refined later (e.g. 500 vs 503). Circuit Breaker, backoff/jitter tuning, observability, and atomic distributed capacity coordination are still pending.
+**Full explanation, configuration, architecture diagram, test cases and known limitations:** [Resilience — Timeout, Retry & Circuit Breaker](docs/RESILIENCE.md).
 
 ### Documentation map
 
 - [`docs/ROADMAP.md`](docs/ROADMAP.md): complete project progress; new independent service in section 26.
 - [`docs/DDD.md`](docs/DDD.md): original domain and architecture, plus new service model/hexagonal boundaries in section 55.
-- [`docs/REACTIVE.md`](docs/REACTIVE.md): original EventHub reactive learning and code only; ends with explicit separation of the new imperative service.
+- [`docs/REACTIVE.md`](docs/REACTIVE.md): original EventHub reactive learning and code, distinguishing Reactor retry from imperative Resilience4j.
+- [`docs/RESILIENCE.md`](docs/RESILIENCE.md): synchronous inter-service timeout, Retry, Circuit Breaker, test coverage, and pending work.
 
 
 ------------------------------------------------------------------------
@@ -219,6 +220,7 @@ as each topic is actually studied.
 | Domain-Driven Design | [DDD.md](docs/DDD.md) |
 | Hexagonal Architecture | [DDD.md](docs/DDD.md#23-ddd-and-hexagonal-architecture) and [independent service design](docs/DDD.md#55-independent-booking-service--ddd-and-hexagonal-architecture-october-2026) |
 | Reactive Programming | [REACTIVE.md](docs/REACTIVE.md) |
+| Inter-service resilience (Timeout, Retry, Circuit Breaker) | [RESILIENCE.md](docs/RESILIENCE.md) |
 
 Additional documentation will be created when the corresponding topics
 are reached in the course.
@@ -281,6 +283,8 @@ Concurrent duplicate protection    ✅
 HTTP + use-case integration tests    ✅
         ↓
 Cross-service Event availability REST ✅
+        ↓
+Bounded Retry + Circuit Breaker        ✅
         ↓
 Distributed capacity coordination    🚧 NEXT
 ```
