@@ -114,6 +114,7 @@ Event's `Capacity` value object raises `InsufficientCapacityException` or `Exces
 - [`docs/DDD.md`](docs/DDD.md): original domain and architecture, plus new service model/hexagonal boundaries in section 55.
 - [`docs/REACTIVE.md`](docs/REACTIVE.md): original EventHub reactive learning and code, distinguishing Reactor retry from imperative Resilience4j.
 - [`docs/RESILIENCE.md`](docs/RESILIENCE.md): synchronous inter-service timeout, Retry, Circuit Breaker, Bulkhead, test coverage, and pending work.
+- [`docs/MICROSERVICES_COMMUNICATION.md`](docs/MICROSERVICES_COMMUNICATION.md): reusable service-to-service communication checklist, practical tests, expected evidence, and EventHub progress.
 
 
 ------------------------------------------------------------------------
@@ -241,6 +242,7 @@ as each topic is actually studied.
 | Hexagonal Architecture | [DDD.md](docs/DDD.md#23-ddd-and-hexagonal-architecture) and [independent service design](docs/DDD.md#55-independent-booking-service--ddd-and-hexagonal-architecture-october-2026) |
 | Reactive Programming | [REACTIVE.md](docs/REACTIVE.md) |
 | Inter-service resilience (Timeout, Retry, Circuit Breaker) | [RESILIENCE.md](docs/RESILIENCE.md) |
+| Microservices communication: practical checklist and testing | [MICROSERVICES_COMMUNICATION.md](docs/MICROSERVICES_COMMUNICATION.md) |
 
 Additional documentation will be created when the corresponding topics
 are reached in the course.
@@ -250,59 +252,59 @@ are reached in the course.
 # 🗺️ Current Position
 
 ``` text
-Project initialization              ✅
+Project initialization                  ✅
         ↓
-DDD fundamentals / Event Aggregate  ✅
+DDD fundamentals / Event Aggregate      ✅
         ↓
-Hexagonal Architecture              🚧 IN PROGRESS
+Hexagonal Architecture                  🚧 IN PROGRESS
         ↓
-Application / Ports / Adapters      ✅
+Application / Ports / Adapters          ✅
         ↓
-Reactive Programming Fundamentals   ✅
+Reactive Programming Fundamentals       ✅
         ↓
-Spring WebFlux                      🚧 IN PROGRESS
+Spring WebFlux                          🚧 IN PROGRESS
         ↓
-Reactive HTTP input adapter         ✅
+Reactive HTTP input adapter             ✅
         ↓
-POST /events                        ✅
-GET  /events                        ✅
-GET  /events/{id}                   ✅
+POST /events                            ✅
+GET  /events                            ✅
+GET  /events/{id}                       ✅
         ↓
-HTTP error handling                 ✅
+HTTP error handling                     ✅
         ↓
-Request validation                  ✅
+Request validation                      ✅
         ↓
-Booking domain / application flow   ✅
+Booking domain / application flow       ✅
         ↓
-Publish Event API                   ✅
+Publish Event API                       ✅
         ↓
-Booking HTTP API                    ✅
+Booking HTTP API                        ✅
         ↓
-Event R2DBC / PostgreSQL            ✅
+Event R2DBC / PostgreSQL                ✅
         ↓
-Booking R2DBC / PostgreSQL          ✅
+Booking R2DBC / PostgreSQL              ✅
         ↓
-Concurrency / optimistic locking    ✅
+Concurrency / optimistic locking        ✅
         ↓
-Reactive transaction / atomicity    ✅
+Reactive transaction / atomicity        ✅
         ↓
-Domain Events                       ✅
+Domain Events                           ✅
         ↓
-Domain Events vs Integration Events ✅
+Domain Events vs Integration Events     ✅
         ↓
-Kafka fundamentals                  ⏸ DEFERRED (original reactive roadmap)
+Kafka fundamentals                      ⏸ DEFERRED (original reactive roadmap)
         ↓
-Booking Service JPA / PostgreSQL    ✅
+Booking Service JPA / PostgreSQL        ✅
         ↓
-Flyway / JPA integration tests      ✅
+Flyway / JPA integration tests          ✅
         ↓
-Transactional decorator / rollback ✅
+Transactional decorator / rollback      ✅
         ↓
-Concurrent duplicate protection    ✅
+Concurrent duplicate protection         ✅
         ↓
-HTTP + use-case integration tests    ✅
+HTTP + use-case integration tests       ✅
         ↓
-Cross-service Event availability REST ✅
+Cross-service Event availability REST   ✅
         ↓
 Retry + Circuit Breaker + Bulkhead      ✅
         ↓

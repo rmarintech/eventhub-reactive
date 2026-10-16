@@ -545,65 +545,65 @@ architecture tests remain pending
 # Current Position
 
 ``` text
-Project Foundation                  ✅
+Project Foundation                          ✅
         ↓
-DDD Fundamentals                    ✅
+DDD Fundamentals                            ✅
         ↓
-Event Aggregate                     ✅
+Event Aggregate                             ✅
         ↓
-Value Objects / Invariants          ✅
+Value Objects / Invariants                  ✅
         ↓
-Pure Domain Tests                   ✅
+Pure Domain Tests                           ✅
         ↓
-DDD Documentation                   ✅
+DDD Documentation                           ✅
         ↓
-Hexagonal Architecture              🚧 IN PROGRESS
+Hexagonal Architecture                      🚧 IN PROGRESS
         ↓
-Reactive Programming Fundamentals   ✅
+Reactive Programming Fundamentals           ✅
         ↓
-Spring WebFlux                      🚧 IN PROGRESS
+Spring WebFlux                              🚧 IN PROGRESS
         ↓
-Reactive HTTP input adapter         ✅
+Reactive HTTP input adapter                 ✅
         ↓
-HTTP error handling                 ✅
+HTTP error handling                         ✅
         ↓
-Request validation                  ✅
+Request validation                          ✅
         ↓
-Booking Domain / application flow   ✅
+Booking Domain / application flow           ✅
         ↓
-Booking HTTP API                    ✅
+Booking HTTP API                            ✅
         ↓
-Event R2DBC / PostgreSQL            ✅
+Event R2DBC / PostgreSQL                    ✅
         ↓
-Booking persistence                 ✅
+Booking persistence                         ✅
         ↓
-Concurrency / optimistic locking    ✅
+Concurrency / optimistic locking            ✅
         ↓
-Domain Events                        ✅
+Domain Events                               ✅
         ↓
-Domain vs Integration Events         ✅
+Domain vs Integration Events                ✅
         ↓
-Kafka fundamentals                   ⏸ DEFERRED (original reactive track)
+Kafka fundamentals                          ⏸ DEFERRED (original reactive track)
         ↓
-Booking Service (Spring MVC / API)       ✅
+Booking Service (Spring MVC / API)          ✅
         ↓
-Booking Service JPA / PostgreSQL         ✅
+Booking Service JPA / PostgreSQL            ✅
         ↓
-Flyway / PostgreSQL Testcontainers       ✅
+Flyway / PostgreSQL Testcontainers          ✅
         ↓
-Transaction decorator / rollback tests  ✅
+Transaction decorator / rollback tests      ✅
         ↓
-Active-booking DB uniqueness            ✅
+Active-booking DB uniqueness                ✅
         ↓
-Concurrency / HTTP integration tests     ✅
+Concurrency / HTTP integration tests        ✅
         ↓
-Event REST + Retry + CB + Bulkhead        ✅
+Event REST + Retry + CB + Bulkhead          ✅
         ↓
-Capacity reserve + compensation API      ✅ UNIT/HTTP TESTED
+Capacity reserve + compensation API         ✅ UNIT/HTTP TESTED
         ↓
-Live two-service end-to-end validation    🚧 NEXT
+Live two-service end-to-end validation      🚧 NEXT
         ↓
-Cross-service integration / Kafka        ⬜ PLANNED
+Cross-service integration / Kafka           ⬜ PLANNED
 ```
 
 ---
