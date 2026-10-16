@@ -3,7 +3,9 @@ package com.rubenmarin.bookingservice.infrastructure.configuration;
 import com.rubenmarin.bookingservice.application.exception.EventNotFoundException;
 import com.rubenmarin.bookingservice.application.exception.EventServiceUnavailableException;
 import com.rubenmarin.bookingservice.application.port.out.EventAvailabilityPort;
+import com.rubenmarin.bookingservice.application.port.out.EventCapacityPort;
 import com.rubenmarin.bookingservice.infrastructure.adapter.out.http.RestEventAvailabilityAdapter;
+import com.rubenmarin.bookingservice.infrastructure.adapter.out.http.RestEventCapacityAdapter;
 import com.rubenmarin.bookingservice.infrastructure.adapter.out.resilience.BulkheadEventAvailabilityAdapter;
 import com.rubenmarin.bookingservice.infrastructure.adapter.out.resilience.CircuitBreakerEventAvailabilityAdapter;
 import com.rubenmarin.bookingservice.infrastructure.adapter.out.resilience.RetryableEventAvailabilityAdapter;
@@ -199,6 +201,11 @@ public class EventClientConfiguration {
         );
 
         return bhAdapter;
+    }
+
+    @Bean
+    public EventCapacityPort eventCapacityPort(RestClient restClient){
+        return new RestEventCapacityAdapter(restClient);
     }
 
 

@@ -1,17 +1,16 @@
 package com.rubenmarin.bookingservice.infrastructure.transaction;
 
-
 import com.rubenmarin.bookingservice.application.port.in.BookingUseCase;
 import com.rubenmarin.bookingservice.application.port.out.BookingRepository;
 import com.rubenmarin.bookingservice.domain.model.*;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Primary;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.postgresql.PostgreSQLContainer;
@@ -27,6 +26,7 @@ class TransactionalBookingRollbackIT {
     static PostgreSQLContainer postgres = new PostgreSQLContainer("postgres:17");
 
     @Autowired
+    @Qualifier("failingBookingUseCase")
     BookingUseCase bookingUseCase;
 
     @Autowired
@@ -38,7 +38,6 @@ class TransactionalBookingRollbackIT {
     static class RollbackTestConfiguration {
 
         @Bean
-        @Primary
         BookingUseCase failingBookingUseCase(BookingRepository repository) {
             BookingUseCase failingDelegate = new BookingUseCase() {
 

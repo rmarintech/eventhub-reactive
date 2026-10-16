@@ -3,7 +3,7 @@ package com.rubenmarin.bookingservice.infrastructure.transaction;
 
 import com.rubenmarin.bookingservice.application.port.in.BookingUseCase;
 import com.rubenmarin.bookingservice.application.port.out.BookingRepository;
-import com.rubenmarin.bookingservice.application.port.out.EventAvailabilityPort;
+import com.rubenmarin.bookingservice.application.port.out.EventCapacityPort;
 import com.rubenmarin.bookingservice.domain.model.*;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -32,7 +32,7 @@ class TransactionalBookingUseCaseIT {
     static PostgreSQLContainer postgres = new PostgreSQLContainer("postgres:17");
 
     @MockitoBean
-    EventAvailabilityPort eventAvailabilityPort;
+    EventCapacityPort eventCapacityPort;
 
     @Autowired
     BookingUseCase bookingUseCase;
@@ -46,7 +46,6 @@ class TransactionalBookingUseCaseIT {
         EventId eventId = new EventId(UUID.randomUUID());
         UserId userId = new UserId(UUID.randomUUID());
 
-        Mockito.when(eventAvailabilityPort.isAvailable(eventId)).thenReturn(true);
         Booking created = bookingUseCase.createBooking(eventId, userId);
 
         //comprobamos resultado sin pasar por lógica de negocio
@@ -58,6 +57,9 @@ class TransactionalBookingUseCaseIT {
                 () -> Assertions.assertEquals(created.getUserId(), found.getUserId()),
                 () -> Assertions.assertEquals(BookingStatus.PENDING, found.getStatus())
         );
+
+        Mockito.verify(eventCapacityPort).reservePlaces(eventId, 1);
+        Mockito.verify(eventCapacityPort, Mockito.never()).releasePlaces(eventId, 1);
     }
 
     @Test
@@ -65,8 +67,6 @@ class TransactionalBookingUseCaseIT {
         // PENDING → CONFIRMED
         EventId eventId = new EventId(UUID.randomUUID());
         UserId userId = new UserId(UUID.randomUUID());
-
-        Mockito.when(eventAvailabilityPort.isAvailable(eventId)).thenReturn(true);
 
         // 1. Crear reserva PENDING
         Booking created = bookingUseCase.createBooking(eventId, userId);
@@ -99,8 +99,6 @@ class TransactionalBookingUseCaseIT {
         EventId eventId = new EventId(UUID.randomUUID());
         UserId userId = new UserId(UUID.randomUUID());
 
-        Mockito.when(eventAvailabilityPort.isAvailable(eventId)).thenReturn(true);
-
         // 1. Crear reserva PENDING
         Booking created = bookingUseCase.createBooking(eventId, userId);
 
@@ -126,8 +124,6 @@ class TransactionalBookingUseCaseIT {
         // PENDING → CONFIRMED → CANCELLED
         EventId eventId = new EventId(UUID.randomUUID());
         UserId userId = new UserId(UUID.randomUUID());
-
-        Mockito.when(eventAvailabilityPort.isAvailable(eventId)).thenReturn(true);
 
         // 1. Crear reserva
         Booking created = bookingUseCase.createBooking(eventId, userId);

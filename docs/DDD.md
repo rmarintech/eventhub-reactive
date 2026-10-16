@@ -339,7 +339,7 @@ public Capacity reserve(int places) {
     }
 
     if (places > available) {
-        throw new IllegalStateException(
+        throw new InsufficientCapacityException(
                 "Not enough available capacity"
         );
     }
@@ -363,7 +363,7 @@ public Capacity release(int places) {
     }
 
     if (available + places > total) {
-        throw new IllegalStateException(
+        throw new ExcessiveCapacityException(
                 "Cannot release more places than total capacity"
         );
     }
@@ -2096,6 +2096,8 @@ JpaBookingRepositoryAdapter                     [infrastructure, outbound]
 SpringDataBookingRepository / Hibernate / PostgreSQL
 ```
 
+**Historical wiring (superseded by §59):** the following paragraph describes the initial transactional-only composition, before the capacity-compensation decorator was added.
+
 The input port has `getBooking`, `createBooking`, `confirmBooking`, `cancelBooking`. The output port provides `findById`, `save` and `existsActiveBooking`. `BookingService` takes a `BookingRepository` in its constructor. `BookingConfiguration` registers one `BookingUseCase` bean: a `TransactionalBookingUseCase` wrapping the plain-Java service. The production repository is the JPA adapter; the previous in-memory bean registration was removed. The controller delegates via `BookingUseCase`; `BookingMapper` converts the returned domain entity into the generated response DTO. Dependency direction stays toward domain/application; Spring and HTTP are confined to adapters.
 
 Actual package paths discussed for the new service include:
@@ -2136,7 +2138,7 @@ The new service's OpenAPI-generated `BookingApi`, `CreateBookingRequest`, `Booki
 
 The new `booking-service` deliberately uses synchronous Spring MVC and JPA, to practice transactional persistence, concurrency and a classic Java stack alongside the **separate** EventHub WebFlux/R2DBC implementation. Reactive programming is not an intrinsic DDD or hexagonal requirement. It is a technology choice at the port/adapter boundary; the domain remains framework-independent in either approach.
 
-**Not implemented yet in this service:** deterministic forcing of both concurrent existence checks to return false, Kafka, reliable cross-service capacity coordination and full deployment. Database-level uniqueness and a two-thread concurrent-start test have been implemented and verified.
+**Still not implemented:** deterministic forcing of both concurrent existence checks to return false, Kafka, durable/idempotent distributed coordination and full deployment. A synchronous best-effort capacity reservation/compensation flow has since been implemented (see §59). Database-level uniqueness and a two-thread concurrent-start test have been implemented and verified.
 
 
 ## 55.7 JPA/PostgreSQL persistence and Flyway (15 October 2026)
@@ -2248,3 +2250,38 @@ BookingService (application)
 The **outer Bulkhead** limits concurrent logical operations to five, including their retries. The Circuit Breaker inside it evaluates the final outcome of Retry. OPEN rejects before further Retry/REST calls; infrastructure maps `CallNotPermittedException` and `BulkheadFullException` to the application exception `EventServiceUnavailableException`, keeping HTTP and Resilience4j out of the application layer. This protects availability, **not** atomic distributed Event-capacity reservation.
 
 The decorators, their detailed failure policy, semaphore concurrency test, CLOSED/OPEN/HALF_OPEN transition tests and still-unverified behavior are explained in **[`RESILIENCE.md`](RESILIENCE.md#circuit-breaker--resilience4j)**. The matching work is tracked in [`ROADMAP.md`](ROADMAP.md#23-microservices-evolution).
+
+
+# 59. Synchronous Event capacity reservation and Booking compensation (16 October 2026)
+
+## 59.1 Domain invariants and HTTP boundary
+
+`Event` owns its `Capacity` value object. `Capacity.reserve(places)` returns a new immutable `Capacity` or raises the **domain** `InsufficientCapacityException` when insufficient places remain; `release(places)` uses `ExcessiveCapacityException` when the release exceeds occupied places. Domain code does not depend on HTTP. `EventExceptionHandler` maps both domain conflicts and `ConcurrentUpdateException` to HTTP `409 Conflict`. The WebFlux Event API exposes `POST /events/{id}/reserve/{places}/places` and `POST /events/{id}/release/{places}/places`. Reactive R2DBC persistence uses Event optimistic locking and one bounded retry for `ConcurrentUpdateException`. A WebTestClient test verified insufficient capacity returns 409 without changing available places.
+
+## 59.2 Current Booking hexagonal composition
+
+The independent, **imperative** Booking Service uses two distinct output ports: `EventAvailabilityPort` retains the previously implemented read-only GET availability/resilience path, while the **current create-booking flow** uses `EventCapacityPort` (`reservePlaces`, `releasePlaces`) implemented by `RestEventCapacityAdapter` with blocking `RestClient`. `BookingService` now checks for active duplicate bookings and saves them; it does **not** call `isAvailable()`.
+
+```text
+POST /api/bookings
+  → BookingController
+    → CompensatingBookingUseCase           [outer coordinator, no @Transactional]
+      → EventCapacityPort.reservePlaces(eventId, 1)
+        → RestEventCapacityAdapter → POST Event Service /events/{id}/reserve/1/places
+      → TransactionalBookingUseCase       [separate Spring bean; @Transactional proxy]
+        → BookingService → BookingRepository → JPA / PostgreSQL
+      → on Booking creation/commit failure: EventCapacityPort.releasePlaces(eventId, 1)
+```
+
+The transaction decorator is a distinct Spring bean so that its `@Transactional` proxy commits (or rolls back) **before** the outer coordinator observes the outcome. A successful booking is `PENDING`. When reservation fails, the delegate is not invoked and no release is attempted. When the delegate throws after a successful reservation, the coordinator attempts a compensating release and propagates the original failure, preserving it if compensation also fails. This is a **minimal, synchronous Saga-like compensation**, not a distributed atomic transaction.
+
+The REST adapter translates reserve 409 to `EventNotAvailableException`, 404 to `EventNotFoundException`, and HTTP 5xx/transport failures to `EventServiceUnavailableException`. During `releasePlaces`, HTTP 409 currently propagates as `HttpClientErrorException.Conflict`, rather than incorrectly labeling excess release as unavailable capacity. No automatic Retry decorator wraps these **mutating POST** calls; the existing `Bulkhead → Circuit Breaker → Retry → REST` chain remains applicable to **GET availability** only.
+
+## 59.3 Verification and limitations
+
+- Event WebTestClient insufficient-capacity test passed (409; available count unchanged).
+- `RestEventCapacityAdapterTest`: eight tests passed covering reserve/release HTTP success, 404, 409 and 500, including the distinct release-409 behavior. These use `MockRestServiceServer`, not a live Event Service.
+- `CompensatingBookingUseCaseTest`: three Mockito tests passed for success, compensation after delegate failure, and no compensation when initial reservation fails.
+- Booking HTTP/JPA/concurrency tests were adapted from `EventAvailabilityPort` mocks to `EventCapacityPort`; the end-to-end two-service POST workflow has **not yet** been manually verified.
+
+**Known limitations:** no shared transaction across the two PostgreSQL databases; no durable compensation retry, reservation ID, idempotency key, outbox or guaranteed resolution of ambiguous network timeouts. A failure or timeout during release can leave capacity inconsistent, and a timeout during reserve can leave an uncertain outcome. Cancellation currently does not trigger remote capacity release. These are deferred design tasks, not established production guarantees.

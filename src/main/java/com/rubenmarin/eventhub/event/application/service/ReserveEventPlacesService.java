@@ -6,6 +6,7 @@ import com.rubenmarin.eventhub.event.application.port.in.ReserveEventPlacesUseCa
 import com.rubenmarin.eventhub.event.application.port.out.EventRepository;
 import com.rubenmarin.eventhub.event.domain.model.Event;
 import com.rubenmarin.eventhub.event.domain.model.EventId;
+import com.rubenmarin.eventhub.event.domain.model.exception.InsufficientCapacityException;
 import reactor.core.publisher.Mono;
 
 public class ReserveEventPlacesService implements ReserveEventPlacesUseCase {

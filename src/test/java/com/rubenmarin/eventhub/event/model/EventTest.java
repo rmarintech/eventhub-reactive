@@ -1,6 +1,7 @@
 package com.rubenmarin.eventhub.event.model;
 
 import com.rubenmarin.eventhub.event.domain.model.*;
+import com.rubenmarin.eventhub.event.domain.model.exception.InsufficientCapacityException;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -61,7 +62,7 @@ public class EventTest {
         event.publish();
 
         Assertions.assertThrows(
-                IllegalStateException.class,
+                InsufficientCapacityException.class,
                 () -> event.reservePlaces(21)
         );
     }

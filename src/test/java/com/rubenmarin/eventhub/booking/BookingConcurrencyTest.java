@@ -10,6 +10,7 @@ import com.rubenmarin.eventhub.event.application.port.in.CreateEventUseCase;
 import com.rubenmarin.eventhub.event.application.port.in.EventQueryUseCase;
 import com.rubenmarin.eventhub.event.application.port.in.PublishEventUseCase;
 import com.rubenmarin.eventhub.event.domain.model.Event;
+import com.rubenmarin.eventhub.event.domain.model.exception.InsufficientCapacityException;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -73,7 +74,7 @@ class BookingConcurrencyTest {
             Mono<Booking> bookingB = createBookingUseCase.createBooking(createBookingBCommand);
 
             return Mono.zip(bookingA, bookingB)
-                    .onErrorResume(IllegalStateException.class, error -> {
+                    .onErrorResume(InsufficientCapacityException.class, error -> {
                         return Mono.empty();
                     }).then(
                             Mono.zip(

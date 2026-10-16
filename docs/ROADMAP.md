@@ -91,7 +91,7 @@ architecture tests remain pending
 
 # 4. Domain Evolution
 
--   [ ] Domain-specific exceptions
+-   [x] Domain-specific capacity exceptions (`InsufficientCapacityException`, `ExcessiveCapacityException`)
 -   [x] Domain events
 -   [x] Booking domain-event tests
 -   [x] Domain event publication port
@@ -599,7 +599,9 @@ Concurrency / HTTP integration tests     ✅
         ↓
 Event REST + Retry + CB + Bulkhead        ✅
         ↓
-Distributed capacity reservation         🚧 NEXT
+Capacity reserve + compensation API      ✅ UNIT/HTTP TESTED
+        ↓
+Live two-service end-to-end validation    🚧 NEXT
         ↓
 Cross-service integration / Kafka        ⬜ PLANNED
 ```
@@ -659,13 +661,13 @@ Cross-service integration / Kafka        ⬜ PLANNED
 - [x] `BookingHttpIT`: real Spring MVC/MockMvc + PostgreSQL HTTP 201 and duplicate 409
 - [x] `EventAvailabilityPort` output port and `RestEventAvailabilityAdapter` with `RestClient`
 - [x] Spring HTTP client bean configured through `EventClientConfiguration`
-- [x] Check Event is `PUBLISHED` and has `available > 0` before creating Booking
+- [x] Read-only Event availability GET check implemented earlier (historical create flow; current `BookingService` no longer invokes it)
 - [x] `EventNotAvailableException` → HTTP 409 `EVENT_NOT_AVAILABLE`
 - [x] Remote 404 → `EventNotFoundException` → HTTP 404 `EVENT_NOT_FOUND`
 - [x] Remote 5xx and connection/I/O failure → `EventServiceUnavailableException` → HTTP 503
 - [x] Configure client connection/read timeout 2s/3s
 - [x] `MockRestServiceServer` tests for event statuses, empty capacity, additional JSON fields, 404, 500 and I/O failure
-- [x] Unit and Spring HTTP integration tests with mocked Event availability; no external service required in CI
+- [x] Unit and Spring HTTP/JPA integration tests updated to mock `EventCapacityPort` in the current create flow; no external Event Service required in these tests
 - [x] Maven Failsafe integration-test execution: `booking-service/.\mvnw.cmd clean verify`
 - [x] Manual real Event Service GET smoke test
 - [ ] Automated test that explicitly triggers configured timeouts
@@ -684,10 +686,18 @@ Cross-service integration / Kafka        ⬜ PLANNED
 - [ ] Reusable cross-service communication checklist (`docs/MICROSERVICES-CHECKLIST.md`) after resilience topics
 - [ ] Optional deterministic concurrency test forcing both pre-checks to report no booking
 - [x] Implement synchronous Event availability validation (read-only)
-- [ ] Design atomic Event capacity reservation (read-only availability is insufficient)
+- [x] Event-side capacity reservation/release HTTP endpoints with domain validation, optimistic locking and 409 mapping
+- [x] `EventCapacityPort` + `RestEventCapacityAdapter` for synchronous reserve/release (without automatic POST retry)
+- [x] `CompensatingBookingUseCase` wraps the transactional delegate; compensating release when Booking creation fails
+- [x] Spring wiring with separate transactional proxy bean and outer compensator
+- [x] Event insufficient-capacity HTTP test (409, no capacity change)
+- [x] `RestEventCapacityAdapterTest` eight success/error mapping tests
+- [x] `CompensatingBookingUseCaseTest` three unit tests: happy path, delegate failure, reserve failure
+- [ ] Idempotent/durable distributed capacity reservation or recovery for ambiguous timeouts
 - [x] Service-to-service Event availability query via REST
-- [ ] Service-to-service Event capacity coordination and compensation
-- [ ] Cross-service consistency, failures and compensation strategy
+- [x] Basic service-to-service Event capacity coordination with synchronous best-effort compensation (unit/HTTP mock tested)
+- [ ] Manual live two-service booking + failure/compensation verification
+- [ ] Durable cross-service consistency, failure recovery and idempotent compensation strategy
 - [ ] Kafka-based integration events / reliable outbox (if selected)
 - [ ] Containerization, deployment and CI/CD for the independent service
 
@@ -695,4 +705,4 @@ Cross-service integration / Kafka        ⬜ PLANNED
 
 ## Next milestone
 
-Bounded Resilience4j **Retry, Circuit Breaker and SemaphoreBulkhead** are implemented and tested for Event availability. Bulkhead is the outer decorator (5 concurrent operations, no wait), Circuit Breaker wraps Retry, and the REST adapter remains innermost. **Next:** design and test atomic Event-capacity reservation between services, then address consistency/compensation. Measured HTTP timeouts, overall latency budget, automatic OPEN→HALF_OPEN timing, error classification and the communication checklist remain follow-up work; Kafka and outbox are not yet implemented.
+Event capacity reserve/release endpoints, the synchronous `EventCapacityPort` REST adapter and `CompensatingBookingUseCase` are implemented and covered by HTTP-mock and unit tests. The existing Resilience4j Bulkhead → Circuit Breaker → Retry chain remains **GET-availability-specific**, not part of mutating POST calls. **Next:** manually exercise the real two-service booking and compensation flow; then address ambiguous timeouts, idempotency, durability and cancellation capacity release. Kafka, outbox and deployment remain deferred.

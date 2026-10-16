@@ -8,7 +8,7 @@ This document explains the **synchronous Booking Service → Event Service** res
 - Callee: **Event Service** (WebFlux/R2DBC, port 8080), queried through `GET /events/{id}`.
 - Application contract: `EventAvailabilityPort.isAvailable(EventId)` returns `boolean`.
 - `true` means Event has `PUBLISHED` status and `available > 0`; `false` is a *valid technical response* for a non-bookable Event.
-- REST availability checks **do not reserve capacity atomically**. Cross-service overselling prevention is not implemented.
+- REST availability checks **do not reserve capacity**. A separate Event-capacity POST path has since been implemented for booking creation; see the current-flow section below. The GET-specific resilience decorators are **not** applied to mutating POST calls.
 
 ```text
 BookingService (application)
@@ -224,7 +224,25 @@ Bulkhead does not replace an Event Service-side concurrency limit, a global requ
 - Measured expiration of connection/read timeouts and an **overall call deadline** across retries.
 - Real-time automatic OPEN→HALF_OPEN timing test; refined backoff/jitter and selective HTTP 5xx/429 retry policy.
 - Resilience observability (metrics, logging, distributed traces), production tuning and capacity limits across replicas. Bulkhead is implemented at the individual Booking Service instance, not as a distributed global limit.
-- Atomic **Event-capacity reservation**, distributed consistency/compensation, and distributed integration tests.
+- Durable/idempotent Event-capacity compensation, distributed consistency guarantees, and real two-service end-to-end integration tests. Basic synchronous capacity reservation/compensation is implemented, but not fault-tolerant.
 - Reusable `docs/MICROSERVICES-CHECKLIST.md` after studying the remaining cross-service reliability concerns.
 
-See [`ROADMAP.md`](ROADMAP.md#23-microservices-evolution) for current/pending implementation milestones. None of the above pending items are described as implemented.
+See [`ROADMAP.md`](ROADMAP.md#23-microservices-evolution) for current/pending implementation milestones. The synchronous best-effort reservation/compensation path is documented separately below; the remaining reliability gaps are not described as implemented.
+
+
+## Current create-booking path — capacity reservation and compensation (16 October 2026)
+
+**Important distinction:** the availability `GET /events/{id}` and its `Bulkhead → Circuit Breaker → Retry → REST` decorators remain implemented, but **`BookingService.createBooking()` no longer calls `EventAvailabilityPort.isAvailable()`**. Its current path is:
+
+```text
+BookingController → CompensatingBookingUseCase
+  → EventCapacityPort.reservePlaces(eventId, 1)
+    → RestEventCapacityAdapter → POST /events/{id}/reserve/1/places
+  → TransactionalBookingUseCase → BookingService → PostgreSQL
+  → on delegate failure: EventCapacityPort.releasePlaces(eventId, 1)
+    → RestEventCapacityAdapter → POST /events/{id}/release/1/places
+```
+
+Both capacity calls use blocking `RestClient` without an automatic mutating-request retry decorator. This avoids blindly repeating a POST after a network timeout when its side effect may already have occurred. The reserve adapter translates 409 to `EventNotAvailableException`, 404 to `EventNotFoundException`, and upstream 5xx/transport failure to `EventServiceUnavailableException`. A **release 409 currently propagates** as `HttpClientErrorException.Conflict`; it is not equivalent to an unavailable event. The outer coordinator tries to release a previously reserved place if Booking creation fails and propagates the original creation error.
+
+**Verified:** eight `RestEventCapacityAdapterTest` HTTP-mock tests and three `CompensatingBookingUseCaseTest` coordination tests are green. Event Service's insufficient-capacity WebTestClient test is green. **Not verified:** a live two-service booking/compensation flow and durable, idempotent recovery. If reserve or compensation times out, a remote side effect may already have happened; no distributed exactly-once guarantee or persistent compensation log exists. Booking cancellation does not yet release capacity in Event Service.

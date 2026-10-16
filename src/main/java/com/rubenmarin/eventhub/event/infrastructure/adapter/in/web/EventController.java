@@ -1,9 +1,6 @@
 package com.rubenmarin.eventhub.event.infrastructure.adapter.in.web;
 
-import com.rubenmarin.eventhub.event.application.port.in.CreateEventCommand;
-import com.rubenmarin.eventhub.event.application.port.in.CreateEventUseCase;
-import com.rubenmarin.eventhub.event.application.port.in.EventQueryUseCase;
-import com.rubenmarin.eventhub.event.application.port.in.PublishEventUseCase;
+import com.rubenmarin.eventhub.event.application.port.in.*;
 import com.rubenmarin.eventhub.event.domain.model.Event;
 import com.rubenmarin.eventhub.event.domain.model.EventId;
 import com.rubenmarin.eventhub.event.infrastructure.adapter.in.web.exception.InvalidEventIdException;
@@ -25,13 +22,20 @@ public class EventController {
     private final CreateEventUseCase createEventUseCase;
     private final EventQueryUseCase eventQueryUseCase;
     private final PublishEventUseCase publishEventUseCase;
+    private final ReserveEventPlacesUseCase reserveEventPlacesUseCase;
+    private final ReleaseEventPlacesUseCase releaseEventPlacesUseCase;
 
-    public EventController(CreateEventUseCase createEventUseCase,
-                           EventQueryUseCase eventQueryUseCase,
-    PublishEventUseCase publishEventUseCase ) {
+    public EventController(
+            CreateEventUseCase createEventUseCase,
+            EventQueryUseCase eventQueryUseCase,
+            PublishEventUseCase publishEventUseCase,
+            ReserveEventPlacesUseCase reserveEventPlacesUseCase,
+            ReleaseEventPlacesUseCase releaseEventPlacesUseCase) {
         this.createEventUseCase = createEventUseCase;
         this.eventQueryUseCase = eventQueryUseCase;
         this.publishEventUseCase = publishEventUseCase;
+        this.reserveEventPlacesUseCase = reserveEventPlacesUseCase;
+        this.releaseEventPlacesUseCase = releaseEventPlacesUseCase;
     }
 
     @PostMapping(
@@ -52,6 +56,40 @@ public class EventController {
 
         Mono<Event> event = publishEventUseCase.publishEvent(parseEventId(id));
         Mono<EventResponse> response = event.map(value -> toResponse(value));
+        return response;
+    }
+
+    @PostMapping("/{id}/reserve/{places}/places")
+    @ResponseStatus(HttpStatus.OK)
+    public Mono<EventResponse> reserveEventPlaces(
+            @PathVariable String id,
+            @PathVariable int places) {
+
+        Mono<Event> reservedEvent =
+                reserveEventPlacesUseCase.reserveEventPlaces(
+                        parseEventId(id),
+                        places
+                );
+
+        Mono<EventResponse> response = reservedEvent.map(event -> toResponse(event));
+
+        return response;
+    }
+
+    @PostMapping("/{id}/release/{places}/places")
+    @ResponseStatus(HttpStatus.OK)
+    public Mono<EventResponse> releaseEventPlaces(
+            @PathVariable String id,
+            @PathVariable int places) {
+
+        Mono<Event> eventReleased =
+                releaseEventPlacesUseCase.releaseEventPlaces(
+                        parseEventId(id),
+                        places
+                );
+
+        Mono<EventResponse> response = eventReleased.map(event -> toResponse(event));
+
         return response;
     }
 

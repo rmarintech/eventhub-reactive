@@ -1,10 +1,13 @@
 package com.rubenmarin.eventhub.event.domain.model;
 
+import com.rubenmarin.eventhub.event.domain.model.exception.ExcessiveCapacityException;
+import com.rubenmarin.eventhub.event.domain.model.exception.InsufficientCapacityException;
+
 /**
  * Represents the capacity of an Event.
- *
+ * <p>
  * Domain invariants:
- *
+ * <p>
  * total > 0
  * available >= 0
  * available <= total
@@ -17,21 +20,15 @@ public record Capacity(
     public Capacity {
 
         if (total <= 0) {
-            throw new IllegalArgumentException(
-                    "Total capacity must be greater than zero"
-            );
+            throw new IllegalArgumentException("Total capacity must be greater than zero");
         }
 
         if (available < 0) {
-            throw new IllegalArgumentException(
-                    "Available capacity cannot be negative"
-            );
+            throw new IllegalArgumentException("Available capacity cannot be negative");
         }
 
         if (available > total) {
-            throw new IllegalArgumentException(
-                    "Available capacity cannot exceed total capacity"
-            );
+            throw new IllegalArgumentException("Available capacity cannot exceed total capacity");
         }
     }
 
@@ -44,39 +41,26 @@ public record Capacity(
 
     public Capacity reserve(int places) {
         if (places <= 0) {
-            throw new IllegalArgumentException(
-                    "Places to reserve must be greater than zero"
-            );
+            throw new IllegalArgumentException("Places to reserve must be greater than zero");
         }
 
         if (places > available) {
-            throw new IllegalStateException(
-                    "Not enough available capacity"
-            );
+            throw new InsufficientCapacityException("Not enough available capacity");
         }
 
-        return new Capacity(
-                total,
-                available - places
-        );
+        return new Capacity(total, available - places);
     }
+
     public Capacity release(int places) {
         if (places <= 0) {
-            throw new IllegalArgumentException(
-                    "Places to reserve must be greater than zero"
-            );
+            throw new IllegalArgumentException("Places to reserve must be greater than zero");
         }
 
         if (places + available > total) {
-            throw new IllegalStateException(
-                    "Cannot release more places than total capacity"
-            );
+            throw new ExcessiveCapacityException("Cannot release more places than total capacity");
         }
 
 
-        return new Capacity(
-                total,
-                available + places
-        );
+        return new Capacity(total, available + places);
     }
 }

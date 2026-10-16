@@ -10,6 +10,7 @@ import com.rubenmarin.eventhub.booking.domain.model.CustomerId;
 import com.rubenmarin.eventhub.event.application.port.out.EventRepository;
 import com.rubenmarin.eventhub.event.application.service.ReserveEventPlacesService;
 import com.rubenmarin.eventhub.event.domain.model.*;
+import com.rubenmarin.eventhub.event.domain.model.exception.InsufficientCapacityException;
 import com.rubenmarin.eventhub.shared.application.port.out.DomainEventPublisher;
 import com.rubenmarin.eventhub.shared.application.port.out.IntegrationEventPublisher;
 import com.rubenmarin.eventhub.shared.domain.event.DomainEvent;
@@ -83,7 +84,7 @@ public class CreateBookingServiceTest {
         });
 
         StepVerifier.create(booking)
-                .expectError(IllegalStateException.class)
+                .expectError(InsufficientCapacityException.class)
                 .verify();
 
         Assertions.assertNull(bookingRepository.savedBooking);

@@ -2,10 +2,8 @@ package com.rubenmarin.bookingservice.application.service;
 
 import com.rubenmarin.bookingservice.application.exception.BookingAlreadyExistsException;
 import com.rubenmarin.bookingservice.application.exception.BookingNotFoundException;
-import com.rubenmarin.bookingservice.application.exception.EventNotAvailableException;
 import com.rubenmarin.bookingservice.application.port.in.BookingUseCase;
 import com.rubenmarin.bookingservice.application.port.out.BookingRepository;
-import com.rubenmarin.bookingservice.application.port.out.EventAvailabilityPort;
 import com.rubenmarin.bookingservice.domain.model.Booking;
 import com.rubenmarin.bookingservice.domain.model.BookingId;
 import com.rubenmarin.bookingservice.domain.model.EventId;
@@ -14,13 +12,12 @@ import com.rubenmarin.bookingservice.domain.model.UserId;
 public class BookingService implements BookingUseCase {
 
     private final BookingRepository repository;
-    private final EventAvailabilityPort eventAvailabilityPort;
 
-    public BookingService(BookingRepository repository, EventAvailabilityPort eventAvailabilityPort) {
+    public BookingService(
+            BookingRepository repository
+    ) {
 
         this.repository = repository;
-        this.eventAvailabilityPort = eventAvailabilityPort;
-
     }
 
     @Override
@@ -36,10 +33,6 @@ public class BookingService implements BookingUseCase {
 
         if (repository.existsActiveBooking(eventId, userId)) {
             throw new BookingAlreadyExistsException(eventId, userId);
-        }
-
-        if (!eventAvailabilityPort.isAvailable(eventId)){
-            throw new EventNotAvailableException(eventId);
         }
 
         Booking booking = new Booking(eventId, userId);

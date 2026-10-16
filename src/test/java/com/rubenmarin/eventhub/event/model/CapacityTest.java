@@ -1,6 +1,8 @@
 package com.rubenmarin.eventhub.event.model;
 
 import com.rubenmarin.eventhub.event.domain.model.Capacity;
+import com.rubenmarin.eventhub.event.domain.model.exception.ExcessiveCapacityException;
+import com.rubenmarin.eventhub.event.domain.model.exception.InsufficientCapacityException;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -72,7 +74,7 @@ class CapacityTest {
         Capacity capacity = new Capacity(20, 2);
 
         Assertions.assertThrows(
-                IllegalStateException.class,
+                InsufficientCapacityException.class,
                 () -> capacity.reserve(3)
         );
     }
@@ -93,7 +95,7 @@ class CapacityTest {
         Capacity capacity = new Capacity(20, 19);
 
         Assertions.assertThrows(
-                IllegalStateException.class,
+                ExcessiveCapacityException.class,
                 () -> capacity.release(2)
         );
     }

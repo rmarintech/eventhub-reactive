@@ -25,9 +25,6 @@ import java.util.UUID;
 class BookingServiceTest {
 
     @Mock
-    EventAvailabilityPort eventAvailabilityPort;
-
-    @Mock
     BookingRepository repository;
 
     @InjectMocks
@@ -45,7 +42,6 @@ class BookingServiceTest {
         Mockito.when(repository.save(Mockito.any(Booking.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
 
-        Mockito.when(eventAvailabilityPort.isAvailable(eventId)).thenReturn(true);
 
         // Act
         Booking created = bookingService.createBooking(eventId, userId);
@@ -58,12 +54,8 @@ class BookingServiceTest {
                 () -> Assertions.assertEquals(BookingStatus.PENDING, created.getStatus())
         );
 
-        //Primero comprobamos duplicados, después disponibilidad y finalmente guardamos.
-        InOrder inOrder = Mockito.inOrder(repository, eventAvailabilityPort);
-
         Mockito.verify(repository).existsActiveBooking(eventId, userId);
         Mockito.verify(repository).save(Mockito.same(created));
-        Mockito.verify(eventAvailabilityPort).isAvailable(eventId);
     }
 
     @Test
@@ -227,21 +219,4 @@ class BookingServiceTest {
         Mockito.verify(repository, Mockito.never()).save(Mockito.any(Booking.class));
     }
 
-    @Test
-    void shouldRejectBookingWhenEventIsNotAvailable() {
-
-        EventId eventId = new EventId(UUID.randomUUID());
-        UserId userId = new UserId(UUID.randomUUID());
-
-        Mockito.when(repository.existsActiveBooking(eventId, userId)).thenReturn(false);
-
-        Mockito.when(eventAvailabilityPort.isAvailable(eventId)).thenReturn(false);
-
-        Assertions.assertThrows(
-                EventNotAvailableException.class,
-                () -> bookingService.createBooking(eventId, userId)
-        );
-
-        Mockito.verify(repository, Mockito.never()).save(Mockito.any());
-    }
 }

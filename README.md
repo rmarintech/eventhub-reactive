@@ -13,7 +13,7 @@ architectural patterns are introduced when they are needed, and the
 documentation is updated only after they have been studied and
 implemented.
 
-> **Architecture update — 15 October 2026:** EventHub is deliberately **evolving from a reactive monolith to a mixed-paradigm microservices learning project**. The Booking capability is being **extracted and redesigned** as an independent **imperative Spring MVC service**, rather than retained as a second active Booking implementation. Historical WebFlux/R2DBC Booking material remains in the documentation as evidence of earlier work, **not as a parallel current service**. This is a conscious portfolio/learning decision to practise both paradigms; it is **not presented as an optimal production architecture**. The independent Booking service now has JPA/PostgreSQL persistence, Flyway migrations, Testcontainers integration tests and a transactional use-case decorator; a first synchronous REST integration for Event availability is implemented and tested; distributed capacity reservation remains pending.
+> **Architecture update — 15 October 2026:** EventHub is deliberately **evolving from a reactive monolith to a mixed-paradigm microservices learning project**. The Booking capability is being **extracted and redesigned** as an independent **imperative Spring MVC service**, rather than retained as a second active Booking implementation. Historical WebFlux/R2DBC Booking material remains in the documentation as evidence of earlier work, **not as a parallel current service**. This is a conscious portfolio/learning decision to practise both paradigms; it is **not presented as an optimal production architecture**. The independent Booking service now has JPA/PostgreSQL persistence, Flyway migrations, Testcontainers integration tests and a transactional use-case decorator; a first synchronous REST integration for Event availability is implemented and tested; a basic synchronous capacity-reservation/compensation path is implemented and unit/HTTP-mock-tested, but real end-to-end verification and robust distributed recovery remain pending.
 
 ## Current components and ownership
 
@@ -59,13 +59,13 @@ GET  /api/bookings/{id}                  → 200 OK / 404 Not Found
 - `JpaBookingRepositoryAdapter.save()` now uses `saveAndFlush()` to surface database errors inside the adapter. The adapter inspects the Hibernate constraint name nested in Spring’s `DataIntegrityViolationException`, translates only `uq_bookings_active_event_user` to `BookingAlreadyExistsException` and propagates unrelated failures unchanged (Mockito test). `flush()` is not a commit.
 - Two-thread `ConcurrentBookingIT` with `ExecutorService`/`CountDownLatch` passed: one creation succeeded and the other was rejected. This is a concurrent-start test, not a deterministic forcing of both existence reads to false.
 - `TransactionalBookingUseCaseIT` verified persisted creation and the transitions `PENDING → CONFIRMED`, `PENDING → CANCELLED`, `CONFIRMED → CANCELLED`. `BookingHttpIT` verified real `POST /api/bookings` → `201`, and repeated POST → `409` with `BOOKING_ALREADY_EXISTS`, through MockMvc and Testcontainers, without mocks of application services.
-- **Still pending:** distributed Event-capacity coordination, Kafka integration, deterministic race-barrier test and full deployment.
+- **Subsequent milestone:** a basic synchronous Event-capacity reservation and compensation flow has now been implemented (below). Still pending: live two-service end-to-end test, durable/idempotent distributed recovery, Kafka integration, deterministic race-barrier test and full deployment.
 
 ### Cross-service REST availability — 15 October 2026
 
 Booking Service (Spring MVC, port 8081) synchronously queries Event Service (WebFlux, port 8080) through application output port `EventAvailabilityPort` and infrastructure `RestEventAvailabilityAdapter` using Spring `RestClient`. The client requests `GET /events/{id}` and considers an event available only if `status == PUBLISHED` and `available > 0`. A reduced `EventResponse` DTO reads only the fields needed by Booking. The call validates availability but **does not reserve Event capacity**, so distributed overselling protection is still pending.
 
-`BookingService.createBooking` checks for an existing active booking first, then calls `EventAvailabilityPort`, and saves a new `PENDING` booking only if available. Errors are translated at infrastructure boundaries: a missing remote event becomes `EventNotFoundException` and HTTP `404 EVENT_NOT_FOUND`; an existing but unavailable event becomes `409 EVENT_NOT_AVAILABLE`; remote HTTP 5xx and connection/read failures become `EventServiceUnavailableException` and HTTP `503 EVENT_SERVICE_UNAVAILABLE`. Error bodies use generated RFC 9457 `ProblemDetail`. `RestClient` has a 2-second connection timeout and 3-second read timeout configured with `SimpleClientHttpRequestFactory`; expiration of those limits has **not** been independently verified with a timing test.
+**Historical flow before the compensation milestone:** `BookingService.createBooking` checked for an existing active booking, then called `EventAvailabilityPort`, and saved a new `PENDING` booking if available. The current flow now uses `CompensatingBookingUseCase` and `EventCapacityPort` (below). Errors are translated at infrastructure boundaries: a missing remote event becomes `EventNotFoundException` and HTTP `404 EVENT_NOT_FOUND`; an existing but unavailable event becomes `409 EVENT_NOT_AVAILABLE`; remote HTTP 5xx and connection/read failures become `EventServiceUnavailableException` and HTTP `503 EVENT_SERVICE_UNAVAILABLE`. Error bodies use generated RFC 9457 `ProblemDetail`. `RestClient` has a 2-second connection timeout and 3-second read timeout configured with `SimpleClientHttpRequestFactory`; expiration of those limits has **not** been independently verified with a timing test.
 
 Testing includes `RestEventAvailabilityAdapterTest` with `MockRestServiceServer` for published/full/draft/cancelled events, extra JSON properties, 404, 500 and simulated I/O failure; `BookingServiceTest` with mocked ports; `BookingHttpIT` with real Spring MVC/PostgreSQL and mocked Event availability for 201/409/404/503; `ConcurrentBookingIT` and transaction integration tests with the external port mocked. A manual cross-service GET has also been exercised. Maven Failsafe now runs `*IT` tests during `verify`:
 
@@ -74,7 +74,7 @@ cd booking-service
 .\mvnw.cmd clean verify
 ```
 
-Remaining: independently test actual timeout expiration; refine Retry/Circuit Breaker/Bulkhead policies; decide whether remote 429/other 4xx need explicit mappings; implement **atomic Event capacity reservation** and cross-service consistency/compensation. A reusable communication checklist is planned once those topics have been studied.
+Remaining: independently test actual timeout expiration; refine GET-availability Retry/Circuit Breaker/Bulkhead policies; decide whether remote 429/other 4xx need explicit mappings; verify the new Event capacity reserve/release and synchronous compensation path end to end; design reliable/idempotent distributed recovery. A reusable communication checklist is planned once those topics have been studied.
 
 ### Event availability resilience — 15–16 October 2026
 
@@ -85,9 +85,28 @@ The independent Booking Service protects its synchronous Event availability HTTP
 - **Circuit Breaker:** 50% failure-rate threshold, count-based window of 10, minimum 10 calls, 10 s OPEN wait, 2 HALF_OPEN probes; remote 404 ignored.
 - **Bulkhead:** semaphore with 5 concurrent operations and zero wait; rejected calls are translated from `BulkheadFullException` to `EventServiceUnavailableException` (HTTP 503).
 - **Error handling:** Circuit Breaker OPEN or Bulkhead full are translated to `EventServiceUnavailableException` and returned as HTTP 503.
-- **Verified:** isolated Retry/Circuit Breaker tests, a latch-based Bulkhead concurrency test and Spring outer-bean wiring; automatic timer transition, global latency budget and distributed capacity reservation remain pending.
+- **Verified:** isolated Retry/Circuit Breaker tests, a latch-based Bulkhead concurrency test and Spring outer-bean wiring; automatic timer transition, global latency budget and durable/idempotent distributed capacity coordination remains pending.
 
 **Full explanation, configuration, architecture diagram, test cases and known limitations:** [Resilience — Timeout, Retry, Circuit Breaker & Bulkhead](docs/RESILIENCE.md).
+
+### Event capacity reservation and synchronous compensation — 16 October 2026
+
+The **current** `POST /api/bookings` flow uses `CompensatingBookingUseCase`, not the earlier `EventAvailabilityPort.isAvailable()` check. Booking Service remains **imperative** (Spring MVC, RestClient, JPA/PostgreSQL), while Event Service implements the capacity API with **WebFlux/Reactor/R2DBC**.
+
+```text
+POST /api/bookings  [Booking Service :8081]
+  → CompensatingBookingUseCase
+    → EventCapacityPort.reservePlaces(eventId, 1)
+      → POST /events/{id}/reserve/1/places  [Event Service :8080]
+    → TransactionalBookingUseCase (@Transactional, separate Spring bean)
+      → BookingService → JPA / PostgreSQL
+    → if creation fails: EventCapacityPort.releasePlaces(eventId, 1)
+      → POST /events/{id}/release/1/places  [Event Service :8080]
+```
+
+Event's `Capacity` value object raises `InsufficientCapacityException` or `ExcessiveCapacityException` to protect its invariants; the Event HTTP advice maps those domain violations to **409 Conflict**. For `reservePlaces`, the Booking REST adapter maps HTTP 409 to `EventNotAvailableException`, 404 to `EventNotFoundException`, and HTTP 5xx/transport failures to `EventServiceUnavailableException`. Release HTTP 409 currently propagates as a raw client conflict; it does **not** mean insufficient available capacity. Mutating POSTs have **no automatic Retry**. The previous `Bulkhead → Circuit Breaker → Retry → REST` implementation remains documented for the **read-only GET availability** path, not for current booking creation.
+
+**Verified:** Event insufficient-capacity HTTP test; eight `RestEventCapacityAdapterTest` HTTP-mock tests; three `CompensatingBookingUseCaseTest` unit tests. Existing Booking HTTP/JPA integration tests were adapted to mock `EventCapacityPort`. **Not yet verified:** full real two-service creation and failed-booking compensation. This is **best-effort synchronous compensation**, not a distributed transaction: ambiguous timeouts, idempotency, durable recovery and capacity release on booking cancellation remain outstanding.
 
 ### Documentation map
 

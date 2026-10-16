@@ -1,9 +1,5 @@
 package com.rubenmarin.eventhub.event.infrastructure.adapter.in.web;
 
-import com.rubenmarin.eventhub.event.application.exception.EventNotFoundException;
-import com.rubenmarin.eventhub.event.domain.model.Event;
-import com.rubenmarin.eventhub.event.infrastructure.adapter.in.web.CreateEventRequest;
-import com.rubenmarin.eventhub.event.infrastructure.adapter.in.web.EventResponse;
 import com.rubenmarin.eventhub.event.infrastructure.adapter.in.web.exception.ValidationErrorResponse;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -232,5 +228,176 @@ class EventControllerTest {
 
                 .expectStatus().isBadRequest();
     }
+
+
+    @Test
+    void shouldReserveEventPlaces() {
+
+        // 1. Crear un evento con 10 plazas
+        CreateEventRequest request = new CreateEventRequest(
+                "Test Reservation",
+                "Event reservation HTTP test",
+                LocalDateTime.now().plusDays(30),
+                10,
+                new BigDecimal("25.00"),
+                "EUR"
+        );
+
+        EventResponse createdEvent = webTestClient.post()
+                .uri("/events")
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue(request)
+                .exchange()
+                .expectStatus().isCreated()
+                .expectBody(EventResponse.class)
+                .returnResult()
+                .getResponseBody();
+
+        Assertions.assertNotNull(createdEvent);
+
+        String eventId = createdEvent.id().toString();
+
+        // 2. Publicar el evento
+        webTestClient.post()
+                .uri("/events/" + eventId + "/publish")
+                .exchange()
+                .expectStatus().isOk();
+
+        // 3. Reservar 2 plazas
+        webTestClient.post()
+                .uri("/events/" + eventId + "/reserve/2/places")
+                .exchange()
+                .expectStatus().isOk()
+                .expectBody(EventResponse.class)
+                .consumeWith(response -> {
+
+                    EventResponse event = response.getResponseBody();
+
+                    Assertions.assertNotNull(event);
+                    Assertions.assertEquals(10, event.capacity());
+                    Assertions.assertEquals(8, event.available());
+                    Assertions.assertEquals("PUBLISHED", event.status());
+                });
+
+        // 4. Comprobar que el cambio se ha persistido
+        webTestClient.get()
+                .uri("/events/" + eventId)
+                .exchange()
+                .expectStatus().isOk()
+                .expectBody(EventResponse.class)
+                .consumeWith(response -> {
+
+                    EventResponse event = response.getResponseBody();
+
+                    Assertions.assertNotNull(event);
+                    Assertions.assertEquals(8, event.available());
+                });
+    }
+
+    @Test
+    void shouldReleaseEventPlaces() {
+
+        CreateEventRequest request = new CreateEventRequest(
+                "Test Release",
+                "Event release HTTP test",
+                LocalDateTime.now().plusDays(30),
+                10,
+                new BigDecimal("25.00"),
+                "EUR"
+        );
+
+        EventResponse createdEvent = webTestClient.post()
+                .uri("/events")
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue(request)
+                .exchange()
+                .expectStatus().isCreated()
+                .expectBody(EventResponse.class)
+                .returnResult()
+                .getResponseBody();
+
+        Assertions.assertNotNull(createdEvent);
+        String eventId = createdEvent.id().toString();
+
+        webTestClient.post()
+                .uri("/events/" + eventId + "/publish")
+                .exchange()
+                .expectStatus().isOk();
+
+        webTestClient.post()
+                .uri("/events/" + eventId + "/reserve/2/places")
+                .exchange()
+                .expectStatus().isOk();
+
+        webTestClient.post()
+                .uri("/events/" + eventId + "/release/2/places")
+                .exchange()
+                .expectStatus().isOk()
+                .expectBody(EventResponse.class)
+                .consumeWith(response -> {
+
+                    EventResponse event = response.getResponseBody();
+
+                    Assertions.assertNotNull(event);
+                    Assertions.assertEquals(10, event.available());
+                });
+    }
+
+
+    @Test
+    void shouldRejectReservationWhenNotEnoughPlaces() {
+
+        // 1. Crear un evento con una sola plaza
+        CreateEventRequest request = new CreateEventRequest(
+                "Test No Capacity",
+                "Reservation without available places",
+                LocalDateTime.now().plusDays(30),
+                1,
+                new BigDecimal("25.00"),
+                "EUR"
+        );
+
+        EventResponse createdEvent = webTestClient.post()
+                .uri("/events")
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue(request)
+                .exchange()
+                .expectStatus().isCreated()
+                .expectBody(EventResponse.class)
+                .returnResult()
+                .getResponseBody();
+
+        Assertions.assertNotNull(createdEvent);
+
+        String eventId = createdEvent.id().toString();
+
+        // 2. Publicar el evento
+        webTestClient.post()
+                .uri("/events/" + eventId + "/publish")
+                .exchange()
+                .expectStatus().isOk();
+
+        // 3. Intentar reservar 2 plazas cuando solo queda 1
+        webTestClient.post()
+                .uri("/events/" + eventId + "/reserve/2/places")
+                .exchange()
+                .expectStatus().is4xxClientError();
+
+        // 4. Comprobar que no se ha descontado capacidad
+        webTestClient.get()
+                .uri("/events/" + eventId)
+                .exchange()
+                .expectStatus().isOk()
+                .expectBody(EventResponse.class)
+                .consumeWith(response -> {
+
+                    EventResponse event = response.getResponseBody();
+
+                    Assertions.assertNotNull(event);
+                    Assertions.assertEquals(1, event.available());
+                });
+    }
+
+
 
 }
