@@ -81,8 +81,8 @@ implemented and validated.
 -   [x] Spring composition root / dependency wiring
 -   [x] Architecture package structure
 -   [ ] Architecture tests
--   [x] Hexagonal Architecture notes in DDD.md and Booking Service section
--   [ ] Dedicated HEXAGONAL.md (optional)
+-   [x] Hexagonal Architecture explained in HEXAGONAL.md
+-   [x] Dedicated HEXAGONAL.md
 
 **Status:** IN PROGRESS --- HTTP input adapter is implemented; dedicated
 architecture tests remain pending
@@ -99,7 +99,7 @@ architecture tests remain pending
 -   [x] In-memory Domain Event publisher adapter
 -   [x] Persistence rehydration strategy
 -   [ ] Additional Event use cases
--   [ ] Domain documentation update
+-   [x] Domain documentation reorganized into DDD.md, HEXAGONAL.md and PERSISTENCE_CONSISTENCY.md
 
 ------------------------------------------------------------------------
 
@@ -601,9 +601,9 @@ Event REST + Retry + CB + Bulkhead          ✅
         ↓
 Capacity reserve + compensation API         ✅ UNIT/HTTP TESTED
         ↓
-Live two-service end-to-end validation      🚧 NEXT
+Live two-service end-to-end validation      ✅ BASIC MANUAL E2E
         ↓
-Cross-service integration / Kafka           ⬜ PLANNED
+Kafka fundamentals / first integration      🚧 NEXT
 ```
 
 ---
@@ -683,7 +683,7 @@ Cross-service integration / Kafka           ⬜ PLANNED
 - [x] Detailed resilience documentation moved to `docs/RESILIENCE.md`
 - [ ] Automatic Circuit Breaker OPEN→HALF_OPEN timing tests, overall timeout budget and resilience policy refinements
 - [ ] Handle additional upstream statuses (such as 429 and unexpected 4xx) by explicit policy
-- [ ] Reusable cross-service communication checklist (`docs/MICROSERVICES-CHECKLIST.md`) after resilience topics
+- [x] Reusable cross-service communication guide (`docs/MICROSERVICES_COMMUNICATION.md`)
 - [ ] Optional deterministic concurrency test forcing both pre-checks to report no booking
 - [x] Implement synchronous Event availability validation (read-only)
 - [x] Event-side capacity reservation/release HTTP endpoints with domain validation, optimistic locking and 409 mapping
@@ -696,7 +696,8 @@ Cross-service integration / Kafka           ⬜ PLANNED
 - [ ] Idempotent/durable distributed capacity reservation or recovery for ambiguous timeouts
 - [x] Service-to-service Event availability query via REST
 - [x] Basic service-to-service Event capacity coordination with synchronous best-effort compensation (unit/HTTP mock tested)
-- [ ] Manual live two-service booking + failure/compensation verification
+- [x] Basic manual E2E: Booking 201 and Event capacity 20→19; duplicate Booking 409 and restored final availability 19; unknown Event 404; full Event 409; Event Service down 503 (17 October 2026)
+- [ ] Controlled E2E injection of Booking persistence/commit failure after remote capacity reservation, with verified release
 - [ ] Durable cross-service consistency, failure recovery and idempotent compensation strategy
 - [ ] Kafka-based integration events / reliable outbox (if selected)
 - [ ] Containerization, deployment and CI/CD for the independent service
@@ -705,4 +706,4 @@ Cross-service integration / Kafka           ⬜ PLANNED
 
 ## Next milestone
 
-Event capacity reserve/release endpoints, the synchronous `EventCapacityPort` REST adapter and `CompensatingBookingUseCase` are implemented and covered by HTTP-mock and unit tests. The existing Resilience4j Bulkhead → Circuit Breaker → Retry chain remains **GET-availability-specific**, not part of mutating POST calls. **Next:** manually exercise the real two-service booking and compensation flow; then address ambiguous timeouts, idempotency, durability and cancellation capacity release. Kafka, outbox and deployment remain deferred.
+Event capacity reserve/release endpoints, the synchronous `EventCapacityPort` REST adapter and `CompensatingBookingUseCase` are implemented and covered by HTTP-mock and unit tests. The existing Resilience4j Bulkhead → Circuit Breaker → Retry chain remains **GET-availability-specific**, not part of mutating POST calls. **Manual E2E (17 October 2026):** basic success, duplicate/final-state compensation, missing event, exhausted capacity, and Event Service-down cases passed. **Next:** Kafka fundamentals and a first asynchronous `BookingCreated` integration; preserve REST for capacity mutation. A controlled post-reservation JPA failure, ambiguous timeouts, idempotency, durable recovery, cancellation capacity release, outbox and deployment remain pending.

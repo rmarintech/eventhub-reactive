@@ -13,7 +13,7 @@ architectural patterns are introduced when they are needed, and the
 documentation is updated only after they have been studied and
 implemented.
 
-> **Architecture update — 15 October 2026:** EventHub is deliberately **evolving from a reactive monolith to a mixed-paradigm microservices learning project**. The Booking capability is being **extracted and redesigned** as an independent **imperative Spring MVC service**, rather than retained as a second active Booking implementation. Historical WebFlux/R2DBC Booking material remains in the documentation as evidence of earlier work, **not as a parallel current service**. This is a conscious portfolio/learning decision to practise both paradigms; it is **not presented as an optimal production architecture**. The independent Booking service now has JPA/PostgreSQL persistence, Flyway migrations, Testcontainers integration tests and a transactional use-case decorator; a first synchronous REST integration for Event availability is implemented and tested; a basic synchronous capacity-reservation/compensation path is implemented and unit/HTTP-mock-tested, but real end-to-end verification and robust distributed recovery remain pending.
+> **Architecture update — 15 October 2026:** EventHub is deliberately **evolving from a reactive monolith to a mixed-paradigm microservices learning project**. The Booking capability is being **extracted and redesigned** as an independent **imperative Spring MVC service**, rather than retained as a second active Booking implementation. Historical WebFlux/R2DBC Booking material remains in the documentation as evidence of earlier work, **not as a parallel current service**. This is a conscious portfolio/learning decision to practise both paradigms; it is **not presented as an optimal production architecture**. The independent Booking service now has JPA/PostgreSQL persistence, Flyway migrations, Testcontainers integration tests and a transactional use-case decorator; a first synchronous REST integration for Event availability is implemented and tested; a basic synchronous capacity-reservation/compensation path is implemented and unit/HTTP-mock-tested, but five basic manual two-service E2E scenarios passed on 17 October 2026; automated E2E and robust distributed recovery remain pending.
 
 ## Current components and ownership
 
@@ -106,12 +106,20 @@ POST /api/bookings  [Booking Service :8081]
 
 Event's `Capacity` value object raises `InsufficientCapacityException` or `ExcessiveCapacityException` to protect its invariants; the Event HTTP advice maps those domain violations to **409 Conflict**. For `reservePlaces`, the Booking REST adapter maps HTTP 409 to `EventNotAvailableException`, 404 to `EventNotFoundException`, and HTTP 5xx/transport failures to `EventServiceUnavailableException`. Release HTTP 409 currently propagates as a raw client conflict; it does **not** mean insufficient available capacity. Mutating POSTs have **no automatic Retry**. The previous `Bulkhead → Circuit Breaker → Retry → REST` implementation remains documented for the **read-only GET availability** path, not for current booking creation.
 
-**Verified:** Event insufficient-capacity HTTP test; eight `RestEventCapacityAdapterTest` HTTP-mock tests; three `CompensatingBookingUseCaseTest` unit tests. Existing Booking HTTP/JPA integration tests were adapted to mock `EventCapacityPort`. **Not yet verified:** full real two-service creation and failed-booking compensation. This is **best-effort synchronous compensation**, not a distributed transaction: ambiguous timeouts, idempotency, durable recovery and capacity release on booking cancellation remain outstanding.
+**Verified:** Event insufficient-capacity HTTP test; eight `RestEventCapacityAdapterTest` HTTP-mock tests; three `CompensatingBookingUseCaseTest` unit tests. Existing Booking HTTP/JPA integration tests were adapted to mock `EventCapacityPort`. **Manual E2E verified (17 October 2026):** Booking created (HTTP 201) with Event capacity 20→19; duplicate Booking rejected (409) with Event final capacity unchanged at 19; missing Event (404); exhausted capacity (409); Event Service stopped (503). A controlled post-reservation persistence failure and automatic E2E tests are still pending. This is **best-effort synchronous compensation**, not a distributed transaction: ambiguous timeouts, idempotency, durable recovery and capacity release on booking cancellation remain outstanding.
+
+### Manual E2E evidence — 17 October 2026
+
+The two running services were tested directly over HTTP without mocked inter-service calls. Observed results: Booking `201 PENDING` and Event `available` from 20 to 19; duplicate Booking `409 BOOKING_ALREADY_EXISTS` with Event capacity still 19 afterward; missing Event `404 EVENT_NOT_FOUND`; exhausted Event `409 EVENT_NOT_AVAILABLE` while availability remained 0; stopped Event Service `503 EVENT_SERVICE_UNAVAILABLE`. Full evidence, IDs, scope and remaining verification gaps are documented in [`docs/MICROSERVICES_COMMUNICATION.md`](docs/MICROSERVICES_COMMUNICATION.md).
+
+**Next:** Apache Kafka fundamentals and a first `BookingCreated` notification integration. The existing synchronous REST capacity-reservation flow remains unchanged.
 
 ### Documentation map
 
 - [`docs/ROADMAP.md`](docs/ROADMAP.md): complete project progress; new independent service in section 26.
-- [`docs/DDD.md`](docs/DDD.md): original domain and architecture, plus new service model/hexagonal boundaries in section 55.
+- [`docs/DDD.md`](docs/DDD.md): domain model, value objects, aggregates and domain events.
+- [`docs/HEXAGONAL.md`](docs/HEXAGONAL.md): application ports, adapters and Spring wiring.
+- [`docs/PERSISTENCE_CONSISTENCY.md`](docs/PERSISTENCE_CONSISTENCY.md): persistence, concurrency, transactions and distributed compensation.
 - [`docs/REACTIVE.md`](docs/REACTIVE.md): original EventHub reactive learning and code, distinguishing Reactor retry from imperative Resilience4j.
 - [`docs/RESILIENCE.md`](docs/RESILIENCE.md): synchronous inter-service timeout, Retry, Circuit Breaker, Bulkhead, test coverage, and pending work.
 - [`docs/MICROSERVICES_COMMUNICATION.md`](docs/MICROSERVICES_COMMUNICATION.md): reusable service-to-service communication checklist, practical tests, expected evidence, and EventHub progress.
@@ -239,7 +247,9 @@ as each topic is actually studied.
 | --- | --- |
 | Project progress | [ROADMAP.md](docs/ROADMAP.md) |
 | Domain-Driven Design | [DDD.md](docs/DDD.md) |
-| Hexagonal Architecture | [DDD.md](docs/DDD.md#23-ddd-and-hexagonal-architecture) and [independent service design](docs/DDD.md#55-independent-booking-service--ddd-and-hexagonal-architecture-october-2026) |
+| Hexagonal Architecture | [HEXAGONAL.md](docs/HEXAGONAL.md) |
+| Persistence and Consistency | [PERSISTENCE_CONSISTENCY.md](docs/PERSISTENCE_CONSISTENCY.md) |
+
 | Reactive Programming | [REACTIVE.md](docs/REACTIVE.md) |
 | Inter-service resilience (Timeout, Retry, Circuit Breaker) | [RESILIENCE.md](docs/RESILIENCE.md) |
 | Microservices communication: practical checklist and testing | [MICROSERVICES_COMMUNICATION.md](docs/MICROSERVICES_COMMUNICATION.md) |
@@ -396,6 +406,8 @@ eventhub-reactive
 │
 └── docs/
     ├── DDD.md
+    ├── HEXAGONAL.md
+    ├── PERSISTENCE_CONSISTENCY.md
     ├── REACTIVE.md
     └── ROADMAP.md
 ```

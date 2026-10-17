@@ -755,7 +755,7 @@ The new independent Booking Service uses synchronous `RestClient` (Spring MVC/JP
 
 The original reactive Event module uses Reactor operators such as `retry()` and `timeout()`, which act on Publisher subscriptions/signals. The independent Booking Service is **imperative**: Spring MVC/JPA and synchronous `RestClient`, protected by Resilience4j **Retry**, **Circuit Breaker** and **Bulkhead** decorators around `EventAvailabilityPort`. This does not turn Booking into a reactive service.
 
-Timeout configuration, the three-attempt Retry policy, Circuit Breaker behavior, Bulkhead concurrency limits, failure classification, and the verified tests belong in **[`RESILIENCE.md`](RESILIENCE.md)**. The application/hexagonal design rationale remains in [`DDD.md`](DDD.md#57-booking-service-retry-as-an-outbound-adapter-15-october-2026). Reactor examples above remain unchanged and continue to document the original learning path.
+Timeout configuration, the three-attempt Retry policy, Circuit Breaker behavior, Bulkhead concurrency limits, failure classification, and the verified tests belong in **[`RESILIENCE.md`](RESILIENCE.md)**. The application/hexagonal design rationale remains in [`HEXAGONAL.md`](HEXAGONAL.md#booking-service-retry-as-an-outbound-adapter-15-october-2026). Reactor examples above remain unchanged and continue to document the original learning path.
 
 
 ## Reactive Event capacity API and imperative Booking compensation (16 October 2026)
@@ -764,4 +764,4 @@ Event Service now exposes WebFlux `POST /events/{id}/reserve/{places}/places` an
 
 The **independent Booking Service remains fully imperative**: its `CompensatingBookingUseCase` invokes synchronous `EventCapacityPort.reservePlaces(eventId, 1)` via `RestClient` before the JPA transactional booking delegate, then calls `releasePlaces` if booking creation fails. A WebFlux HTTP endpoint **does not make its synchronous HTTP caller reactive**. The earlier availability GET resilience chain still exists separately, but the new mutating POST calls are **not automatically retried** because their outcome can be ambiguous after a timeout.
 
-The HTTP adapter's eight focused tests and the three compensation unit tests passed. A **real two-microservice end-to-end booking/compensation test** and robust idempotent recovery are pending. Architecture and known limits: [`DDD.md`](DDD.md#59-synchronous-event-capacity-reservation-and-booking-compensation-16-october-2026).
+The HTTP adapter's eight focused tests and the three compensation unit tests passed. A **real two-microservice end-to-end booking/compensation test** and robust idempotent recovery are pending. Architecture and known limits: [`PERSISTENCE_CONSISTENCY.md`](PERSISTENCE_CONSISTENCY.md#synchronous-event-capacity-reservation-and-booking-compensation-16-october-2026).

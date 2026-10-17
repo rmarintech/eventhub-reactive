@@ -20,7 +20,7 @@ BookingService (application)
             → RestClient → GET /events/{id} → Event Service
 ```
 
-All four adapters implement the same output port. `EventClientConfiguration` wires them using Resilience4j's **core Java API**, without Spring AOP/@Retry/@CircuitBreaker annotations. The application layer remains independent of HTTP and Resilience4j. See [`DDD.md`](DDD.md#58-booking-service-circuit-breaker-as-an-outer-adapter-16-october-2026) for the dependency-inversion decision.
+All four adapters implement the same output port. `EventClientConfiguration` wires them using Resilience4j's **core Java API**, without Spring AOP/@Retry/@CircuitBreaker annotations. The application layer remains independent of HTTP and Resilience4j. See [`HEXAGONAL.md`](HEXAGONAL.md#booking-service-circuit-breaker-and-resilience-decorators-16-october-2026) for the dependency-inversion decision.
 
 ## What resilience means here
 
@@ -246,3 +246,7 @@ BookingController → CompensatingBookingUseCase
 Both capacity calls use blocking `RestClient` without an automatic mutating-request retry decorator. This avoids blindly repeating a POST after a network timeout when its side effect may already have occurred. The reserve adapter translates 409 to `EventNotAvailableException`, 404 to `EventNotFoundException`, and upstream 5xx/transport failure to `EventServiceUnavailableException`. A **release 409 currently propagates** as `HttpClientErrorException.Conflict`; it is not equivalent to an unavailable event. The outer coordinator tries to release a previously reserved place if Booking creation fails and propagates the original creation error.
 
 **Verified:** eight `RestEventCapacityAdapterTest` HTTP-mock tests and three `CompensatingBookingUseCaseTest` coordination tests are green. Event Service's insufficient-capacity WebTestClient test is green. **Not verified:** a live two-service booking/compensation flow and durable, idempotent recovery. If reserve or compensation times out, a remote side effect may already have happened; no distributed exactly-once guarantee or persistent compensation log exists. Booking cancellation does not yet release capacity in Event Service.
+
+## Manual live-service failure evidence — 17 October 2026
+
+With Event Service stopped, a real `POST /api/bookings` to Booking Service returned **503** with application code `EVENT_SERVICE_UNAVAILABLE` and a controlled message. This validates the observed handling of a stopped remote service for the **current mutating reservation path**. It does **not** demonstrate the GET-specific Circuit Breaker/Retry/Bulkhead decorators handling this POST, nor measured read/connect timeout expiry or an ambiguous result after remote execution. See [`MICROSERVICES_COMMUNICATION.md`](MICROSERVICES_COMMUNICATION.md) for the other manual E2E cases.
