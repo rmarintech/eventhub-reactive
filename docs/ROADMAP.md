@@ -3,6 +3,26 @@
 This roadmap tracks the complete learning and implementation path for
 EventHub.
 
+## Current milestone — 18 October 2026
+
+- [x] Kafka broker available locally through Docker Compose; Spring Kafka producer configured
+- [x] `BookingCreatedIntegrationEvent` integration contract and JSON serialization
+- [x] `IntegrationEventPublisherPort` returns Kafka-independent `CompletableFuture<Void>`
+- [x] `KafkaIntegrationEventAdapter` sends with `KafkaTemplate` and preserves asynchronous acknowledgment
+- [x] Flyway V3 `outbox_events`, JPA entity and repository adapter
+- [x] Atomic Booking + Outbox creation and rollback verified with Testcontainers tests
+- [x] Scheduled Outbox polling, JSON deserialization and publish-success/failure completion handling
+- [x] Manual Kafka acknowledgment -> `PUBLISHED` verification in PostgreSQL
+- [x] Dedicated [KAFKA.md](KAFKA.md) documentation
+- [ ] Kafka consumer and consumer-side idempotency **(NEXT)**
+- [ ] Automated Kafka integration tests, poison-message handling, competing relays and durable recovery
+
+**Scope:** producer-side Transactional Outbox is working in local manual verification. `at-least-once` admits duplicates; no consumer or exactly-once delivery claim. Dated descriptions later in this roadmap are retained as historical snapshots.
+
+---
+
+
+
 Completed items are marked as:
 
 ``` text
@@ -249,24 +269,24 @@ architecture tests remain pending
 -   [x] Domain Event dispatcher
 -   [x] BookingCreated handler and dispatcher tests
 -   [ ] Apache Kafka fundamentals
--   [ ] Kafka broker setup
--   [ ] Topics
+-   [x] Kafka broker setup
+-   [x] Topics
 -   [ ] Partitions
 -   [ ] Offsets
--   [ ] Producers
+-   [x] Producers
 -   [ ] Consumers
 -   [ ] Consumer groups
--   [ ] Spring Kafka
--   [ ] Event contracts
--   [ ] Event serialization
+-   [x] Spring Kafka
+-   [x] Event contracts
+-   [x] Event serialization
 -   [ ] Retry strategy
 -   [ ] Dead Letter Topic
 -   [ ] Idempotency
 -   [ ] Duplicate-event handling
 -   [ ] Eventual consistency
--   [ ] Transactional Outbox pattern
+-   [x] Transactional Outbox pattern
 -   [ ] Kafka integration tests
--   [ ] Kafka documentation
+-   [x] Kafka documentation
 
 ------------------------------------------------------------------------
 
@@ -603,7 +623,9 @@ Capacity reserve + compensation API         ✅ UNIT/HTTP TESTED
         ↓
 Live two-service end-to-end validation      ✅ BASIC MANUAL E2E
         ↓
-Kafka fundamentals / first integration      🚧 NEXT
+Kafka producer / Transactional Outbox       ✅ LOCAL VERIFIED
+        ↓
+Kafka consumer + idempotency                🚧 NEXT
 ```
 
 ---
@@ -699,11 +721,11 @@ Kafka fundamentals / first integration      🚧 NEXT
 - [x] Basic manual E2E: Booking 201 and Event capacity 20→19; duplicate Booking 409 and restored final availability 19; unknown Event 404; full Event 409; Event Service down 503 (17 October 2026)
 - [ ] Controlled E2E injection of Booking persistence/commit failure after remote capacity reservation, with verified release
 - [ ] Durable cross-service consistency, failure recovery and idempotent compensation strategy
-- [ ] Kafka-based integration events / reliable outbox (if selected)
+- [x] Kafka producer integration and Transactional Outbox (local verification); consumer remains pending
 - [ ] Containerization, deployment and CI/CD for the independent service
 
 **Concurrency caveat:** the `existsActiveBooking()` then `save()` sequence can still race even inside `@Transactional`, but PostgreSQL now prevents two active duplicates through Flyway V2's partial unique index. `@Version` alone would not prevent inserts with distinct Booking IDs. The two-thread test did not deterministically force both pre-checks to return false.
 
-## Next milestone
+## Earlier milestone snapshot (before Kafka producer)
 
 Event capacity reserve/release endpoints, the synchronous `EventCapacityPort` REST adapter and `CompensatingBookingUseCase` are implemented and covered by HTTP-mock and unit tests. The existing Resilience4j Bulkhead → Circuit Breaker → Retry chain remains **GET-availability-specific**, not part of mutating POST calls. **Manual E2E (17 October 2026):** basic success, duplicate/final-state compensation, missing event, exhausted capacity, and Event Service-down cases passed. **Next:** Kafka fundamentals and a first asynchronous `BookingCreated` integration; preserve REST for capacity mutation. A controlled post-reservation JPA failure, ambiguous timeouts, idempotency, durable recovery, cancellation capacity release, outbox and deployment remain pending.

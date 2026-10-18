@@ -2,6 +2,10 @@ spring:
   application:
     name: booking-service
 
+  logging:
+    level:
+      com.rubenmarin.bookingservice.infrastructure.adapter.out.kafka.OutboxScheduler: DEBUG
+
   datasource:
     url: jdbc:postgresql://localhost:5433/bookingdb
     username: booking_user
@@ -13,6 +17,13 @@ spring:
       ddl-auto: none
     #Evita mantener abierto el contexto de persistencia durante la respuesta HTTP
     open-in-view: false
+
+  kafka:
+    bootstrap-servers: localhost:9092
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+      acks: all #Kafka confirma el envío cuando lo han reconocido las réplicas requeridas
 
 server:
   port: 8081
@@ -27,6 +38,7 @@ management:
 clients:
   event-service:
     base-url: http://localhost:8080
+
 
 
 

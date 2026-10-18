@@ -1,5 +1,8 @@
 # Inter-service Resilience — EventHub
 
+
+**Kafka boundary:** the separate Kafka Outbox producer does not use the GET-availability Bulkhead/Circuit Breaker/Retry decorator chain documented below. REST capacity reserve/release remains synchronous. Kafka and Outbox publishing reliability are documented in [KAFKA.md](KAFKA.md).
+
 This document explains the **synchronous Booking Service → Event Service** resilience work implemented and tested on 15–16 October 2026, including Bulkhead. It collects theory, concrete configuration, tested behavior and limitations in one place. It does **not** describe Reactor's reactive `retry()` operator; that belongs in [`REACTIVE.md`](REACTIVE.md).
 
 ## Scope and architecture

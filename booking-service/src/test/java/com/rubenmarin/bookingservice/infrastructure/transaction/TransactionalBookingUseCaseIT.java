@@ -1,9 +1,12 @@
 package com.rubenmarin.bookingservice.infrastructure.transaction;
 
 
+import com.rubenmarin.bookingservice.application.model.OutboxEvent;
+import com.rubenmarin.bookingservice.application.model.OutboxEventStatus;
 import com.rubenmarin.bookingservice.application.port.in.BookingUseCase;
 import com.rubenmarin.bookingservice.application.port.out.BookingRepository;
 import com.rubenmarin.bookingservice.application.port.out.EventCapacityPort;
+import com.rubenmarin.bookingservice.application.port.out.OutboxRepository;
 import com.rubenmarin.bookingservice.domain.model.*;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -12,9 +15,12 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.postgresql.PostgreSQLContainer;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 
 import java.util.UUID;
 
@@ -38,7 +44,14 @@ class TransactionalBookingUseCaseIT {
     BookingUseCase bookingUseCase;
 
     @Autowired
-    BookingRepository repository;
+    BookingRepository bookingRepository;
+
+   // @Autowired
+    @MockitoSpyBean //mantiene la implementación real del repositorio, pero permite simular una excepción con Mockito.
+    OutboxRepository outboxRepository;
+
+    @Autowired
+    ObjectMapper objectMapper ;
 
     @Test
     void shouldCommitBookingCreation() {
@@ -49,7 +62,7 @@ class TransactionalBookingUseCaseIT {
         Booking created = bookingUseCase.createBooking(eventId, userId);
 
         //comprobamos resultado sin pasar por lógica de negocio
-        Booking found = repository.findById(created.getBookingId()).orElseThrow();
+        Booking found = bookingRepository.findById(created.getBookingId()).orElseThrow();
 
         Assertions.assertAll(
                 () -> Assertions.assertEquals(created.getBookingId(), found.getBookingId()),
@@ -60,6 +73,78 @@ class TransactionalBookingUseCaseIT {
 
         Mockito.verify(eventCapacityPort).reservePlaces(eventId, 1);
         Mockito.verify(eventCapacityPort, Mockito.never()).releasePlaces(eventId, 1);
+    }
+
+    @Test
+    void shouldCommitBookingCreationAndOutboxEvent() {
+
+        EventId eventId = new EventId(UUID.randomUUID());
+        UserId userId = new UserId(UUID.randomUUID());
+
+        Booking created = bookingUseCase.createBooking(eventId, userId);
+
+        //comprobamos resultado sin pasar por lógica de negocio
+        Booking found = bookingRepository.findById(created.getBookingId()).orElseThrow();
+
+        Assertions.assertAll(
+                () -> Assertions.assertEquals(created.getBookingId(), found.getBookingId()),
+                () -> Assertions.assertEquals(created.getEventId(), found.getEventId()),
+                () -> Assertions.assertEquals(created.getUserId(), found.getUserId()),
+                () -> Assertions.assertEquals(BookingStatus.PENDING, found.getStatus())
+        );
+
+        Mockito.verify(eventCapacityPort).reservePlaces(eventId, 1);
+        Mockito.verify(eventCapacityPort, Mockito.never()).releasePlaces(eventId, 1);
+
+        UUID createdBookingId = created.getBookingId().bookingId();
+
+        OutboxEvent  outbox= outboxRepository
+                .findByStatusPending()
+                .stream()
+                .filter(
+                        outboxEvent ->
+                                outboxEvent.aggregateId().equals(createdBookingId))
+                .findFirst().orElseThrow(
+                        () -> new RuntimeException("Outbox event not found for booking Id: " + createdBookingId)
+                );
+
+        JsonNode json = objectMapper.readTree(outbox.payload());
+
+
+        Assertions.assertAll(
+                () -> Assertions.assertEquals( OutboxEventStatus.PENDING, outbox.status()),
+                () -> Assertions.assertEquals("BookingCreated", outbox.eventType()),
+                () -> Assertions.assertEquals("booking-created", outbox.topic()),
+
+                () -> Assertions.assertEquals(createdBookingId.toString(), json.get("bookingId").asString()),
+                () -> Assertions.assertEquals(eventId.eventId().toString(), json.get("eventId").asString()),
+                () -> Assertions.assertEquals(userId.userId().toString(), json.get("userId").asString())
+        );
+    }
+
+    @Test
+    void shouldRollbackBookingWhenOutboxFails() {
+
+        EventId eventId = new EventId(UUID.randomUUID());
+        UserId userId = new UserId(UUID.randomUUID());
+
+        // Simulamos un fallo al persistir el evento Outbox.
+        Mockito.doThrow(new RuntimeException("Outbox persistence failed"))
+                .when(outboxRepository)
+                .createOutboxEvent(Mockito.any(OutboxEvent.class));
+
+        // La creación de la reserva debe fallar.
+        Assertions.assertThrows(
+                RuntimeException.class,
+                () -> bookingUseCase.createBooking(eventId, userId)
+        );
+
+        // La transacción debe revertir el INSERT del Booking.
+        Assertions.assertFalse(                bookingRepository.existsActiveBooking(eventId, userId)        );
+
+        // La capacidad remota debe quedar compensada.
+        Mockito.verify(eventCapacityPort).reservePlaces(eventId, 1);
+        Mockito.verify(eventCapacityPort).releasePlaces(eventId, 1);
     }
 
     @Test
@@ -75,7 +160,7 @@ class TransactionalBookingUseCaseIT {
         Booking confirmed = bookingUseCase.confirmBooking(created.getBookingId());
 
         // 3. Recuperarla directamente del repositorio
-        Booking found = repository.findById(created.getBookingId()).orElseThrow();
+        Booking found = bookingRepository.findById(created.getBookingId()).orElseThrow();
 
 //        - BookingUseCase ejecuta la transición PENDING → CONFIRMED.
 //        - La actualización queda persistida en PostgreSQL.
@@ -106,7 +191,7 @@ class TransactionalBookingUseCaseIT {
         Booking cancelled = bookingUseCase.cancelBooking(created.getBookingId());
 
         // 3. Recuperarla directamente del repositorio
-        Booking found = repository.findById(created.getBookingId()).orElseThrow();
+        Booking found = bookingRepository.findById(created.getBookingId()).orElseThrow();
 
         // 4. Comprobar que se ha persistido la transición
         Assertions.assertAll(
@@ -115,7 +200,7 @@ class TransactionalBookingUseCaseIT {
                 () -> Assertions.assertEquals(BookingStatus.CANCELLED, cancelled.getStatus()),
                 () -> Assertions.assertEquals(BookingStatus.PENDING, created.getStatus()),
                 //las reservas canceladas dejan de estar activas.
-                () -> Assertions.assertFalse(repository.existsActiveBooking(eventId, userId))
+                () -> Assertions.assertFalse(bookingRepository.existsActiveBooking(eventId, userId))
         );
     }
 
@@ -135,14 +220,15 @@ class TransactionalBookingUseCaseIT {
         Booking cancelled = bookingUseCase.cancelBooking(confirmed.getBookingId());
 
         // 4. Recuperarla desde PostgreSQL
-        Booking found = repository.findById(created.getBookingId()).orElseThrow();
+        Booking found = bookingRepository.findById(created.getBookingId()).orElseThrow();
 
         Assertions.assertAll(
                 () -> Assertions.assertEquals(created.getBookingId(), found.getBookingId()),
                 () -> Assertions.assertEquals(BookingStatus.CANCELLED, found.getStatus()),
                 () -> Assertions.assertEquals(BookingStatus.CANCELLED, cancelled.getStatus()),
                 () -> Assertions.assertEquals(BookingStatus.CONFIRMED, confirmed.getStatus()),
-                () -> Assertions.assertFalse(repository.existsActiveBooking(eventId, userId))
+                () -> Assertions.assertFalse(bookingRepository.existsActiveBooking(eventId, userId))
         );
     }
+
 }

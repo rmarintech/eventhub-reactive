@@ -1,6 +1,6 @@
 # Reactive Programming — EventHub
 
-This document records **only concepts studied and behaviour implemented or tested** in EventHub. It is organized by topic rather than by dated progress snapshots. Kafka remains the next learning milestone, not an implemented feature.
+This document records **only concepts studied and behaviour implemented or tested** in EventHub. It is organized by topic rather than by dated progress snapshots. Kafka producer publication is now implemented in the **independent imperative Booking Service**, not in the historical reactive Booking module. See [KAFKA.md](KAFKA.md).
 
 # Reactor fundamentals
 

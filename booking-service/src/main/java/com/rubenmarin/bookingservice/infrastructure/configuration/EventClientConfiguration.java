@@ -41,30 +41,8 @@ public class EventClientConfiguration {
     RestClient (timeouts)
             ↓
     Event Service
-            */
+*/
 
-    @Bean("eventRestClient")
-    public RestClient eventRestClient(
-            RestClient.Builder builder,
-            @Value("${clients.event-service.base-url}") String baseUrl) {
-
-        /** Timeout Configuration
-         *
-         * Coonection timeout:  2s.
-         * Read Timeout:        3s.
-         *
-         * */
-
-        SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
-
-        factory.setConnectTimeout(Duration.ofSeconds(2));
-        factory.setReadTimeout(Duration.ofSeconds(3));
-
-        return builder
-                .baseUrl(baseUrl)
-                .requestFactory(factory)
-                .build();
-    }
 
     @Bean
     public Retry eventAvailabilityRetry() {
@@ -204,9 +182,35 @@ public class EventClientConfiguration {
     }
 
     @Bean
-    public EventCapacityPort eventCapacityPort(RestClient restClient){
+    public EventCapacityPort eventCapacityPort(
+            @Qualifier("eventRestClient")RestClient restClient
+    ){
         return new RestEventCapacityAdapter(restClient);
     }
+
+    @Bean("eventRestClient")
+    public RestClient eventRestClient(
+            RestClient.Builder builder,
+            @Value("${clients.event-service.base-url}") String baseUrl) {
+
+        /** Timeout Configuration
+         *
+         * Coonection timeout:  2s.
+         * Read Timeout:        3s.
+         *
+         * */
+
+        SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
+
+        factory.setConnectTimeout(Duration.ofSeconds(2));
+        factory.setReadTimeout(Duration.ofSeconds(3));
+
+        return builder
+                .baseUrl(baseUrl)
+                .requestFactory(factory)
+                .build();
+    }
+
 
 
 }

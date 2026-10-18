@@ -1,5 +1,8 @@
 # Domain-Driven Design — EventHub
 
+
+**Current event-integration boundary (18 October 2026):** the independent Booking Service now records `BookingCreatedIntegrationEvent` as the JSON payload of a PostgreSQL Outbox record in the same transaction as Booking creation. The integration event is an external message contract, not the `Booking` aggregate or the persisted Outbox record. Kafka publication details: [KAFKA.md](KAFKA.md). Historical statements below about Kafka not yet being implemented refer to earlier milestones.
+
 Business modeling, aggregates, value objects, invariants and domain events in the original reactive EventHub and the independent Booking Service. Architecture and persistence are documented separately in [HEXAGONAL.md](HEXAGONAL.md) and [PERSISTENCE_CONSISTENCY.md](PERSISTENCE_CONSISTENCY.md).
 
 ---

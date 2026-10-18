@@ -1,5 +1,8 @@
 # Hexagonal Architecture — EventHub
 
+
+**Current boundary (18 October 2026):** application-owned `IntegrationEventPublisherPort` returns `CompletableFuture<Void>` and `OutboxRepository` owns persistence operations; infrastructure provides `KafkaIntegrationEventAdapter`, `JpaOutboxRepositoryAdapter` and `OutboxScheduler`. Kafka's `SendResult` stays inside infrastructure. See [KAFKA.md](KAFKA.md).
+
 Application ports, use cases, inbound/outbound adapters, dependency inversion, Spring wiring and HTTP boundaries. Domain modeling belongs in [DDD.md](DDD.md); transactions and distributed consistency belong in [PERSISTENCE_CONSISTENCY.md](PERSISTENCE_CONSISTENCY.md).
 
 ---

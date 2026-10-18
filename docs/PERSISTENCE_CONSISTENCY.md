@@ -1,5 +1,8 @@
 # Persistence and Consistency — EventHub
 
+
+**Current milestone (18 October 2026):** Booking creation and `outbox_events` insertion share a single local PostgreSQL/JPA transaction. Flyway V3 introduces the Outbox table; tests verified successful commit and rollback when Outbox insertion fails. The relay publishes pending events later and updates them to `PUBLISHED` only after Kafka acknowledgment. This does **not** create a distributed transaction with Event Service. See [KAFKA.md](KAFKA.md). The original reactive Booking history below is retained as historical background.
+
 R2DBC, JPA, optimistic locking, local transactions, duplicate protection and synchronous compensation. For full HTTP failure scenarios see [MICROSERVICES_COMMUNICATION.md](MICROSERVICES_COMMUNICATION.md); for resilience decorators see [RESILIENCE.md](RESILIENCE.md).
 
 ---

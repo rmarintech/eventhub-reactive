@@ -1,17 +1,53 @@
 package com.rubenmarin.bookingservice.infrastructure.transaction;
 
+import com.rubenmarin.bookingservice.application.event.BookingCreatedIntegrationEvent;
+import com.rubenmarin.bookingservice.application.model.OutboxEvent;
 import com.rubenmarin.bookingservice.application.port.in.BookingUseCase;
+import com.rubenmarin.bookingservice.application.port.out.OutboxRepository;
 import com.rubenmarin.bookingservice.domain.model.Booking;
 import com.rubenmarin.bookingservice.domain.model.BookingId;
 import com.rubenmarin.bookingservice.domain.model.EventId;
 import com.rubenmarin.bookingservice.domain.model.UserId;
 import org.springframework.transaction.annotation.Transactional;
+import tools.jackson.databind.ObjectMapper;
 
-public class TransactionalBookingUseCase  implements BookingUseCase {
+import java.util.UUID;
+
+/**
+ * Creamos TransactionalBookingUseCase como un decorador transaccional para
+ * mantener nuestro BookingService independiente de Spring,
+ * respetando la arquitectura hexagonal.
+ * <p>
+ * BookingController
+ *      ↓
+ * BookingUseCase
+ *      ↓
+ * CompensatingBookingUseCase
+ *      ↓
+ * TransactionalBookingUseCase
+ *      │
+ *      │ @Transactional
+ *      ▼
+ * BookingService
+ *      ↓
+ * BookingRepository
+ *      ↓
+ * PostgreSQL
+ *
+ */
+public class TransactionalBookingUseCase implements BookingUseCase {
     private final BookingUseCase delegate;
+    private final OutboxRepository outboxRepository;
+    private final ObjectMapper objectMapper;
 
-    public TransactionalBookingUseCase(BookingUseCase delegate) {
+    public TransactionalBookingUseCase(
+            BookingUseCase delegate,
+            OutboxRepository outboxRepository,
+            ObjectMapper objectMapper) {
+
         this.delegate = delegate;
+        this.outboxRepository = outboxRepository;
+        this.objectMapper = objectMapper;
     }
 
     @Override
@@ -23,7 +59,36 @@ public class TransactionalBookingUseCase  implements BookingUseCase {
     @Override
     @Transactional
     public Booking createBooking(EventId eventId, UserId userId) {
-        return delegate.createBooking(eventId, userId);
+
+        Booking booking = delegate.createBooking(eventId, userId);
+
+        //Todo: create outbox_event
+
+        BookingCreatedIntegrationEvent bookingCreatedIntegrationEvent =
+                new BookingCreatedIntegrationEvent(
+                        booking.getBookingId().bookingId(),
+                        booking.getEventId().eventId(),
+                        booking.getUserId().userId()
+                );
+
+
+        String eventType = "BookingCreated";
+        UUID aggregateId = bookingCreatedIntegrationEvent.bookingId();
+        String topic = "booking-created";
+        String payload = objectMapper.writeValueAsString(bookingCreatedIntegrationEvent);
+
+        OutboxEvent outboxEvent = OutboxEvent.pending(
+                eventType,
+                aggregateId,
+                topic,
+                payload
+        );
+
+
+        outboxRepository.createOutboxEvent(outboxEvent);
+
+
+        return booking;
     }
 
     @Override

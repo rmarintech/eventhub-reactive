@@ -1,5 +1,8 @@
 # EventHub Reactive
 
+
+**Current milestone — 18 October 2026:** Booking Service now implements **Transactional Outbox and Kafka producer publication**. A Booking and its pending Outbox event are committed atomically in PostgreSQL; a scheduled relay asynchronously publishes `BookingCreatedIntegrationEvent` to Kafka, waits for acknowledgment via `CompletableFuture<Void>`, and marks the record `PUBLISHED`. Local persistence tests and manual Kafka publication were verified. **No Kafka consumer is implemented yet.** See [Kafka and Transactional Outbox](docs/KAFKA.md) and [ROADMAP](docs/ROADMAP.md). Previous dated milestone descriptions below are historical snapshots.
+
 A full-stack event management and booking platform built with **Java 21
 and Spring Boot**, with React planned for the frontend.
 

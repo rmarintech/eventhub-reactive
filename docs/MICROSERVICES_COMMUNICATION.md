@@ -1,5 +1,8 @@
 # Microservices Communication — Practical Guide and Testing Checklist
 
+
+**Asynchronous channel (18 October 2026):** Booking Service additionally persists `BookingCreatedIntegrationEvent` through Transactional Outbox and publishes it asynchronously to Kafka after local commit. This does **not** change the synchronous REST capacity reservation/compensation sequence below. Publisher flow, evidence, limitations and next consumer step: [KAFKA.md](KAFKA.md).
+
 > **Purpose.** A reusable guide for designing, implementing, and **demonstrating through tests** reliable communication between Java/Spring Boot microservices. The running example is **EventHub**: **Event Service** (WebFlux + R2DBC, `:8080`) and **Booking Service** (Spring MVC + JPA, `:8081`). This is not a list of technologies that every project must install: choose the guarantees required by the business.
 >
 > **Evidence rule:** *implemented* does not mean *tested*; a mocked HTTP server is not an end-to-end test; a 200/201 response alone does not prove distributed consistency.
