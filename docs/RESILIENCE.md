@@ -1,11 +1,6 @@
 # Inter-service Resilience — EventHub
 
-
-**19 October 2026:** Kafka consumer-side deduplication is implemented in Event Service using a PostgreSQL/R2DBC Inbox. This does not alter the REST GET-availability resilience decorators. Kafka error-handler / DLT behavior remains to be implemented and tested; see [KAFKA.md](KAFKA.md).
-
-**Kafka boundary:** the separate Kafka Outbox producer does not use the GET-availability Bulkhead/Circuit Breaker/Retry decorator chain documented below. REST capacity reserve/release remains synchronous. Kafka and Outbox publishing reliability are documented in [KAFKA.md](KAFKA.md).
-
-This document explains the **synchronous Booking Service → Event Service** resilience work implemented and tested on 15–16 October 2026, including Bulkhead. It collects theory, concrete configuration, tested behavior and limitations in one place. It does **not** describe Reactor's reactive `retry()` operator; that belongs in [`REACTIVE.md`](REACTIVE.md).
+This document explains the **synchronous Booking Service → Event Service** resilience work implemented and tested, including Bulkhead. It collects theory, concrete configuration, tested behavior and limitations in one place. It does **not** describe Reactor's reactive `retry()` operator; that belongs in [`REACTIVE.md`](REACTIVE.md).
 
 ## Scope and architecture
 
@@ -214,7 +209,7 @@ public boolean isAvailable(EventId eventId) {
 
 `BulkheadEventAvailabilityAdapterTest` uses Mockito, `ExecutorService`, `Future` and two `CountDownLatch` objects without Spring. Its test-specific limit is **1 permit**: one call enters the mocked delegate and waits; a concurrent second call is rejected with an `EventServiceUnavailableException` whose cause is `BulkheadFullException`; releasing the first call restores the permit; Mockito verifies that only the admitted call reached the delegate. Latches avoid reliance on `Thread.sleep()`. The test was reported green.
 
-`EventClientConfigurationTest` (`@SpringBootTest`) verifies that the Retry, Circuit Breaker, Bulkhead and RestClient beans load and that the `EventAvailabilityPort` bean exposed by Spring is a `BulkheadEventAvailabilityAdapter`. This verifies the outer bean type, not the complete nested chain by reflection. The full `booking-service` `clean verify` suite was reported green on 16 October 2026.
+`EventClientConfigurationTest` (`@SpringBootTest`) verifies that the Retry, Circuit Breaker, Bulkhead and RestClient beans load and that the `EventAvailabilityPort` bean exposed by Spring is a `BulkheadEventAvailabilityAdapter`. This verifies the outer bean type, not the complete nested chain by reflection. The full `booking-service` `clean verify` suite was reported green.
 
 ### What Bulkhead does not guarantee
 
@@ -235,7 +230,7 @@ Bulkhead does not replace an Event Service-side concurrency limit, a global requ
 See [`ROADMAP.md`](ROADMAP.md#23-microservices-evolution) for current/pending implementation milestones. The synchronous best-effort reservation/compensation path is documented separately below; the remaining reliability gaps are not described as implemented.
 
 
-## Current create-booking path — capacity reservation and compensation (16 October 2026)
+## Current create-booking path — capacity reservation and compensation
 
 **Important distinction:** the availability `GET /events/{id}` and its `Bulkhead → Circuit Breaker → Retry → REST` decorators remain implemented, but **`BookingService.createBooking()` no longer calls `EventAvailabilityPort.isAvailable()`**. Its current path is:
 
@@ -252,6 +247,6 @@ Both capacity calls use blocking `RestClient` without an automatic mutating-requ
 
 **Verified:** eight `RestEventCapacityAdapterTest` HTTP-mock tests and three `CompensatingBookingUseCaseTest` coordination tests are green. Event Service's insufficient-capacity WebTestClient test is green. **Not verified:** a live two-service booking/compensation flow and durable, idempotent recovery. If reserve or compensation times out, a remote side effect may already have happened; no distributed exactly-once guarantee or persistent compensation log exists. Booking cancellation does not yet release capacity in Event Service.
 
-## Manual live-service failure evidence — 17 October 2026
+## Manual live-service failure evidence — 
 
 With Event Service stopped, a real `POST /api/bookings` to Booking Service returned **503** with application code `EVENT_SERVICE_UNAVAILABLE` and a controlled message. This validates the observed handling of a stopped remote service for the **current mutating reservation path**. It does **not** demonstrate the GET-specific Circuit Breaker/Retry/Bulkhead decorators handling this POST, nor measured read/connect timeout expiry or an ambiguous result after remote execution. See [`MICROSERVICES_COMMUNICATION.md`](MICROSERVICES_COMMUNICATION.md) for the other manual E2E cases.

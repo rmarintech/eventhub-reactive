@@ -1,10 +1,5 @@
 # Hexagonal Architecture — EventHub
 
-
-**19 October 2026 consumer boundary:** Event Service now has an application-owned `InboxRepository` (reactive `Mono` methods) with an infrastructure `R2dbcInboxRepositoryAdapter`, and an inbound `BookingCreatedKafkaConsumer` (`@KafkaListener`). The Kafka listener uses Jackson and waits for `save(...).block()` on its Kafka-managed thread. See [KAFKA.md](KAFKA.md).
-
-**Current boundary (18 October 2026):** application-owned `IntegrationEventPublisherPort` returns `CompletableFuture<Void>` and `OutboxRepository` owns persistence operations; infrastructure provides `KafkaIntegrationEventAdapter`, `JpaOutboxRepositoryAdapter` and `OutboxScheduler`. Kafka's `SendResult` stays inside infrastructure. See [KAFKA.md](KAFKA.md).
-
 Application ports, use cases, inbound/outbound adapters, dependency inversion, Spring wiring and HTTP boundaries. Domain modeling belongs in [DDD.md](DDD.md); transactions and distributed consistency belong in [PERSISTENCE_CONSISTENCY.md](PERSISTENCE_CONSISTENCY.md).
 
 ---
@@ -42,10 +37,7 @@ Domain
 
 The domain does not depend on the application or infrastructure layers.
 
-------------------------------------------------------------------------
-
 ---
-
 ## Reactive Application Layer and Create Event Use Case
 
 The application boundary is now reactive while the domain remains
@@ -83,10 +75,7 @@ Reactive types are used at the application boundary and infrastructure
 interaction; `Event`, `Capacity`, `Money` and the other domain types
 still contain no `Mono` or `Flux`.
 
-------------------------------------------------------------------------
-
 ---
-
 ## Reactive Outbound Port
 
 The repository port now expresses reactive persistence/query contracts:
@@ -112,10 +101,7 @@ findAll()      → 0..N results → Flux<Event>
 A missing Event is represented by an empty `Mono`, rather than by
 `Mono<Optional<Event>>`.
 
-------------------------------------------------------------------------
-
 ---
-
 ## Reactive Output Adapter and Lazy Execution
 
 The in-memory output adapter was used first to study lazy reactive
@@ -141,10 +127,7 @@ defer        → lazy PUBLISHER
 The adapter remains an infrastructure implementation of the
 application-owned `EventRepository` port.
 
-------------------------------------------------------------------------
-
 ---
-
 ## Query Input Port and Application Service
 
 Read operations are grouped in one query-oriented inbound port rather
@@ -173,10 +156,7 @@ EventRepository
 This is an organization of application responsibilities; CQRS has not
 been introduced.
 
-------------------------------------------------------------------------
-
 ---
-
 ## Dependency Inversion, Injection and Spring IoC
 
 The application services depend on `EventRepository`, an abstraction
@@ -217,10 +197,7 @@ Inversion of Control
     → Spring controls object creation and wiring
 ```
 
-------------------------------------------------------------------------
-
 ---
-
 ## HTTP Input Adapter with Spring WebFlux
 
 The HTTP input adapter has now been implemented with Spring WebFlux.
@@ -257,10 +234,7 @@ The controller uses `map()` for the synchronous transformation from
 `Event` to `EventResponse`; it does not call `subscribe()` manually.
 WebFlux performs the subscription at the HTTP boundary.
 
-------------------------------------------------------------------------
-
 ---
-
 ## HTTP Contract Studied So Far
 
 The create endpoint explicitly consumes and produces JSON and returns
@@ -306,10 +280,7 @@ GET /events/{valid-missing-id}      → 404 Not Found
 GET /events/{invalid-id-format}     → 400 Bad Request
 ```
 
-------------------------------------------------------------------------
-
 ---
-
 ## Reactive HTTP and Repository Flow
 
 The current vertical slice is:
@@ -340,10 +311,7 @@ WebFlux subscribes and serializes JSON
 
 The domain itself remains synchronous pure Java.
 
-------------------------------------------------------------------------
-
 ---
-
 ## Tests at the Current Architecture Boundary
 
 The project now tests the architecture at several levels:
@@ -371,10 +339,7 @@ flows. The find-by-id test creates an Event through `POST /events`,
 captures the generated UUID from the response, and then retrieves that
 same resource through `GET /events/{id}`.
 
-------------------------------------------------------------------------
-
 ---
-
 ## Current Architecture Structure
 
 ``` text
@@ -484,10 +449,7 @@ valid EventId + Event missing      → 404 Not Found
 invalid EventId representation     → 400 Bad Request
 ```
 
-------------------------------------------------------------------------
-
 ---
-
 ## HTTP Integration Test Isolation
 
 Earlier WebFlux integration tests exposed the lifecycle of the in-memory
@@ -535,10 +497,7 @@ This is the current stopping point of the architecture documentation.
 Request validation and reactive database persistence remain future
 course steps.
 
-------------------------------------------------------------------------
-
 ---
-
 ## Request Validation at the HTTP Boundary
 
 Event creation now validates HTTP input before it reaches the
@@ -572,10 +531,7 @@ Validation errors are translated by the WebFlux exception handler into a
 `ValidationErrorResponse` containing a timestamp, HTTP status, message
 and field-error map.
 
-------------------------------------------------------------------------
-
 ---
-
 ## Booking Domain and Aggregate
 
 A second business module, `booking`, has now been introduced.
@@ -614,10 +570,7 @@ cancellation rejection and invalid place counts. A JUnit 5 parameterized
 test with `@ParameterizedTest` and `@ValueSource` was introduced to test
 multiple invalid place values.
 
-------------------------------------------------------------------------
-
 ---
-
 ## Cross-Module Coordination Through an Input Port
 
 Creating a Booking requires reserving capacity in an Event. The Booking
@@ -655,10 +608,7 @@ places and saves the updated Event.
 The domain remains responsible for the actual reservation rules: the
 Event must be published and enough capacity must be available.
 
-------------------------------------------------------------------------
-
 ---
-
 ## Reactive Booking Creation Flow
 
 `CreateBookingService` coordinates the two operations studied so far:
@@ -693,10 +643,7 @@ Common test dependencies are recreated before every test using JUnit 5
 `@BeforeEach`, keeping the stateful fake repositories isolated between
 test methods.
 
-------------------------------------------------------------------------
-
 ---
-
 ## Publish Event Application Use Case
 
 Event publication is now exposed through an explicit application input
@@ -722,10 +669,7 @@ with `flatMap()`.
 The service is tested for both the successful `DRAFT → PUBLISHED`
 transition and the missing-Event error path.
 
-------------------------------------------------------------------------
-
 ---
-
 ## Booking HTTP Input Adapter
 
 The Booking module now exposes:
@@ -764,10 +708,7 @@ Malformed UUID input is translated into the web-specific
 `BookingResponse` exposes the generated Booking ID, customer ID, Event
 ID, number of places and Booking status.
 
-------------------------------------------------------------------------
-
 ---
-
 ## Event Publication HTTP Endpoint
 
 Event publication is now available through:
@@ -783,10 +724,7 @@ currently required because `publish()` needs no additional input.
 The controller delegates to `PublishEventUseCase` rather than accessing
 `EventRepository` directly.
 
-------------------------------------------------------------------------
-
 ---
-
 ## Event Availability in the HTTP Contract
 
 `EventResponse` now exposes both:
@@ -800,10 +738,7 @@ The complete Booking flow was manually verified with an Event whose
 availability changed from `20` to `17` after creating a Booking for `3`
 places.
 
-------------------------------------------------------------------------
-
 ---
-
 ## Booking Controller Isolation Test
 
 A focused `BookingControllerTest` has been added using Mockito and
@@ -827,11 +762,8 @@ repositories while verifying the `POST /bookings` HTTP contract and
 Spring configuration tests also verify that the Event and Booking
 application dependencies are correctly wired.
 
-------------------------------------------------------------------------
-
 ---
-
-## Independent Booking Service — DDD and Hexagonal Architecture (October 2026)
+## Independent Booking Service — DDD and Hexagonal Architecture
 
 > **Evolution through extraction and redesign.** Sections 37–54 document Booking **when it belonged to the original reactive monolith** (`CustomerId`, `places`, `CONFIRMED` on creation, Event-capacity orchestration, R2DBC and events). The new imperative `booking-service` is the **intended successor**, not a second permanent implementation. It intentionally uses **Spring MVC**, `UserId`, `PENDING` and **JPA/PostgreSQL persistence**. The former in-memory repository remains useful for learning and unit tests, but is no longer wired as the production repository. Historical and current domain contracts are different and must not be conflated. This architecture is selected to learn both paradigms, not claimed as an ideal production decomposition.
 
@@ -909,7 +841,7 @@ The new `booking-service` deliberately uses synchronous Spring MVC and JPA, to p
 
 ---
 
-## Booking Service → Event Service: REST output adapter (October 2026)
+## Booking Service → Event Service: REST output adapter
 
 The new imperative Booking service defines `EventAvailabilityPort` in `application.port.out` with `boolean isAvailable(EventId eventId)`. Its infrastructure HTTP adapter, `RestEventAvailabilityAdapter`, implements the port using Spring `RestClient` and a deliberately small `EventResponse(UUID id, String status, int available)` projection. The Event service is still implemented with WebFlux/R2DBC, but Booking's call is synchronous; inter-service HTTP does not change either service's programming paradigm.
 
@@ -931,7 +863,7 @@ Tests: `RestEventAvailabilityAdapterTest` uses `MockRestServiceServer` for busin
 
 ---
 
-## Booking Service: Retry as an outbound adapter (15 October 2026)
+## Booking Service: Retry as an outbound adapter
 
 The application service depends on the `EventAvailabilityPort` abstraction. Infrastructure wraps `RestEventAvailabilityAdapter` with `RetryableEventAvailabilityAdapter`, so transient failure handling is implemented **outside** the domain and application layers. The infrastructure composition root (`EventClientConfiguration`) supplies the implementations; no Spring/Resilience4j annotations are required in the domain.
 
@@ -939,7 +871,7 @@ The Retry policy is implemented and unit-tested. **Configuration values, error c
 
 ---
 
-## Booking Service: Circuit Breaker and resilience decorators (16 October 2026)
+## Booking Service: Circuit Breaker and resilience decorators
 
 `BulkheadEventAvailabilityAdapter` now wraps `CircuitBreakerEventAvailabilityAdapter`, which wraps `RetryableEventAvailabilityAdapter` and then `RestEventAvailabilityAdapter`; all implement `EventAvailabilityPort`. This illustrates the **Decorator pattern**, dependency inversion and a hexagonal infrastructure boundary:
 

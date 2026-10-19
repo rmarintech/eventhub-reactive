@@ -1,48 +1,14 @@
-# EventHub Reactive --- Project Roadmap
+# EventHub Reactive — Project Roadmap
 
-This roadmap tracks the complete learning and implementation path for
-EventHub.
+This roadmap tracks implemented capabilities, verified tests, and planned work for EventHub.
+The original reactive Booking module is documented separately from the independent Booking Service.
 
-## Current milestone — 19 October 2026
 
-- [x] Kafka broker available locally through Docker Compose; Spring Kafka producer configured
-- [x] `BookingCreatedIntegrationEvent` integration contract and JSON serialization
-- [x] `IntegrationEventPublisherPort` returns Kafka-independent `CompletableFuture<Void>`
-- [x] `KafkaIntegrationEventAdapter` sends with `KafkaTemplate` and preserves asynchronous acknowledgment
-- [x] Flyway V3 `outbox_events`, JPA entity and repository adapter
-- [x] Atomic Booking + Outbox creation and rollback verified with Testcontainers tests
-- [x] Scheduled Outbox polling, JSON deserialization and publish-success/failure completion handling
-- [x] Manual Kafka acknowledgment -> `PUBLISHED` verification in PostgreSQL
-- [x] Dedicated [KAFKA.md](KAFKA.md) documentation
-- [x] Kafka consumer in Event Service (`@KafkaListener`, topic `booking-created`, consumer group `eventhub-event-service`)
-- [x] R2DBC Inbox (`inbox_events` primary key, `InboxRepository`, `R2dbcInboxRepositoryAdapter`)
-- [x] Inbox PostgreSQL/Testcontainers tests: INSERT, lookup, duplicate rejected
-- [x] Manual Kafka consumer reception and Inbox deduplication checks
-- [ ] Dead Letter Topic, poison-message recovery and Kafka offset/error-handler tests **(NEXT)**
-- [ ] Automated Kafka integration tests, poison-message handling, competing relays and durable recovery
 
-**Scope:** producer-side Transactional Outbox and consumer-side Inbox are locally verified. `at-least-once` admits redelivery, and the Inbox deduplicates persisted message IDs. Full broker-backed automated tests and exactly-once side effects are not claimed. Dated descriptions later in this roadmap are retained as historical snapshots.
+**Status:** `[x]` implemented or studied within the indicated scope; `[ ]` pending.
+For technical details and verification evidence, follow the linked topic documents.
 
 ---
-
-
-
-Completed items are marked as:
-
-``` text
-✅
-```
-
-The current or immediately upcoming area is marked as:
-
-``` text
-🚧 / NEXT
-```
-
-Future items remain unchecked until they are actually studied,
-implemented and validated.
-
-------------------------------------------------------------------------
 
 # 1. Project Foundation
 
@@ -272,7 +238,7 @@ architecture tests remain pending
 -   [x] Domain Event handler abstraction
 -   [x] Domain Event dispatcher
 -   [x] BookingCreated handler and dispatcher tests
--   [ ] Apache Kafka fundamentals
+-   [x] Apache Kafka fundamentals (topics, producers, consumers, consumer groups)
 -   [x] Kafka broker setup
 -   [x] Topics
 -   [ ] Partitions
@@ -294,6 +260,28 @@ architecture tests remain pending
 -   [x] Kafka documentation
 
 ------------------------------------------------------------------------
+
+## Kafka Integration — Transactional Outbox and Inbox
+
+- [x] Kafka broker available locally through Docker Compose; Spring Kafka producer configured
+- [x] `BookingCreatedIntegrationEvent` integration contract and JSON serialization
+- [x] `IntegrationEventPublisherPort` returns Kafka-independent `CompletableFuture<Void>`
+- [x] `KafkaIntegrationEventAdapter` sends with `KafkaTemplate` and preserves asynchronous acknowledgment
+- [x] Flyway V3 `outbox_events`, JPA entity and repository adapter
+- [x] Atomic Booking + Outbox creation and rollback verified with Testcontainers tests
+- [x] Scheduled Outbox polling, JSON deserialization and publish-success/failure completion handling
+- [x] Manual Kafka acknowledgment -> `PUBLISHED` verification in PostgreSQL
+- [x] Dedicated [KAFKA.md](KAFKA.md) documentation
+- [x] Kafka consumer in Event Service (`@KafkaListener`, topic `booking-created`, consumer group `eventhub-event-service`)
+- [x] R2DBC Inbox (`inbox_events` primary key, `InboxRepository`, `R2dbcInboxRepositoryAdapter`)
+- [x] Inbox PostgreSQL/Testcontainers tests: INSERT, lookup, duplicate rejected
+- [x] Manual Kafka consumer reception and Inbox deduplication checks
+- [ ] Dead Letter Topic, poison-message recovery and Kafka offset/error-handler tests **(next Kafka step)**
+- [ ] Automated Kafka integration tests, poison-message handling, competing relays and durable recovery
+
+**Scope:** producer-side Transactional Outbox and consumer-side Inbox are locally verified. `at-least-once` admits redelivery, and the Inbox deduplicates persisted message IDs. Full broker-backed automated tests and exactly-once side effects are not claimed. Older reactive Booking checklist items describe the original module, not the independent Booking Service.
+
+---
 
 # 12. Security
 
@@ -393,7 +381,7 @@ architecture tests remain pending
 -   [ ] Multi-stage builds
 -   [ ] Non-root containers
 -   [x] PostgreSQL container
--   [ ] Kafka container
+-   [x] Kafka container (local Compose setup)
 -   [x] Docker Compose
 -   [ ] Container networking
 -   [ ] Health checks
@@ -511,7 +499,7 @@ architecture tests remain pending
 -   [ ] Independent deployment
 -   [x] HTTP communication from imperative Booking to reactive Event (synchronous RestClient)
 -   [ ] Reactive/nonblocking service-to-service client (only if separately justified)
--   [ ] Event-driven service communication
+-   [x] Event-driven service communication (Kafka; IBM MQ demonstrated separately)
 -   [x] Translate remote HTTP 5xx and connection failures to application exception/HTTP 503
 -   [ ] Complete failure isolation (Bulkhead implemented; policy refinements, end-to-end latency budget and operational tuning remain)
 -   [x] Configure REST connection/read timeouts (2s/3s; expiry tests pending)
@@ -608,7 +596,7 @@ Domain Events                               ✅
         ↓
 Domain vs Integration Events                ✅
         ↓
-Kafka fundamentals                          ⏸ DEFERRED (original reactive track)
+Kafka fundamentals                          ✅ (independent services)
         ↓
 Booking Service (Spring MVC / API)          ✅
         ↓
@@ -632,12 +620,16 @@ Kafka producer / Transactional Outbox       ✅ LOCAL VERIFIED
         ↓
 Kafka consumer + Inbox idempotency          ✅ LOCAL VERIFIED
         ↓
-DLT / consumer failure tests                🚧 NEXT
+Kafka DLT / consumer failure tests          ⬜ PENDING
+        ↓
+IBM MQ producer / consumer / backout         ✅ LOCAL VERIFIED
+        ↓
+IBM MQ backout reprocessing                  🚧 NEXT
 ```
 
 ---
 
-# 26. Independent Booking Service — Spring MVC (new track, October 2026)
+# 26. Independent Booking Service — Spring MVC (independent service)
 
 > **Evolution, not parallel operation:** Sections 9–11 describe the **historical Booking module within the reactive monolith** (WebFlux, `CustomerId`, places, R2DBC/PostgreSQL and Event capacity). This section tracks its **extraction/redesign into the imperative `booking-service`**. Historical accomplishments remain documented, but do not count as features of the new service. The intentional mixed-stack approach serves learning and portfolio goals, not a claim of optimal production design.
 
@@ -666,7 +658,7 @@ DLT / consumer failure tests                🚧 NEXT
 - [x] In-memory repository tests for save, find, replacement and negative existence queries
 - [x] Active status query implementation and positive/negative test scenarios discussed
 
-## Next / not yet implemented in the new service
+## Independent Booking Service — Implementation and Remaining Work
 
 - [x] Run pending/confirmed/cancelled repository tests (reported green)
 - [x] Run `BookingService` success and transition tests (reported green)
@@ -725,7 +717,7 @@ DLT / consumer failure tests                🚧 NEXT
 - [ ] Idempotent/durable distributed capacity reservation or recovery for ambiguous timeouts
 - [x] Service-to-service Event availability query via REST
 - [x] Basic service-to-service Event capacity coordination with synchronous best-effort compensation (unit/HTTP mock tested)
-- [x] Basic manual E2E: Booking 201 and Event capacity 20→19; duplicate Booking 409 and restored final availability 19; unknown Event 404; full Event 409; Event Service down 503 (17 October 2026)
+- [x] Basic manual E2E: Booking 201 and Event capacity 20→19; duplicate Booking 409 and restored final availability 19; unknown Event 404; full Event 409; Event Service down 503
 - [ ] Controlled E2E injection of Booking persistence/commit failure after remote capacity reservation, with verified release
 - [ ] Durable cross-service consistency, failure recovery and idempotent compensation strategy
 - [x] Kafka producer integration and Transactional Outbox (local verification)
@@ -734,6 +726,18 @@ DLT / consumer failure tests                🚧 NEXT
 
 **Concurrency caveat:** the `existsActiveBooking()` then `save()` sequence can still race even inside `@Transactional`, but PostgreSQL now prevents two active duplicates through Flyway V2's partial unique index. `@Version` alone would not prevent inserts with distinct Booking IDs. The two-thread test did not deterministically force both pre-checks to return false.
 
-## Earlier milestone snapshot (before Kafka producer)
+------------------------------------------------------------------------
 
-Event capacity reserve/release endpoints, the synchronous `EventCapacityPort` REST adapter and `CompensatingBookingUseCase` are implemented and covered by HTTP-mock and unit tests. The existing Resilience4j Bulkhead → Circuit Breaker → Retry chain remains **GET-availability-specific**, not part of mutating POST calls. **Manual E2E (17 October 2026):** basic success, duplicate/final-state compensation, missing event, exhausted capacity, and Event Service-down cases passed. **Next:** Kafka fundamentals and a first asynchronous `BookingCreated` integration; preserve REST for capacity mutation. A controlled post-reservation JPA failure, ambiguous timeouts, idempotency, durable recovery, cancellation capacity release, outbox and deployment remain pending.
+# 27. IBM MQ — Spring JMS and Backout Handling
+
+- [x] IBM MQ queue manager `QM1` running with Docker Compose and a version-controlled MQSC setup
+- [x] Spring JMS producer (`JmsTemplate`) publishes `BookingCreatedIntegrationEvent` as JSON to `BOOKING.CREATED.Q`
+- [x] `@JmsListener` consumes the message; source queue depth verified as zero
+- [x] JMS transactional rollback and redelivery observed with a deliberately failing listener
+- [x] `BOTHRESH(3)` + `BOQNAME(BOOKING.BACKOUT.Q)` configured; IBM MQ JMS moved failing message to backout queue
+- [x] `JmsTemplate.browse()` inspected message ID and JSON; backout queue retained the message
+- [x] [IBMMQ.md](IBMMQ.md) documents setup, verification, troubleshooting, and limitations
+- [ ] Implement explicit, controlled reprocessing from `BOOKING.BACKOUT.Q` to `BOOKING.CREATED.Q` **(next IBM MQ step)**
+- [ ] Automate broker-backed JMS integration and failure-path tests; review production credentials and access policies
+
+**Scope:** IBM MQ producer/consumer/backout checks were manual local tests. The IBM MQ publisher currently demonstrates direct JMS publication and is not wired to the Kafka Transactional Outbox.

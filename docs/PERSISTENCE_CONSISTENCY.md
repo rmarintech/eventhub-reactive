@@ -1,10 +1,5 @@
 # Persistence and Consistency — EventHub
 
-
-**19 October 2026 Inbox update:** Event Service now persists `inbox_events(event_id UUID PRIMARY KEY, processed_at TIMESTAMPTZ NOT NULL)` with R2DBC. `bookingId` is the Inbox deduplication identifier; duplicate INSERTs are rejected by PostgreSQL and handled with `DuplicateKeyException`. Testcontainers repository tests and manual duplicate-consumption checks passed. There is no downstream consumer business operation requiring a joint transaction yet. See [KAFKA.md](KAFKA.md).
-
-**Current milestone (18 October 2026):** Booking creation and `outbox_events` insertion share a single local PostgreSQL/JPA transaction. Flyway V3 introduces the Outbox table; tests verified successful commit and rollback when Outbox insertion fails. The relay publishes pending events later and updates them to `PUBLISHED` only after Kafka acknowledgment. This does **not** create a distributed transaction with Event Service. See [KAFKA.md](KAFKA.md). The original reactive Booking history below is retained as historical background.
-
 R2DBC, JPA, optimistic locking, local transactions, duplicate protection and synchronous compensation. For full HTTP failure scenarios see [MICROSERVICES_COMMUNICATION.md](MICROSERVICES_COMMUNICATION.md); for resilience decorators see [RESILIENCE.md](RESILIENCE.md).
 
 ---
@@ -87,10 +82,7 @@ rows and publishing an Event updated the same row to `PUBLISHED`.
 Reactive transactions, database migrations and PostgreSQL Testcontainers
 have not yet been implemented.
 
-------------------------------------------------------------------------
-
 ---
-
 ## Booking PostgreSQL Persistence
 
 The Booking module now also persists Bookings reactively in PostgreSQL
@@ -124,10 +116,7 @@ At this point these are two successfully composed reactive persistence
 operations. Atomicity across both database writes has not yet been
 implemented or studied; reactive transactions remain a later step.
 
-------------------------------------------------------------------------
-
 ---
-
 ## Concurrent Booking and Optimistic Locking
 
 A concurrency problem was reproduced around Event capacity. Two booking
@@ -188,10 +177,7 @@ translated at the infrastructure boundary into
 `ConcurrentUpdateException`, an application-level exception. This keeps
 Spring Data details out of the application layer.
 
-------------------------------------------------------------------------
-
 ---
-
 ## Recovering the Booking That Loses the Race
 
 An optimistic-locking conflict means that the Event state used by the
@@ -299,11 +285,8 @@ optimistic locking detects stale concurrent writes, while the
 transaction provides all-or-nothing persistence across Event and
 Booking. Both mechanisms are therefore retained.
 
-------------------------------------------------------------------------
-
 ---
-
-## JPA/PostgreSQL persistence and Flyway (15 October 2026)
+## JPA/PostgreSQL persistence and Flyway
 
 The independent Booking service persists to PostgreSQL 17 through Spring Data JPA / Hibernate. `BookingJpaEntity` stores UUID fields (`booking_id`, `event_id`, `user_id`) and a string `status`; `BookingJpaEntity.fromDomain()` and `toDomain()` convert between persistence and the immutable domain. `Booking.rehydrate(...)` restores a booking with its existing ID and state; domain creation still starts in `PENDING`.
 
@@ -346,7 +329,7 @@ A service-level transaction at the usual `READ_COMMITTED` isolation does **not**
 
 ---
 
-## Active-booking uniqueness and persistence error translation (15 October 2026)
+## Active-booking uniqueness and persistence error translation
 
 `V2__unique_active_booking.sql` adds:
 
@@ -364,7 +347,7 @@ The regular application-level `existsActiveBooking()` pre-check is retained for 
 
 ---
 
-## Concurrent-start and end-to-end tests (15 October 2026)
+## Concurrent-start and end-to-end tests
 
 `ConcurrentBookingIT` uses a two-thread `ExecutorService`, a readiness `CountDownLatch(2)` and a start `CountDownLatch(1)` to release two independent booking requests for the same event/user. Without test-level `@Transactional`, each call runs through the Spring-managed transactional decorator. The test passed with exactly one successful booking and one `BookingAlreadyExistsException`, and an active booking present afterward. **Limitation:** synchronizing the start does not force both threads to observe `existsActiveBooking() == false`; a deterministic barrier at that read remains an optional stronger race test.
 
@@ -376,7 +359,7 @@ The regular application-level `existsActiveBooking()` pre-check is retained for 
 
 ---
 
-## Synchronous Event capacity reservation and Booking compensation (16 October 2026)
+## Synchronous Event capacity reservation and Booking compensation
 
 ## 59.1 Domain invariants and HTTP boundary
 
@@ -411,6 +394,6 @@ The REST adapter translates reserve 409 to `EventNotAvailableException`, 404 to 
 **Known limitations:** no shared transaction across the two PostgreSQL databases; no durable compensation retry, reservation ID, idempotency key, outbox or guaranteed resolution of ambiguous network timeouts. A failure or timeout during release can leave capacity inconsistent, and a timeout during reserve can leave an uncertain outcome. Cancellation currently does not trigger remote capacity release. These are deferred design tasks, not established production guarantees.
 
 
-## Manual cross-service consistency evidence — 17 October 2026
+## Manual cross-service consistency evidence — 
 
 With Event Service and independent Booking Service running against their actual persistence, a new `PENDING` Booking returned HTTP 201 and Event availability fell from 20 to 19. Repeating the same booking returned `409 BOOKING_ALREADY_EXISTS` and a later Event GET still reported 19 available places. This is **consistent with** the synchronous `CompensatingBookingUseCase` reserving and releasing on duplicate failure. The test did not independently capture the intermediate Event state or inject a controlled JPA failure after a confirmed remote reservation. These results **do not** establish distributed atomicity, durable compensation or idempotency. See [`MICROSERVICES_COMMUNICATION.md`](MICROSERVICES_COMMUNICATION.md).

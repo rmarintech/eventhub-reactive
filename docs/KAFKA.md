@@ -1,6 +1,6 @@
 # Kafka, Transactional Outbox and Idempotent Inbox — EventHub
 
-> **Current implementation — 19 October 2026.** Booking Service publishes through a transactional Outbox; Event Service consumes `booking-created` and deduplicates deliveries using a PostgreSQL Inbox. Producer and consumer were manually checked together; repository integration tests use Testcontainers. These results do not establish a full automated Kafka end-to-end test.
+> **Implementation scope.** Booking Service publishes through a transactional Outbox; Event Service consumes `booking-created` and deduplicates deliveries using a PostgreSQL Inbox. Producer and consumer were manually checked together; repository integration tests use Testcontainers. These results do not establish a full automated Kafka end-to-end test.
 
 ## Why we use Kafka
 
@@ -90,7 +90,7 @@ The failure callback also handles an exception from `markAsPublished()`. The eve
 
 **Other limitations:** no dead-letter topic, automated Kafka integration-test suite, verified consumer error-retry/offset-commit policy, guaranteed publish deadline or robust poison-message policy has been implemented yet. A malformed stored payload can currently interrupt that polling invocation. Kafka availability is not guaranteed; acknowledgments and retries do not guarantee eventual success under permanent failure.
 
-## Evidence as of 19 October 2026
+## Evidence 
 
 - `JpaOutboxRepositoryAdapterIT`: real PostgreSQL/Testcontainers persistence and `markAsPublished` verification (green).
 - `TransactionalBookingUseCaseIT`: verified Booking and pending Outbox row persisted together; simulated `OutboxRepository.createOutboxEvent()` failure rolled back Booking and triggered remote-release request through mocked capacity port (green).
@@ -130,7 +130,7 @@ The earlier `existsById() -> save()` implementation was simplified: a pre-check 
 
 **Note on delivery semantics:** the Inbox prevents two persisted records for the same key, not repeated deliveries from Kafka. The actual Kafka offset/error behavior depends on listener-container configuration and has not been failure-injection-tested. `auto-offset-reset: earliest` applies only when a group has no committed offset.
 
-## Consumer-side evidence — 19 October 2026
+## Consumer-side evidence 
 
 - `R2dbcInboxRepositoryAdapterIT`: PostgreSQL/Testcontainers tests passed for saving an event, checking existence, and rejecting a duplicate primary key; the missing `testcontainers-r2dbc` dependency was added to enable the R2DBC service connection.
 - Manual two-service verification: Event Service logged the same `bookingId` as the producer payload from the `booking-created` topic.

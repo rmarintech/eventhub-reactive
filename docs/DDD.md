@@ -1,10 +1,5 @@
 # Domain-Driven Design — EventHub
 
-
-**19 October 2026 integration update:** Event Service now deserializes the Booking-created integration contract and records its `bookingId` in a deduplicating Inbox. This is an integration concern, not an Event domain Aggregate or a repeat of the REST capacity reservation. See [KAFKA.md](KAFKA.md).
-
-**Current event-integration boundary (18 October 2026):** the independent Booking Service now records `BookingCreatedIntegrationEvent` as the JSON payload of a PostgreSQL Outbox record in the same transaction as Booking creation. The integration event is an external message contract, not the `Booking` aggregate or the persisted Outbox record. Kafka publication details: [KAFKA.md](KAFKA.md). Historical statements below about Kafka not yet being implemented refer to earlier milestones.
-
 Business modeling, aggregates, value objects, invariants and domain events in the original reactive EventHub and the independent Booking Service. Architecture and persistence are documented separately in [HEXAGONAL.md](HEXAGONAL.md) and [PERSISTENCE_CONSISTENCY.md](PERSISTENCE_CONSISTENCY.md).
 
 ---
@@ -47,10 +42,7 @@ It does not depend on:
 -   Reactor
 -   PostgreSQL
 
-------------------------------------------------------------------------
-
 ---
-
 ## Event Domain
 
 The first model implemented is an Event.
@@ -80,10 +72,7 @@ releasePlaces()
 
 This means the domain object contains both state and behaviour.
 
-------------------------------------------------------------------------
-
 ---
-
 ## Entity
 
 An **Entity** is a domain object whose identity matters.
@@ -106,10 +95,7 @@ Status: PUBLISHED
 
 It is still the same Event because its identity has not changed.
 
-------------------------------------------------------------------------
-
 ---
-
 ## EventId and Strongly Typed IDs
 
 The Event identity is represented by:
@@ -154,10 +140,7 @@ Event
           └── UUID
 ```
 
-------------------------------------------------------------------------
-
 ---
-
 ## Value Objects
 
 A **Value Object** represents a domain concept defined by its value
@@ -175,10 +158,7 @@ Money
 Java records are useful for these objects because they provide immutable
 components and value-based equality.
 
-------------------------------------------------------------------------
-
 ---
-
 ## EventName
 
 Instead of representing the Event name only as:
@@ -226,10 +206,7 @@ An invalid EventName cannot exist.
 
 The domain object protects its own validity.
 
-------------------------------------------------------------------------
-
 ---
-
 ## Capacity
 
 Capacity represents both the total number of places and the currently
@@ -276,10 +253,7 @@ public record Capacity(
 }
 ```
 
-------------------------------------------------------------------------
-
 ---
-
 ## Domain Invariants
 
 An invariant is a condition that must always remain true for the domain
@@ -307,10 +281,7 @@ Capacity(20, 21)
 
 The object cannot be constructed in those states.
 
-------------------------------------------------------------------------
-
 ---
-
 ## Factory Method
 
 Capacity provides:
@@ -336,10 +307,7 @@ new Capacity(20, 20);
 The factory method expresses that a newly created Capacity starts with
 all places available.
 
-------------------------------------------------------------------------
-
 ---
-
 ## Behaviour in Value Objects
 
 Capacity does not only contain data.
@@ -396,10 +364,7 @@ public Capacity release(int places) {
 
 The behaviour is kept close to the data and invariants it affects.
 
-------------------------------------------------------------------------
-
 ---
-
 ## Tell, Don't Ask
 
 The Capacity implementation demonstrates the idea:
@@ -428,10 +393,7 @@ capacity.reserve(places);
 
 Capacity itself applies the corresponding rules.
 
-------------------------------------------------------------------------
-
 ---
-
 ## Immutability
 
 `Capacity` is immutable.
@@ -458,10 +420,7 @@ The original Value Object remains unchanged.
 
 The tests explicitly verify this behaviour.
 
-------------------------------------------------------------------------
-
 ---
-
 ## Money
 
 Money is represented as a combination of:
@@ -517,10 +476,7 @@ public record Money(
 
 Zero is allowed so EventHub can represent free Events.
 
-------------------------------------------------------------------------
-
 ---
-
 ## BigDecimal for Money
 
 Money uses:
@@ -546,10 +502,7 @@ new BigDecimal(49.99)
 This avoids starting from a binary floating-point representation when an
 exact decimal value is required.
 
-------------------------------------------------------------------------
-
 ---
-
 ## EventStatus
 
 The Event lifecycle currently uses:
@@ -586,10 +539,7 @@ event.publish();
 event.cancel();
 ```
 
-------------------------------------------------------------------------
-
 ---
-
 ## Aggregate Root
 
 `Event` is the first Aggregate Root implemented in EventHub.
@@ -618,10 +568,7 @@ event.reservePlaces(3);
 
 The Aggregate Root coordinates the rules required by that operation.
 
-------------------------------------------------------------------------
-
 ---
-
 ## Aggregate Behaviour
 
 Reservation is implemented in Event as:
@@ -662,10 +609,7 @@ Event must be PUBLISHED
 Enough capacity must be available
 ```
 
-------------------------------------------------------------------------
-
 ---
-
 ## Event Creation
 
 The Event constructor is private.
@@ -688,10 +632,7 @@ new Event
 This prevents callers from choosing an arbitrary initial lifecycle state
 when creating a new Event.
 
-------------------------------------------------------------------------
-
 ---
-
 ## Rich Domain Model
 
 The Event domain is intentionally more than a collection of data fields.
@@ -732,10 +673,7 @@ Business Rules
 
 This is the rich domain model approach used so far in EventHub.
 
-------------------------------------------------------------------------
-
 ---
-
 ## Framework Independence
 
 The domain currently contains no Spring annotations.
@@ -767,10 +705,7 @@ dependencies in it.
 
 The current domain behaviour is pure synchronous Java logic.
 
-------------------------------------------------------------------------
-
 ---
-
 ## Domain Unit Tests
 
 The domain is tested directly with JUnit.
@@ -847,10 +782,7 @@ or:
 .\mvnw.cmd clean test
 ```
 
-------------------------------------------------------------------------
-
 ---
-
 ## Current Domain Structure
 
 ``` text
@@ -887,10 +819,7 @@ This is the current stopping point of the DDD documentation.
 The document will be extended only after additional DDD concepts have
 been studied and implemented in the course.
 
-------------------------------------------------------------------------
-
 ---
-
 ## Booking Domain and Aggregate
 
 A second business module, `booking`, has now been introduced.
@@ -929,10 +858,7 @@ cancellation rejection and invalid place counts. A JUnit 5 parameterized
 test with `@ParameterizedTest` and `@ValueSource` was introduced to test
 multiple invalid place values.
 
-------------------------------------------------------------------------
-
 ---
-
 ## Booking Domain Events
 
 A Domain Event represents a business fact that has already happened.
@@ -1000,10 +926,7 @@ with `BookingCreated`. The complete test suite is green.
 
 Kafka publication has not yet been implemented.
 
-------------------------------------------------------------------------
-
 ---
-
 ## Domain Events vs Integration Events
 
 The distinction between Domain Events and Integration Events has now

@@ -1,0 +1,24 @@
+services:
+  ibmmq:
+    image: icr.io/ibm-messaging/mq:latest
+    container_name: eventhub-ibmmq
+
+    environment:
+      LICENSE: accept
+      MQ_QMGR_NAME: QM1
+      MQ_APP_PASSWORD: passw0rd
+
+      #Usuario de aplicación	app
+      #Contraseña de desarrollo	passw0rd
+      #Canal de aplicación	DEV.APP.SVRCONN
+
+    ports:
+      - "1414:1414"
+      - "9443:9443"
+
+    volumes:
+      - ibmmq-data:/mnt/mqm
+      - ./ibmmq/init.mqsc:/etc/mqm/init.mqsc:ro
+
+volumes:
+  ibmmq-data:

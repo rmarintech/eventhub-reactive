@@ -1,7 +1,5 @@
 # Reactive Programming — EventHub
 
-
-**19 October 2026 Kafka/R2DBC boundary:** Event Service now uses an imperative Spring Kafka `@KafkaListener` and a reactive R2DBC `InboxRepository`. The listener uses `save(...).block()` on the Kafka listener thread to wait for PostgreSQL before returning; it is not an Event WebFlux event-loop handler. See [KAFKA.md](KAFKA.md).
 This document records **only concepts studied and behaviour implemented or tested** in EventHub. It is organized by topic rather than by dated progress snapshots. Kafka producer publication is now implemented in the **independent imperative Booking Service**, not in the historical reactive Booking module. See [KAFKA.md](KAFKA.md).
 
 # Reactor fundamentals
@@ -720,7 +718,7 @@ handler is invoked.
 `IntegrationEventPublisher` output port. Kafka has not yet been
 introduced.
 
-# Current project state
+# Implementation Scope
 
 - Reactor fundamentals, reactive composition, schedulers and `StepVerifier`: studied and tested.
 - Spring WebFlux Event/Booking HTTP adapters and focused tests: implemented.
@@ -737,7 +735,7 @@ For the **original reactive EventHub modules**, database migrations, PostgreSQL 
 
 ---
 
-# Boundary note — independent Booking Service (October 2026)
+# Independent Booking Service Boundary
 
 The sections above describe the **original reactive EventHub modules**, including their `Mono<Booking>` flow, `POST /bookings`, reactive event-capacity coordination, R2DBC persistence and WebTestClient/StepVerifier tests. This material is kept as a record of what was built and learned in that implementation.
 
@@ -760,7 +758,7 @@ The original reactive Event module uses Reactor operators such as `retry()` and 
 Timeout configuration, the three-attempt Retry policy, Circuit Breaker behavior, Bulkhead concurrency limits, failure classification, and the verified tests belong in **[`RESILIENCE.md`](RESILIENCE.md)**. The application/hexagonal design rationale remains in [`HEXAGONAL.md`](HEXAGONAL.md#booking-service-retry-as-an-outbound-adapter-15-october-2026). Reactor examples above remain unchanged and continue to document the original learning path.
 
 
-## Reactive Event capacity API and imperative Booking compensation (16 October 2026)
+## Reactive Event capacity API and imperative Booking compensation
 
 Event Service now exposes WebFlux `POST /events/{id}/reserve/{places}/places` and `POST /events/{id}/release/{places}/places`. Its reactive use cases retrieve and update Event via `Mono<Event>`, preserving the synchronous, framework-independent `Event`/`Capacity` domain model. R2DBC optimistic locking detects concurrent writes; a bounded one-time retry re-reads the Event after `ConcurrentUpdateException`. Domain capacity exceptions (`InsufficientCapacityException`, `ExcessiveCapacityException`) are translated by the HTTP adapter into `409 Conflict`. A WebTestClient test confirmed insufficient capacity returns 409 without changing the stored available places.
 

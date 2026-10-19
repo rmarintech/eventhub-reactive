@@ -1,10 +1,5 @@
 # Microservices Communication — Practical Guide and Testing Checklist
 
-
-**19 October 2026 asynchronous consumer:** Event Service now receives `booking-created` and deduplicates `bookingId` via a PostgreSQL/R2DBC Inbox. This is independent of REST capacity reservation; no second capacity deduction occurs. Repository integration tests and manual producer-to-consumer verification passed; offset/failure semantics and DLT remain pending. See [KAFKA.md](KAFKA.md).
-
-**Asynchronous channel (18 October 2026):** Booking Service additionally persists `BookingCreatedIntegrationEvent` through Transactional Outbox and publishes it asynchronously to Kafka after local commit. This does **not** change the synchronous REST capacity reservation/compensation sequence below. Publisher flow, evidence, limitations and next consumer step: [KAFKA.md](KAFKA.md).
-
 > **Purpose.** A reusable guide for designing, implementing, and **demonstrating through tests** reliable communication between Java/Spring Boot microservices. The running example is **EventHub**: **Event Service** (WebFlux + R2DBC, `:8080`) and **Booking Service** (Spring MVC + JPA, `:8081`). This is not a list of technologies that every project must install: choose the guarantees required by the business.
 >
 > **Evidence rule:** *implemented* does not mean *tested*; a mocked HTTP server is not an end-to-end test; a 200/201 response alone does not prove distributed consistency.
@@ -32,7 +27,7 @@ CompensatingBookingUseCase
 HTTP 201 / Booking Service error
 ```
 
-**Target business invariant:** successfully creating a Booking consumes **exactly one place**. If local Booking creation fails after a confirmed remote reservation, the service attempts to release that place. **Current status:** synchronous compensation is implemented and tested with mocks; basic manual two-service E2E scenarios were exercised on 17 October 2026. Full post-reservation failure injection and durable recovery remain pending. There is no shared ACID transaction across the two PostgreSQL databases.
+**Target business invariant:** successfully creating a Booking consumes **exactly one place**. If local Booking creation fails after a confirmed remote reservation, the service attempts to release that place. **Current status:** synchronous compensation is implemented and tested with mocks; basic manual two-service E2E scenarios were exercised. Full post-reservation failure injection and durable recovery remain pending. There is no shared ACID transaction across the two PostgreSQL databases.
 
 ### Essential terminology
 
@@ -221,11 +216,11 @@ Limitations/open issue: _______________
 
 **Implemented and tested in isolation:** Event HTTP reserve/release with domain guards and HTTP 409; `RestEventCapacityAdapterTest` (8 cases); `CompensatingBookingUseCaseTest` (3 cases); Booking HTTP/JPA tests updated for `EventCapacityPort`; local transactions and partial unique index; availability **GET** resilience tested separately.
 
-**Next incremental task:** Kafka fundamentals and a first asynchronous integration. The basic real-service scenarios have been manually recorded below; the remaining failure injection/concurrency scenarios stay pending. Keep 🟡/⬜ until verified. The historical Reactor concurrency test has a `Mono.zip` cancellation limitation; a green result does not prove both flows finished independently.
+**Next incremental task:** Kafka failure handling and integration testing. The basic real-service scenarios have been manually recorded below; the remaining failure injection/concurrency scenarios stay pending. Keep 🟡/⬜ until verified. The historical Reactor concurrency test has a `Mono.zip` cancellation limitation; a green result does not prove both flows finished independently.
 
 **Related docs:** [DDD.md](DDD.md) (domain and decorators), [REACTIVE.md](REACTIVE.md) (WebFlux), [RESILIENCE.md](RESILIENCE.md) (GET and Resilience4j), [ROADMAP.md](ROADMAP.md) (milestones).
 
-## 10. Manual two-service E2E verification — 17 October 2026
+## 10. Manual two-service E2E verification — 
 
 **Environment:** running Event Service (`:8080`) and Booking Service (`:8081`), with their real PostgreSQL-backed state; requests made manually over HTTP, **without mocks**. These are manual observations, not an automated E2E suite.
 
@@ -239,4 +234,4 @@ Limitations/open issue: _______________
 
 **Evidence boundaries:** responses and Event GET reads establish these observed outcomes. Independent SQL inspection of Booking rows, proof of the intermediate `19 → 18 → 19` sequence, a controlled **JPA failure after confirmed reservation**, and automatic replayable E2E tests were **not** performed. The duplicate scenario is consistent with the implemented compensation flow, but does not prove it under every failure condition.
 
-**Next learning milestone: Apache Kafka.** Start with broker, topic, partition, offset, producer and consumer; then integrate an asynchronous `BookingCreated` notification flow. **Keep synchronous REST for capacity reservation.** Deferred hardening: idempotency, ambiguous timeouts, durable compensation/reconciliation, deliberate race testing, real timeout measurements, and distributed tracing.
+**Further Kafka work:** broker-backed automated integration tests and failure handling; then integrate an asynchronous `BookingCreated` notification flow. **Keep synchronous REST for capacity reservation.** Deferred hardening: idempotency, ambiguous timeouts, durable compensation/reconciliation, deliberate race testing, real timeout measurements, and distributed tracing.
