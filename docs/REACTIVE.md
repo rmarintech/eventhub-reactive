@@ -1,5 +1,7 @@
 # Reactive Programming — EventHub
 
+
+**19 October 2026 Kafka/R2DBC boundary:** Event Service now uses an imperative Spring Kafka `@KafkaListener` and a reactive R2DBC `InboxRepository`. The listener uses `save(...).block()` on the Kafka listener thread to wait for PostgreSQL before returning; it is not an Event WebFlux event-loop handler. See [KAFKA.md](KAFKA.md).
 This document records **only concepts studied and behaviour implemented or tested** in EventHub. It is organized by topic rather than by dated progress snapshots. Kafka producer publication is now implemented in the **independent imperative Booking Service**, not in the historical reactive Booking module. See [KAFKA.md](KAFKA.md).
 
 # Reactor fundamentals

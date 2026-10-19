@@ -1,6 +1,8 @@
 # Microservices Communication — Practical Guide and Testing Checklist
 
 
+**19 October 2026 asynchronous consumer:** Event Service now receives `booking-created` and deduplicates `bookingId` via a PostgreSQL/R2DBC Inbox. This is independent of REST capacity reservation; no second capacity deduction occurs. Repository integration tests and manual producer-to-consumer verification passed; offset/failure semantics and DLT remain pending. See [KAFKA.md](KAFKA.md).
+
 **Asynchronous channel (18 October 2026):** Booking Service additionally persists `BookingCreatedIntegrationEvent` through Transactional Outbox and publishes it asynchronously to Kafka after local commit. This does **not** change the synchronous REST capacity reservation/compensation sequence below. Publisher flow, evidence, limitations and next consumer step: [KAFKA.md](KAFKA.md).
 
 > **Purpose.** A reusable guide for designing, implementing, and **demonstrating through tests** reliable communication between Java/Spring Boot microservices. The running example is **EventHub**: **Event Service** (WebFlux + R2DBC, `:8080`) and **Booking Service** (Spring MVC + JPA, `:8081`). This is not a list of technologies that every project must install: choose the guarantees required by the business.

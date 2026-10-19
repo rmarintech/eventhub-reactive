@@ -11,3 +11,15 @@ spring:
   sql:
     init:
       mode: always
+
+  kafka:
+    bootstrap-servers: localhost:9092
+    consumer:
+      #group-id: identifica el grupo de consumidores de Event Service.
+      group-id: eventhub-event-service
+      #key-deserializer: convierte la clave recibida a String.
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      #value-deserializer: convierte el JSON recibido a String.
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      #si el grupo no tiene offsets registrados, comienza desde el mensaje más antiguo disponible.
+      auto-offset-reset: earliest

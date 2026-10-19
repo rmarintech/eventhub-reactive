@@ -1,6 +1,6 @@
-# Kafka and Transactional Outbox — EventHub
+# Kafka, Transactional Outbox and Idempotent Inbox — EventHub
 
-> **Current implementation — 18 October 2026.** This document records what was implemented and manually verified in the independent `booking-service`. It distinguishes producer publication from consumer delivery, and asynchronous acknowledgments from local database transactions.
+> **Current implementation — 19 October 2026.** Booking Service publishes through a transactional Outbox; Event Service consumes `booking-created` and deduplicates deliveries using a PostgreSQL Inbox. Producer and consumer were manually checked together; repository integration tests use Testcontainers. These results do not establish a full automated Kafka end-to-end test.
 
 ## Why we use Kafka
 
@@ -34,7 +34,13 @@ KafkaIntegrationEventAdapter
        v
 Kafka topic: booking-created
        v
-Future consumer (NOT implemented yet)
+Event Service @KafkaListener (group: eventhub-event-service)
+       |-- ObjectMapper -> BookingCreatedIntegrationEvent
+       |-- InboxRepository.save(InboxEvent(bookingId, processedAt)).block()
+       |-- INSERT inbox_events (PostgreSQL/R2DBC)
+       |      |-- success -> record newly received event
+       |      +-- DuplicateKeyException -> ignore redelivery
+       +-- other failures -> propagate to Kafka listener error handling
 ```
 
 ## Integration event vs Outbox record
@@ -80,11 +86,11 @@ The failure callback also handles an exception from `markAsPublished()`. The eve
 
 **Implemented guarantee:** Booking persistence and Outbox insertion are atomic within the Booking PostgreSQL transaction. A successful local COMMIT leaves an event to publish. The relay retries records still `PENDING` on later polling cycles. Publication is **at least once**, not exactly once.
 
-**Duplicate scenarios:** Kafka may acknowledge an event, but the database update to `PUBLISHED` may fail. Also, if the Kafka future has not completed when the next poll starts, the same `PENDING` event may be sent twice. Multiple scheduler instances increase that possibility. We have **not** implemented a claim/lease (`IN_PROGRESS`) mechanism or coordination among scheduler instances. Future consumers must therefore be idempotent.
+**Duplicate scenarios:** Kafka may acknowledge an event, but the database update to `PUBLISHED` may fail. Also, if the Kafka future has not completed when the next poll starts, the same `PENDING` event may be sent twice. Multiple scheduler instances increase that possibility. We have **not** implemented a claim/lease (`IN_PROGRESS`) mechanism or coordination among scheduler instances. The Event Service consumer implements persistent deduplication using the Booking UUID as the Inbox primary key.
 
-**Other limitations:** no consumer, consumer group, consumer-side idempotency implementation, dead-letter topic, Kafka integration-test suite, guaranteed publish deadline or robust poison-message policy has been implemented yet. A malformed stored payload can currently interrupt that polling invocation. Kafka availability is not guaranteed; acknowledgments and retries do not guarantee eventual success under permanent failure.
+**Other limitations:** no dead-letter topic, automated Kafka integration-test suite, verified consumer error-retry/offset-commit policy, guaranteed publish deadline or robust poison-message policy has been implemented yet. A malformed stored payload can currently interrupt that polling invocation. Kafka availability is not guaranteed; acknowledgments and retries do not guarantee eventual success under permanent failure.
 
-## Evidence as of 18 October 2026
+## Evidence as of 19 October 2026
 
 - `JpaOutboxRepositoryAdapterIT`: real PostgreSQL/Testcontainers persistence and `markAsPublished` verification (green).
 - `TransactionalBookingUseCaseIT`: verified Booking and pending Outbox row persisted together; simulated `OutboxRepository.createOutboxEvent()` failure rolled back Booking and triggered remote-release request through mocked capacity port (green).
@@ -93,6 +99,45 @@ The failure callback also handles an exception from `markAsPublished()`. The eve
 
 These are scoped tests and manual observations. They do not constitute an automated end-to-end Kafka integration test or proof against all crash windows.
 
+## Event Service: Kafka consumer and Inbox
+
+The independent **Event Service** uses Spring WebFlux and R2DBC for its Event API and persistence. Kafka consumption is handled by a **Spring Kafka imperative `@KafkaListener`**, rather than by a reactive Kafka receiver. The listener is a Kafka-managed thread: `InboxRepository.save(...).block()` waits for the R2DBC INSERT to finish before returning to Kafka's listener container. Do not call `subscribe()` and immediately return, because the offset could advance before the Inbox write is finished.
+
+- **Topic:** `booking-created`. **Consumer group:** `eventhub-event-service`.
+- **Deserializers:** Kafka `StringDeserializer` for key and value; Jackson `ObjectMapper` converts the JSON payload to `BookingCreatedIntegrationEvent(bookingId, eventId, userId)` in Event Service.
+- **Deduplication ID:** `bookingId` because this exercise generates one `BookingCreatedIntegrationEvent` per Booking. Do not confuse it with the business `eventId` (the Event whose capacity was previously reserved).
+- **Application model and port:** `InboxEvent(UUID eventId, OffsetDateTime processedAt)` and `InboxRepository` (`Mono<Boolean> existsById(UUID)` and `Mono<InboxEvent> save(InboxEvent)`). Here `InboxEvent.eventId` is the **message deduplication identifier**, populated from `bookingId`.
+- **R2DBC infrastructure:** `InboxEntity` maps `inbox_events`, implements `Persistable<UUID>` and supplies `isNew=true` for new INSERTs; `SpringDataInboxRepository` and `R2dbcInboxRepositoryAdapter` implement the port.
+- **Schema:** `inbox_events(event_id UUID PRIMARY KEY, processed_at TIMESTAMPTZ NOT NULL)` in Event Service's `schema.sql`. The primary key enforces uniqueness, including when duplicate deliveries race.
+- **Listener:** `BookingCreatedKafkaConsumer` is an `@Component` with `@KafkaListener(topics="booking-created", groupId="eventhub-event-service")`. It deserializes the JSON, creates an `InboxEvent` using `bookingId`, and calls `inboxRepository.save(inboxEvent).block()`. `DuplicateKeyException` is treated as an already-recorded message; unrelated exceptions are not swallowed.
+
+```text
+booking-created JSON
+        ↓
+BookingCreatedKafkaConsumer @KafkaListener
+        ↓ deserialize
+BookingCreatedIntegrationEvent
+        ↓ bookingId -> InboxEvent.eventId
+InboxRepository.save(...).block()
+        ├── INSERT succeeds  -> log new event
+        ├── duplicate key    -> log ignored duplicate
+        └── other failure    -> throw (listener error handling applies)
+```
+
+The earlier `existsById() -> save()` implementation was simplified: a pre-check is vulnerable to a check-then-insert race and adds a database query. The PostgreSQL primary key plus a narrowly scoped `DuplicateKeyException` handler is the deduplication mechanism actually retained. The `existsById()` port method remains available, but is not required in the final listener path.
+
+**Scope of this exercise:** receiving and recording events only. Event capacity was already reserved over REST; the consumer must **not** reserve it again. No downstream business side effect is executed. If one is introduced later, it must be committed atomically with the Inbox record using an appropriate reactive transaction.
+
+**Note on delivery semantics:** the Inbox prevents two persisted records for the same key, not repeated deliveries from Kafka. The actual Kafka offset/error behavior depends on listener-container configuration and has not been failure-injection-tested. `auto-offset-reset: earliest` applies only when a group has no committed offset.
+
+## Consumer-side evidence — 19 October 2026
+
+- `R2dbcInboxRepositoryAdapterIT`: PostgreSQL/Testcontainers tests passed for saving an event, checking existence, and rejecting a duplicate primary key; the missing `testcontainers-r2dbc` dependency was added to enable the R2DBC service connection.
+- Manual two-service verification: Event Service logged the same `bookingId` as the producer payload from the `booking-created` topic.
+- Manual Inbox verification: an incoming Booking-created event was persisted in `inbox_events`. Repeating the same logical event was logged as ignored; the database row was not duplicated.
+- **Not verified:** automated broker-backed consumer integration tests, Kafka offset-commit behavior under failure, concurrent duplicate handling under load, a DLT, or exactly-once semantics.
+
 ## Next learning milestone
 
-Implement a Kafka consumer for `booking-created` and test consumer-side idempotency. Keep the existing producer flow unchanged while studying this separately.
+Introduce Dead Letter Topic (DLT) handling and focused tests for poison messages and transient consumer failures. Preserve the current producer and Inbox architecture.
+

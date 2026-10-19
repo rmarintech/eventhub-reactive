@@ -17,7 +17,6 @@ public class SharedConfiguration {
 
     @Bean
     public DomainEventPublisher domainEventPublisher(DomainEventDispatcher domainEventDispatcher){
-
         return new InMemoryDomainEventPublisher(domainEventDispatcher);
 
     }

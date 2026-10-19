@@ -3,7 +3,7 @@
 This roadmap tracks the complete learning and implementation path for
 EventHub.
 
-## Current milestone — 18 October 2026
+## Current milestone — 19 October 2026
 
 - [x] Kafka broker available locally through Docker Compose; Spring Kafka producer configured
 - [x] `BookingCreatedIntegrationEvent` integration contract and JSON serialization
@@ -14,10 +14,14 @@ EventHub.
 - [x] Scheduled Outbox polling, JSON deserialization and publish-success/failure completion handling
 - [x] Manual Kafka acknowledgment -> `PUBLISHED` verification in PostgreSQL
 - [x] Dedicated [KAFKA.md](KAFKA.md) documentation
-- [ ] Kafka consumer and consumer-side idempotency **(NEXT)**
+- [x] Kafka consumer in Event Service (`@KafkaListener`, topic `booking-created`, consumer group `eventhub-event-service`)
+- [x] R2DBC Inbox (`inbox_events` primary key, `InboxRepository`, `R2dbcInboxRepositoryAdapter`)
+- [x] Inbox PostgreSQL/Testcontainers tests: INSERT, lookup, duplicate rejected
+- [x] Manual Kafka consumer reception and Inbox deduplication checks
+- [ ] Dead Letter Topic, poison-message recovery and Kafka offset/error-handler tests **(NEXT)**
 - [ ] Automated Kafka integration tests, poison-message handling, competing relays and durable recovery
 
-**Scope:** producer-side Transactional Outbox is working in local manual verification. `at-least-once` admits duplicates; no consumer or exactly-once delivery claim. Dated descriptions later in this roadmap are retained as historical snapshots.
+**Scope:** producer-side Transactional Outbox and consumer-side Inbox are locally verified. `at-least-once` admits redelivery, and the Inbox deduplicates persisted message IDs. Full broker-backed automated tests and exactly-once side effects are not claimed. Dated descriptions later in this roadmap are retained as historical snapshots.
 
 ---
 
@@ -274,15 +278,16 @@ architecture tests remain pending
 -   [ ] Partitions
 -   [ ] Offsets
 -   [x] Producers
--   [ ] Consumers
--   [ ] Consumer groups
+-   [x] Consumers
+-   [x] Consumer groups
 -   [x] Spring Kafka
 -   [x] Event contracts
 -   [x] Event serialization
 -   [ ] Retry strategy
 -   [ ] Dead Letter Topic
--   [ ] Idempotency
--   [ ] Duplicate-event handling
+-   [x] Consumer-side Inbox deduplication (primary key)
+-   [x] Duplicate-event handling in the Inbox (DuplicateKeyException)
+-   [ ] Atomic Inbox + downstream business side effect (not needed for current logging-only consumer)
 -   [ ] Eventual consistency
 -   [x] Transactional Outbox pattern
 -   [ ] Kafka integration tests
@@ -625,7 +630,9 @@ Live two-service end-to-end validation      ✅ BASIC MANUAL E2E
         ↓
 Kafka producer / Transactional Outbox       ✅ LOCAL VERIFIED
         ↓
-Kafka consumer + idempotency                🚧 NEXT
+Kafka consumer + Inbox idempotency          ✅ LOCAL VERIFIED
+        ↓
+DLT / consumer failure tests                🚧 NEXT
 ```
 
 ---
@@ -721,7 +728,8 @@ Kafka consumer + idempotency                🚧 NEXT
 - [x] Basic manual E2E: Booking 201 and Event capacity 20→19; duplicate Booking 409 and restored final availability 19; unknown Event 404; full Event 409; Event Service down 503 (17 October 2026)
 - [ ] Controlled E2E injection of Booking persistence/commit failure after remote capacity reservation, with verified release
 - [ ] Durable cross-service consistency, failure recovery and idempotent compensation strategy
-- [x] Kafka producer integration and Transactional Outbox (local verification); consumer remains pending
+- [x] Kafka producer integration and Transactional Outbox (local verification)
+- [x] Event Service Kafka consumer and R2DBC Inbox (manual verification and repository IT)
 - [ ] Containerization, deployment and CI/CD for the independent service
 
 **Concurrency caveat:** the `existsActiveBooking()` then `save()` sequence can still race even inside `@Transactional`, but PostgreSQL now prevents two active duplicates through Flyway V2's partial unique index. `@Version` alone would not prevent inserts with distinct Booking IDs. The two-thread test did not deterministically force both pre-checks to return false.

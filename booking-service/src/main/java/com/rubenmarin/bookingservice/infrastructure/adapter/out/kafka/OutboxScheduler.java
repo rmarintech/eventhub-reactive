@@ -9,6 +9,8 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import tools.jackson.databind.ObjectMapper;
 
+import java.util.concurrent.CompletableFuture;
+
 @Component
 public class OutboxScheduler {
 
@@ -43,7 +45,7 @@ public class OutboxScheduler {
 
             //Importante: thenRun() no se ejecutará si Kafka falla.
             // En ese caso, el evento seguirá PENDING.
-            integrationEventPublisher.publish(bookingCreatedIntegrationEvent)
+            CompletableFuture<Void> future = integrationEventPublisher.publish(bookingCreatedIntegrationEvent)
                     .thenRun(() ->
                     {
                         _log.debug("Published outbox: {}", outbox.id());

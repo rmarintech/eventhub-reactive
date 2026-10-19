@@ -1,6 +1,8 @@
 # Hexagonal Architecture — EventHub
 
 
+**19 October 2026 consumer boundary:** Event Service now has an application-owned `InboxRepository` (reactive `Mono` methods) with an infrastructure `R2dbcInboxRepositoryAdapter`, and an inbound `BookingCreatedKafkaConsumer` (`@KafkaListener`). The Kafka listener uses Jackson and waits for `save(...).block()` on its Kafka-managed thread. See [KAFKA.md](KAFKA.md).
+
 **Current boundary (18 October 2026):** application-owned `IntegrationEventPublisherPort` returns `CompletableFuture<Void>` and `OutboxRepository` owns persistence operations; infrastructure provides `KafkaIntegrationEventAdapter`, `JpaOutboxRepositoryAdapter` and `OutboxScheduler`. Kafka's `SendResult` stays inside infrastructure. See [KAFKA.md](KAFKA.md).
 
 Application ports, use cases, inbound/outbound adapters, dependency inversion, Spring wiring and HTTP boundaries. Domain modeling belongs in [DDD.md](DDD.md); transactions and distributed consistency belong in [PERSISTENCE_CONSISTENCY.md](PERSISTENCE_CONSISTENCY.md).
