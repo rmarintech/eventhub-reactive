@@ -1,6 +1,7 @@
 package com.rubenmarin.bookingservice.infrastructure.transaction;
 
 
+import com.rubenmarin.bookingservice.application.model.BrokerName;
 import com.rubenmarin.bookingservice.application.model.OutboxEvent;
 import com.rubenmarin.bookingservice.application.model.OutboxEventStatus;
 import com.rubenmarin.bookingservice.application.port.in.BookingUseCase;
@@ -98,27 +99,50 @@ class TransactionalBookingUseCaseIT {
 
         UUID createdBookingId = created.getBookingId().bookingId();
 
-        OutboxEvent  outbox= outboxRepository
-                .findByStatusPending()
+        OutboxEvent  outboxKafka= outboxRepository
+                .findByStatusPendingAndBrokerName(BrokerName.KAFKA)
                 .stream()
                 .filter(
                         outboxEvent ->
                                 outboxEvent.aggregateId().equals(createdBookingId))
                 .findFirst().orElseThrow(
-                        () -> new RuntimeException("Outbox event not found for booking Id: " + createdBookingId)
+                        () -> new RuntimeException("Outbox KAFKA event not found for booking Id: " + createdBookingId)
                 );
 
-        JsonNode json = objectMapper.readTree(outbox.payload());
+        JsonNode jsonKafka = objectMapper.readTree(outboxKafka.payload());
 
 
         Assertions.assertAll(
-                () -> Assertions.assertEquals( OutboxEventStatus.PENDING, outbox.status()),
-                () -> Assertions.assertEquals("BookingCreated", outbox.eventType()),
-                () -> Assertions.assertEquals("booking-created", outbox.topic()),
+                () -> Assertions.assertEquals( OutboxEventStatus.PENDING, outboxKafka.status()),
+                () -> Assertions.assertEquals("BookingCreated", outboxKafka.eventType()),
+                () -> Assertions.assertEquals("booking-created", outboxKafka.topic()),
 
-                () -> Assertions.assertEquals(createdBookingId.toString(), json.get("bookingId").asString()),
-                () -> Assertions.assertEquals(eventId.eventId().toString(), json.get("eventId").asString()),
-                () -> Assertions.assertEquals(userId.userId().toString(), json.get("userId").asString())
+                () -> Assertions.assertEquals(createdBookingId.toString(), jsonKafka.get("bookingId").asString()),
+                () -> Assertions.assertEquals(eventId.eventId().toString(), jsonKafka.get("eventId").asString()),
+                () -> Assertions.assertEquals(userId.userId().toString(), jsonKafka.get("userId").asString())
+        );
+
+        OutboxEvent  outboxMq= outboxRepository
+                .findByStatusPendingAndBrokerName(BrokerName.IBMMQ)
+                .stream()
+                .filter(
+                        outboxEvent ->
+                                outboxEvent.aggregateId().equals(createdBookingId))
+                .findFirst().orElseThrow(
+                        () -> new RuntimeException("Outbox IBMMQ event not found for booking Id: " + createdBookingId)
+                );
+
+        JsonNode jsonMq = objectMapper.readTree(outboxMq.payload());
+
+
+        Assertions.assertAll(
+                () -> Assertions.assertEquals( OutboxEventStatus.PENDING, outboxMq.status()),
+                () -> Assertions.assertEquals("BookingCreated", outboxMq.eventType()),
+                () -> Assertions.assertEquals("BOOKING.CREATED.Q", outboxMq.topic()),
+
+                () -> Assertions.assertEquals(createdBookingId.toString(), jsonMq.get("bookingId").asString()),
+                () -> Assertions.assertEquals(eventId.eventId().toString(), jsonMq.get("eventId").asString()),
+                () -> Assertions.assertEquals(userId.userId().toString(), jsonMq.get("userId").asString())
         );
     }
 

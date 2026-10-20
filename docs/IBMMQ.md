@@ -1,22 +1,36 @@
 # IBM MQ and Spring JMS — EventHub
 
-> **Manually verified.** This documents a separate learning integration in the independent imperative `booking-service`, alongside the existing Kafka/Transactional Outbox integration. It does **not** establish that the same Outbox event is reliably published to both brokers.
+> **Verification scope (20 October 2026).** Booking Service now creates separate Kafka and IBM MQ Outbox records in the same local PostgreSQL transaction. Both relay paths were exercised locally. IBM MQ consumption and Inbox persistence were also tested with isolated IBM MQ and PostgreSQL Testcontainers. This is **not** an exactly-once or distributed transaction guarantee.
 
 ## Purpose and architecture
 
 ```text
-BookingCreatedIntegrationEvent(bookingId, eventId, userId)
-    -> IbmMqBookingPublisher (infrastructure output adapter)
-    -> JmsTemplate.convertAndSend("BOOKING.CREATED.Q", JSON String)
-    -> IBM MQ / QM1
-    -> BookingCreatedMqConsumer (infrastructure input adapter)
-    -> @JmsListener(destination = "BOOKING.CREATED.Q")
+Booking created -> TransactionalBookingUseCase (@Transactional)
+    |-- INSERT bookings
+    |-- INSERT outbox_events [broker_name = KAFKA, status = PENDING]
+    +-- INSERT outbox_events [broker_name = IBMMQ, status = PENDING]
+                  | one PostgreSQL transaction
+                  v
+    OutboxKafkaScheduler              OutboxIBMMQScheduler
+        |                                 |
+        v                                 v
+    KafkaIntegrationEventAdapter     IbmMqIntegrationEventAdapter
+        |                                 | JmsTemplate.convertAndSend(JSON)
+        v                                 v
+    topic booking-created             BOOKING.CREATED.Q / QM1
+        |                                 |
+        v                                 v
+    Event Service Kafka consumer      BookingCreatedMqConsumer (@JmsListener)
+        |                                 |
+        v                                 v
+    Event Service R2DBC Inbox         Booking Service JPA Inbox
 ```
 
-- `booking-service` uses **Spring MVC / JPA** and `spring-boot-starter-jms` together with `com.ibm.mq:mq-jms-spring-boot-starter:4.0.1`.
-- `IbmMqBookingPublisher` converts the integration-event record into a **JSON String** before calling `JmsTemplate.convertAndSend()`. Passing a Jackson `JsonNode` directly is not the tested JMS text-message approach.
-- `BookingCreatedMqConsumer` receives the text payload with `@JmsListener`.
-- Direct Spring JMS publishing is an isolated learning path. Kafka publication is still driven by the Transactional Outbox. The two paths do not currently constitute coordinated, atomic dual publication.
+- Booking Service uses Spring MVC / JPA, `spring-boot-starter-jms`, and `com.ibm.mq:mq-jms-spring-boot-starter:4.0.1`.
+- Flyway V5 introduces `broker_name` (`KAFKA` / `IBMMQ`) to route individual Outbox records to the appropriate relay. The event payload contains `bookingId`, `eventId`, and `userId`.
+- Separate schedulers select `PENDING` records for their broker. `OutboxIBMMQScheduler` uses `IbmMqIntegrationEventAdapter`, which serializes the integration event to JSON and publishes synchronously via `JmsTemplate`. Successful delivery marks only that broker's Outbox record `PUBLISHED`.
+- `BookingCreatedMqConsumer` deserializes the JSON and invokes `ProcessBookingCreatedUseCase`. Booking Service's PostgreSQL `inbox_events(event_id UUID PRIMARY KEY, processed_at TIMESTAMPTZ)` prevents duplicate Inbox rows for the same `bookingId`.
+- Local atomicity covers Booking plus the **two Outbox inserts**, not either external broker. Each relay can fail independently; publication remains **at least once** and duplicates are possible. Do not claim atomic dual-broker delivery or exactly-once business effects.
 
 ## Local IBM MQ setup
 
@@ -92,12 +106,26 @@ docker exec eventhub-ibmmq sh -c "tail -n 60 /var/mqm/qmgrs/QM1/errors/AMQERR01.
 
 `BookingBackoutInspector` calls `JmsTemplate.browse("BOOKING.BACKOUT.Q", callback)` and uses `QueueBrowser.getEnumeration()` to iterate JMS messages. For `TextMessage`, it logs `getJMSMessageID()` and `getText()`. Browsing does **not acknowledge or remove** the messages; their persistence was checked with `CURDEPTH(1)` after inspection.
 
+## Automated integration tests (20 October 2026)
+
+`IbmMqContainerIT` uses **IBM MQ Testcontainers** (`com.ibm.mq:mq-java-testcontainer:2.0.5`) and a separate **PostgreSQL 17 Testcontainer**, with Spring configuration overridden through `@DynamicPropertySource`. Flyway initializes the isolated Booking Service database.
+
+Green tests reported for:
+
+1. Starting both isolated containers and checking the two MQ queues.
+2. Publishing and receiving a real JMS text message through `JmsTemplate`.
+3. Publishing `BookingCreatedIntegrationEvent` and verifying that the real `BookingCreatedMqConsumer` records the booking ID in PostgreSQL Inbox.
+4. Publishing the same integration event twice, observing one Inbox row and empty source/backout queues afterward.
+
+**Test scope caveat:** checking `CURDEPTH(0)` alone cannot prove the exact moment at which the second JMS delivery was transactionally acknowledged. These green tests demonstrate observable deduplication and queue draining, not exactly-once processing under every failure window. They also do not constitute a broker-backed automated Kafka test or a complete test of the dual-Outbox relay itself.
+
+**Testcontainers authentication pitfall:** `MQContainer.configure()` writes its own default app password (`app`) to `/run/secrets/mqAppPassword`. Copying a custom file to the same path is overwritten. Use `.withAppPassword("passw0rd")` in the local integration-test container; this is **test-only** and is not a deployment credential.
+
 ## Scope, safety and pending work
 
-- Manual local verification only; no automated IBM MQ broker-backed test suite has been evidenced.
-- Restore the normal consumer after the deliberate `RuntimeException` redelivery exercise; leaving a permanently failing listener running will continually retry/backout new messages.
-- No business-side processing or Inbox/idempotency scheme has been implemented for this JMS consumer. Backout and retry do not prevent duplicate business effects by themselves.
-- No automated safe replay/reprocessing workflow from `BOOKING.BACKOUT.Q` to `BOOKING.CREATED.Q` has been implemented. **This is the next learning step.**
-- Queue permissions and local credentials should be reviewed and minimized before any production deployment; examples are intended for a local test container.
+- Manual backout, rollback/redelivery, browsing, and controlled reprocessing checks complement the automated happy-path and duplicate-event tests. Do not claim full automated failure-path coverage.
+- Restore the normal consumer after deliberate failure injection. Queue permissions and credentials must be reviewed before production use.
+- Kafka DLT/offset behavior and robust multi-instance relay coordination remain outside the scope of these IBM MQ tests.
+- Next learning focus: **Kafka** consumer failure handling, DLT, and broker-backed integration tests.
 
 See also [KAFKA.md](KAFKA.md), [MICROSERVICES_COMMUNICATION.md](MICROSERVICES_COMMUNICATION.md) and [ROADMAP.md](ROADMAP.md).

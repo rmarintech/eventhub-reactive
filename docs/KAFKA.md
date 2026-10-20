@@ -1,6 +1,12 @@
 # Kafka, Transactional Outbox and Idempotent Inbox — EventHub
 
-> **Implementation scope.** Booking Service publishes through a transactional Outbox; Event Service consumes `booking-created` and deduplicates deliveries using a PostgreSQL Inbox. Producer and consumer were manually checked together; repository integration tests use Testcontainers. These results do not establish a full automated Kafka end-to-end test.
+> **Implementation scope (updated 20 October 2026).** Booking Service creates separate Kafka and IBM MQ Outbox records atomically with Booking persistence. Kafka publication and Event Service Inbox consumption were verified locally; IBM MQ has additional broker-backed Testcontainers tests documented in [IBMMQ.md](IBMMQ.md). The Kafka path still does **not** have a complete automated broker-backed end-to-end test.
+
+## Dual-broker Outbox evolution
+
+Booking creation now inserts **two** Outbox rows in the same local JPA transaction: `broker_name=KAFKA` and `broker_name=IBMMQ` (Flyway V5), using the same `BookingCreatedIntegrationEvent` payload but independent Outbox IDs. `OutboxKafkaScheduler` publishes to Kafka through `KafkaIntegrationEventAdapter`; `OutboxIBMMQScheduler` publishes to IBM MQ through `IbmMqIntegrationEventAdapter`. Each record is acknowledged/marked independently. This replaces the earlier single `OutboxScheduler` and direct-only IBM MQ publishing design. The historical single-broker examples below explain Kafka mechanics; **the current runtime uses broker-specific schedulers**.
+
+Two local Outbox inserts are atomic with Booking creation. Two broker sends are **not** atomic with each other or with the database transaction. Failures may yield differing broker publication states; duplicate publication is possible. `KAFKA` consumer Inbox and Booking Service's `IBMMQ` consumer Inbox are separate stores. See [IBMMQ.md](IBMMQ.md).
 
 ## Why we use Kafka
 

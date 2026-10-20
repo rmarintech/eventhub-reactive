@@ -1,23 +1,30 @@
 
-
+* ******* Aplicar cambios ********
 * Get-Content .\ibmmq\init.mqsc | docker exec -i eventhub-ibmmq runmqsc QM1
+
+* ******* Leer Log ********
 * docker exec eventhub-ibmmq sh -c "tail -n 50 /var/mqm/qmgrs/QM1/errors/AMQERR01.LOG"
+
+* ******* Consultar los permisos del usuario app ********
 * docker exec eventhub-ibmmq dspmqaut -m QM1 -t q -n BOOKING.BACKOUT.Q -p app
+* docker exec eventhub-ibmmq dspmqaut -m QM1 -t q -n BOOKING.CREATED.Q -p app
 
 * "DISPLAY QLOCAL('BOOKING.CREATED.Q') CURDEPTH" | docker exec -i eventhub-ibmmq runmqsc QM1
 * "DISPLAY QLOCAL('BOOKING.BACKOUT.Q') CURDEPTH" | docker exec -i eventhub-ibmmq runmqsc QM1
 
 
+* ******* BOOKING.CREATED ********
 * Create booking queue
 DEFINE QLOCAL('BOOKING.CREATED.Q') REPLACE
 
 * Grant producer and consumer permissions
 SET AUTHREC PROFILE('BOOKING.CREATED.Q') OBJTYPE(QUEUE) PRINCIPAL('app') AUTHADD(PUT,GET,INQ,BROWSE)
 
-*BackOut Queue (BOQ)
+
+
+******** BOOKING.BACKOUT (BOQ) ********
 DEFINE QLOCAL('BOOKING.BACKOUT.Q') REPLACE
 ALTER QLOCAL('BOOKING.CREATED.Q') BOTHRESH(3) BOQNAME('BOOKING.BACKOUT.Q')
-SET AUTHREC PROFILE('BOOKING.BACKOUT.Q') OBJTYPE(QUEUE) PRINCIPAL('app') AUTHADD(PUT,INQ,PASSALL)
 
 * Para consultar mensajes sin consumirlos, necesitamos BROWSE
-SET AUTHREC PROFILE('BOOKING.BACKOUT.Q') OBJTYPE(QUEUE) PRINCIPAL('app') AUTHADD(PUT,INQ,PASSALL,BROWSE)
+SET AUTHREC PROFILE('BOOKING.BACKOUT.Q') OBJTYPE(QUEUE) PRINCIPAL('app') AUTHADD(PUT,GET,INQ,PASSALL,BROWSE)

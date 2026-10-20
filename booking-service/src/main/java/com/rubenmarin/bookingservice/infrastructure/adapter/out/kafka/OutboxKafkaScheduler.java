@@ -1,10 +1,12 @@
 package com.rubenmarin.bookingservice.infrastructure.adapter.out.kafka;
 
 import com.rubenmarin.bookingservice.application.event.BookingCreatedIntegrationEvent;
+import com.rubenmarin.bookingservice.application.model.BrokerName;
 import com.rubenmarin.bookingservice.application.port.out.IntegrationEventPublisherPort;
 import com.rubenmarin.bookingservice.application.port.out.OutboxRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import tools.jackson.databind.ObjectMapper;
@@ -12,18 +14,18 @@ import tools.jackson.databind.ObjectMapper;
 import java.util.concurrent.CompletableFuture;
 
 @Component
-public class OutboxScheduler {
+public class OutboxKafkaScheduler {
 
-    private static final Logger _log = LoggerFactory.getLogger(OutboxScheduler.class);
+    private static final Logger _log = LoggerFactory.getLogger(OutboxKafkaScheduler.class);
 
     private final OutboxRepository outboxRepository;
     private final ObjectMapper objectMapper;
     private final IntegrationEventPublisherPort integrationEventPublisher;
 
-    public OutboxScheduler(
+    public OutboxKafkaScheduler(
             OutboxRepository outboxRepository,
             ObjectMapper objectMapper,
-            IntegrationEventPublisherPort integrationEventPublisher
+            @Qualifier("kafkaIntegrationEventAdapter") IntegrationEventPublisherPort integrationEventPublisher
     ) {
         this.outboxRepository = outboxRepository;
         this.objectMapper = objectMapper;
@@ -34,7 +36,7 @@ public class OutboxScheduler {
     //fixedRate = cada 5 segundos desde el inicio de la anterior.
     @Scheduled(fixedDelay = 5000)
     public void processPendingEvents() {
-        outboxRepository.findByStatusPending().forEach(outbox -> {
+        outboxRepository.findByStatusPendingAndBrokerName(BrokerName.KAFKA).forEach(outbox -> {
 
 
             BookingCreatedIntegrationEvent bookingCreatedIntegrationEvent =

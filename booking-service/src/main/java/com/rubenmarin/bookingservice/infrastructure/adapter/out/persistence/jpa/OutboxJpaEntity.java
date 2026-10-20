@@ -1,5 +1,6 @@
 package com.rubenmarin.bookingservice.infrastructure.adapter.out.persistence.jpa;
 
+import com.rubenmarin.bookingservice.application.model.BrokerName;
 import com.rubenmarin.bookingservice.application.model.OutboxEvent;
 import com.rubenmarin.bookingservice.application.model.OutboxEventId;
 import com.rubenmarin.bookingservice.application.model.OutboxEventStatus;
@@ -15,6 +16,10 @@ public class OutboxJpaEntity {
     @Id
     @Column(name = "id", nullable = false)
     private UUID id;
+
+    @Column(name = "broker_name", nullable = false)
+    @Enumerated(EnumType.STRING)
+    private BrokerName brokerName;
 
     @Column(name = "event_type", nullable = false)
     private String eventType;
@@ -43,6 +48,7 @@ public class OutboxJpaEntity {
 
     private OutboxJpaEntity(
             UUID id,
+            BrokerName brokerName,
             String eventType,
             UUID aggregateId,
             String topic,
@@ -52,6 +58,7 @@ public class OutboxJpaEntity {
             OffsetDateTime publishedAt) {
 
         this.id = id;
+        this.brokerName = brokerName;
         this.eventType = eventType;
         this.aggregateId = aggregateId;
         this.topic = topic;
@@ -64,6 +71,7 @@ public class OutboxJpaEntity {
     public static OutboxJpaEntity fromModel(OutboxEvent event) {
         return new OutboxJpaEntity(
                 event.id().id(),
+                event.brokerName(),
                 event.eventType(),
                 event.aggregateId(),
                 event.topic(),
@@ -77,6 +85,7 @@ public class OutboxJpaEntity {
     public OutboxEvent toModel() {
         return new OutboxEvent(
                 new OutboxEventId(id),
+                brokerName,
                 eventType,
                 aggregateId,
                 topic,
@@ -95,6 +104,8 @@ public class OutboxJpaEntity {
     public UUID getId() {
         return id;
     }
+
+    public BrokerName getBrokerName() {return brokerName;}
 
     public String getEventType() {
         return eventType;

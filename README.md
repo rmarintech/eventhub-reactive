@@ -37,14 +37,14 @@ Client
 Booking Service (Spring MVC + JPA)
   |-- reserve/release capacity via REST --> Event Service (WebFlux + R2DBC)
   |-- bookings + outbox_events ---------> PostgreSQL (single local transaction)
-  |-- OutboxScheduler -> Kafka ---------> Event Service Kafka consumer -> R2DBC Inbox
-  |-- direct JmsTemplate publication ---> IBM MQ -> @JmsListener
+  |-- OutboxKafkaScheduler -> Kafka ------> Event Service consumer -> R2DBC Inbox
+  |-- OutboxIBMMQScheduler -> IBM MQ ----> Booking Service JMS consumer -> JPA Inbox
                                             | failures / rollback
                                             v
                                        BOOKING.BACKOUT.Q
 ```
 
-**Integration boundaries:** The REST reserve/release sequence handles business capacity. Kafka asynchronously communicates `BookingCreatedIntegrationEvent`; it does **not** reserve another place. The IBM MQ path is a separate, directly tested Spring JMS learning integration; it is **not wired to the Kafka transactional Outbox**. There is no claim of atomic publication to both brokers.
+**Integration boundaries:** REST reserve/release handles business capacity. The Booking Service creates **two broker-specific Outbox records** (`KAFKA` and `IBMMQ`) together with the Booking in one local PostgreSQL transaction; independent schedulers publish the same integration-event payload to Kafka and IBM MQ. Neither consumer reserves capacity again. **The two external broker deliveries are not atomic** and may be duplicated.
 
 The domain and application layers follow **DDD and ports/adapters**. Infrastructure contains HTTP controllers, persistence adapters, messaging adapters and Spring configuration.
 
@@ -56,7 +56,7 @@ The domain and application layers follow **DDD and ports/adapters**. Infrastruct
 | **Booking Service** | ✅ Spring MVC/JPA, API-first booking flow, Flyway, transactional persistence | Durable distributed reconciliation |
 | **REST integration** | ✅ Capacity reservation/release and best-effort compensation; resilience for availability reads | Robust handling of ambiguous remote outcomes |
 | **Kafka** | ✅ Transactional Outbox producer and persistent Inbox consumer, locally verified | DLT, offset/error policy and broker-backed automated tests |
-| **IBM MQ** | ✅ Direct JMS publish/consume, rollback/redelivery, Backout Queue, non-destructive browsing | Controlled backout-message replay and automated tests |
+| **IBM MQ** | ✅ Broker-specific Transactional Outbox relay, JMS consumer + JPA Inbox, rollback/backout, broker-backed Testcontainers tests | Full failure-path automation and relay coordination |
 | **Frontend / deployment** | ⬜ React / TypeScript and extended deployment work planned | See roadmap |
 
 The status describes **capabilities demonstrated in this project**, not production-readiness. The [roadmap](docs/ROADMAP.md) contains the complete checklist.
@@ -97,21 +97,16 @@ TransactionalBookingUseCase (@Transactional)
    ├── BookingRepository → bookings                ┐
    └── OutboxRepository  → outbox_events           ┘ one local commit
    ↓
-OutboxScheduler → Kafka topic: booking-created
-   ↓
-Event Service @KafkaListener → PostgreSQL Inbox (deduplication)
-
-Separate IBM MQ learning path:
-IbmMqBookingPublisher → JmsTemplate → BOOKING.CREATED.Q
-                                          ↓
-                                 @JmsListener
-                                          ↓ on repeated failures
-                                   BOOKING.BACKOUT.Q
-                                          ↓
-                                   JmsTemplate.browse()
+Outbox records (same transaction): KAFKA + IBMMQ
+  |-- OutboxKafkaScheduler → Kafka topic: booking-created
+  |      → Event Service @KafkaListener → PostgreSQL/R2DBC Inbox
+  |
+  `-- OutboxIBMMQScheduler → JmsTemplate → BOOKING.CREATED.Q
+         → BookingCreatedMqConsumer → Booking Service PostgreSQL/JPA Inbox
+         → on repeated failures: BOOKING.BACKOUT.Q
 ```
 
-**Why these boundaries matter:** DDD keeps business invariants inside aggregates; ports and adapters decouple application rules from infrastructure. A local transaction protects Booking + Outbox, while REST compensation and asynchronous messaging address different distributed-consistency problems. The IBM MQ path is **not** a second transactional Outbox destination.
+**Why these boundaries matter:** DDD protects domain invariants and ports/adapters keep transport concerns out of application rules. The Booking + two Outbox rows are one local transaction; broker sends are asynchronous/independent, at least once, and not an atomic distributed operation. JMS consumer deduplication is tested against a separate PostgreSQL Testcontainer.
 
 ### 🏛️ Domain model
 
@@ -132,7 +127,7 @@ Value Objects enforce validity; aggregate methods control legal state changes. D
 - **Bookings:** API-first creation and lookup, `PENDING` / `CONFIRMED` / `CANCELLED` lifecycle, active-booking uniqueness and transactional JPA persistence.
 - **Service communication:** synchronous REST capacity reservation with best-effort compensation; availability checks with timeout, Retry, Circuit Breaker and Bulkhead.
 - **Kafka:** Booking and Outbox persisted atomically; scheduled producer; Event Service consumer with PostgreSQL Inbox for duplicate deliveries.
-- **IBM MQ:** JMS producer/consumer, transactional rollback and redelivery, `BOTHRESH`/backout queue, and non-destructive failed-message inspection.
+- **IBM MQ:** Independent Outbox relay, JMS producer/consumer, JPA Inbox deduplication, transactional rollback/redelivery, `BOTHRESH`/backout queue, and Testcontainers integration tests.
 
 ## 🧪 Testing and Guarantees
 
@@ -142,7 +137,7 @@ Value Objects enforce validity; aggregate methods control legal state changes. D
 | Persistence | PostgreSQL/Testcontainers tests for JPA, Outbox and reactive Inbox | No distributed ACID transaction |
 | Two-service REST | Manual live-service scenarios plus mocked HTTP tests | Durable compensation/reconciliation pending |
 | Kafka | Manual publication, consumption and deduplication; DB integration tests | Full broker-backed automated E2E, DLT/error/offset coverage pending |
-| IBM MQ | Manual producer, consumer, rollback, backout and browse checks | Automated broker-backed tests and backout replay pending |
+| IBM MQ | Automated MQ + PostgreSQL Testcontainers tests (JMS round trip, Inbox persistence, duplicate delivery); manual rollback/backout/browse checks | Automated failure-path tests and multi-instance Outbox coordination pending |
 
 Successful local Booking + Outbox commit does not guarantee instant Kafka delivery. The Outbox design is **at least once**, and consumers must account for duplicates. IBM MQ failures are routed to a separate backout queue after the configured threshold in the tested JMS setup.
 
@@ -179,7 +174,7 @@ Use local environment variables for credentials; do not commit real secrets. **D
 
 ## 🗺️ Roadmap
 
-The [roadmap](docs/ROADMAP.md) separates completed work from planned features, including IBM MQ failed-message replay, Kafka failure-path tests, frontend development and deployment topics. The Git commit history records *when* the work was performed.
+The [roadmap](docs/ROADMAP.md) separates completed work from planned features, including Kafka failure-path and DLT tests, stronger IBM MQ failure-path automation, frontend development and deployment topics. The Git commit history records *when* the work was performed.
 
 ## 👨‍💻 Author
 

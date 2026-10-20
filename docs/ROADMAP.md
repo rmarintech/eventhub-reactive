@@ -525,7 +525,7 @@ architecture tests remain pending
 -   [ ] Data ownership
 -   [ ] Consistency trade-offs
 -   [ ] Caching
--   [ ] Messaging trade-offs
+-   [x] Messaging trade-offs (Kafka vs IBM MQ: log/offsets vs queues/acknowledgments, redelivery and backout)
 -   [ ] Failure scenarios
 -   [ ] Capacity planning
 -   [ ] Architecture diagrams
@@ -622,9 +622,11 @@ Kafka consumer + Inbox idempotency          ✅ LOCAL VERIFIED
         ↓
 Kafka DLT / consumer failure tests          ⬜ PENDING
         ↓
-IBM MQ producer / consumer / backout         ✅ LOCAL VERIFIED
+IBM MQ dual-Outbox relay + Inbox            ✅ LOCAL VERIFIED
         ↓
-IBM MQ backout reprocessing                  🚧 NEXT
+IBM MQ + PostgreSQL Testcontainers           ✅ GREEN
+        ↓
+Kafka DLT / failure-path integration         🚧 NEXT
 ```
 
 ---
@@ -728,16 +730,27 @@ IBM MQ backout reprocessing                  🚧 NEXT
 
 ------------------------------------------------------------------------
 
-# 27. IBM MQ — Spring JMS and Backout Handling
+# 27. IBM MQ — Spring JMS, dual-broker Outbox and Inbox
 
-- [x] IBM MQ queue manager `QM1` running with Docker Compose and a version-controlled MQSC setup
-- [x] Spring JMS producer (`JmsTemplate`) publishes `BookingCreatedIntegrationEvent` as JSON to `BOOKING.CREATED.Q`
-- [x] `@JmsListener` consumes the message; source queue depth verified as zero
-- [x] JMS transactional rollback and redelivery observed with a deliberately failing listener
-- [x] `BOTHRESH(3)` + `BOQNAME(BOOKING.BACKOUT.Q)` configured; IBM MQ JMS moved failing message to backout queue
-- [x] `JmsTemplate.browse()` inspected message ID and JSON; backout queue retained the message
-- [x] [IBMMQ.md](IBMMQ.md) documents setup, verification, troubleshooting, and limitations
-- [ ] Implement explicit, controlled reprocessing from `BOOKING.BACKOUT.Q` to `BOOKING.CREATED.Q` **(next IBM MQ step)**
-- [ ] Automate broker-backed JMS integration and failure-path tests; review production credentials and access policies
+- [x] IBM MQ queue manager `QM1` with Docker Compose and version-controlled MQSC
+- [x] Spring JMS JSON publishing to `BOOKING.CREATED.Q` and real `@JmsListener` consumption
+- [x] Transactional Booking creation writes two broker-specific Outbox records (`KAFKA`, `IBMMQ`) in PostgreSQL (Flyway V5)
+- [x] `OutboxKafkaScheduler` and `OutboxIBMMQScheduler` publish their own pending records using the appropriate adapter
+- [x] Manual verification of separate broker Outbox rows transitioning to `PUBLISHED`
+- [x] Booking Service JPA Inbox with `bookingId` primary-key deduplication and real JMS consumer
+- [x] JMS rollback/redelivery, `BOTHRESH(3)`, Backout Queue and browsing demonstrated locally
+- [x] Controlled backout reprocessing exercised locally (manual verification)
+- [x] `IbmMqContainerIT`: IBM MQ + PostgreSQL 17 Testcontainers, queues, JMS send/receive, consumer-to-Inbox and duplicate-delivery observable behavior — **all five tests reported green 20 October 2026**
+- [x] Updated [IBMMQ.md](IBMMQ.md), [KAFKA.md](KAFKA.md), and root README
+- [ ] Automated JMS failure/backout/reprocessing test suite and concurrent multi-relay coordination
+- [ ] Production security review, permissions, secret management
 
-**Scope:** IBM MQ producer/consumer/backout checks were manual local tests. The IBM MQ publisher currently demonstrates direct JMS publication and is not wired to the Kafka Transactional Outbox.
+**Scope:** Booking plus both Outbox records are inserted in a single local database transaction. Independent relay publication to Kafka and IBM MQ is **at least once**, not atomically coordinated. Green JMS integration tests prove the tested observable scenarios; they do not prove exactly-once side effects or full failure recovery.
+
+# 28. Next: Kafka Consumer Failure Handling and Tests
+
+- [ ] Define consumer error/retry strategy and offset-commit behavior
+- [ ] Implement a Dead Letter Topic for poison messages (preserving event information)
+- [ ] Broker-backed Kafka consumer integration tests with Testcontainers
+- [ ] Verify valid, duplicate, malformed, transient-failure and poison-message cases
+- [ ] Document verified guarantees and failure windows in [KAFKA.md](KAFKA.md)

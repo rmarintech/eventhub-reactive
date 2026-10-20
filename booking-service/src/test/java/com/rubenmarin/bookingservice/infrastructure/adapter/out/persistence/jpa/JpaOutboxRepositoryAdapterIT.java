@@ -1,5 +1,6 @@
 package com.rubenmarin.bookingservice.infrastructure.adapter.out.persistence.jpa;
 
+import com.rubenmarin.bookingservice.application.model.BrokerName;
 import com.rubenmarin.bookingservice.application.model.OutboxEvent;
 import com.rubenmarin.bookingservice.application.model.OutboxEventId;
 import com.rubenmarin.bookingservice.application.model.OutboxEventStatus;
@@ -35,6 +36,7 @@ public class JpaOutboxRepositoryAdapterIT {
     void shouldPersistAndPublishOutboxEvent() {
 
         OutboxEventId id = new OutboxEventId(UUID.randomUUID());
+        BrokerName brokerName = BrokerName.KAFKA;
         String eventType = "Booking Event";
         UUID aggregateId = UUID.randomUUID();
         String topic = "booking-created";
@@ -45,6 +47,7 @@ public class JpaOutboxRepositoryAdapterIT {
 
         OutboxEvent newEvent = new OutboxEvent(
                 id,
+                brokerName,
                 eventType,
                 aggregateId,
                 topic, payload,
@@ -68,7 +71,8 @@ public class JpaOutboxRepositoryAdapterIT {
                 () -> Assertions.assertEquals(OutboxEventStatus.PUBLISHED, publishedEvent.status()),
                 () -> Assertions.assertNotNull(publishedEvent.publishedAt()),
                 () -> Assertions.assertEquals(OutboxEventStatus.PUBLISHED, persistedEntity.getStatus()),
-                () -> Assertions.assertNotNull(persistedEntity.getPublishedAt())
+                () -> Assertions.assertNotNull(persistedEntity.getPublishedAt()),
+                () -> Assertions.assertEquals(BrokerName.KAFKA, persistedEntity.getBrokerName())
         );
     }
 }

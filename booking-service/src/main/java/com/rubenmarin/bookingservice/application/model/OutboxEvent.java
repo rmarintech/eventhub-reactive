@@ -5,6 +5,7 @@ import java.util.UUID;
 
 public record OutboxEvent(
         OutboxEventId id,
+        BrokerName brokerName,
         String eventType,
         UUID aggregateId,
         String topic,
@@ -15,6 +16,7 @@ public record OutboxEvent(
 ) {
 
     public static OutboxEvent pending(
+            BrokerName brokerName,
             String eventType,
             UUID aggregateId,
             String topic,
@@ -22,6 +24,7 @@ public record OutboxEvent(
 
         return new OutboxEvent(
                 new OutboxEventId(UUID.randomUUID()),
+                brokerName,
                 eventType,
                 aggregateId,
                 topic,
@@ -39,6 +42,7 @@ public record OutboxEvent(
 
         return new OutboxEvent(
                 id,
+                brokerName,
                 eventType,
                 aggregateId,
                 topic,

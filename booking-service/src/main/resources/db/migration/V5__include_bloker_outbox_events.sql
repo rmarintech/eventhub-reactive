@@ -1,0 +1,2 @@
+ALTER TABLE outbox_events
+    ADD COLUMN broker_name VARCHAR(20) NOT NULL DEFAULT 'KAFKA';

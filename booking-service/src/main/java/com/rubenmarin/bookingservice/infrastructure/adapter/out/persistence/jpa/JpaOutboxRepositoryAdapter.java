@@ -1,5 +1,6 @@
 package com.rubenmarin.bookingservice.infrastructure.adapter.out.persistence.jpa;
 
+import com.rubenmarin.bookingservice.application.model.BrokerName;
 import com.rubenmarin.bookingservice.application.model.OutboxEvent;
 import com.rubenmarin.bookingservice.application.model.OutboxEventId;
 import com.rubenmarin.bookingservice.application.model.OutboxEventStatus;
@@ -25,9 +26,9 @@ public class JpaOutboxRepositoryAdapter implements OutboxRepository {
     }
 
     @Override
-    public List<OutboxEvent> findByStatusPending() {
+    public List<OutboxEvent> findByStatusPendingAndBrokerName(BrokerName brokerName) {
         return springDataOutboxRepository
-                .findByStatus(OutboxEventStatus.PENDING)
+                .findByStatusAndBrokerName(OutboxEventStatus.PENDING, brokerName)
                 .stream()
                 .map(entity -> entity.toModel())
                 .toList();

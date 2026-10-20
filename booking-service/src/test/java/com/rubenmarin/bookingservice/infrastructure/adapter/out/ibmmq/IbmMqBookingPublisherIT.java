@@ -17,6 +17,7 @@ class IbmMqBookingPublisherIT {
     void shouldPublishtoQueue() {
 
         UUID bookingId = UUID.randomUUID();
+       // UUID bookingId = UUID.fromString("db0e05f2-5e82-41cd-8070-05569c72fda1");
         UUID eventId = UUID.randomUUID();
         UUID userId = UUID.randomUUID();
 

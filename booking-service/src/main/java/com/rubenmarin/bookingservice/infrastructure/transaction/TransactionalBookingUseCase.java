@@ -1,6 +1,7 @@
 package com.rubenmarin.bookingservice.infrastructure.transaction;
 
 import com.rubenmarin.bookingservice.application.event.BookingCreatedIntegrationEvent;
+import com.rubenmarin.bookingservice.application.model.BrokerName;
 import com.rubenmarin.bookingservice.application.model.OutboxEvent;
 import com.rubenmarin.bookingservice.application.port.in.BookingUseCase;
 import com.rubenmarin.bookingservice.application.port.out.OutboxRepository;
@@ -62,8 +63,6 @@ public class TransactionalBookingUseCase implements BookingUseCase {
 
         Booking booking = delegate.createBooking(eventId, userId);
 
-        //Todo: create outbox_event
-
         BookingCreatedIntegrationEvent bookingCreatedIntegrationEvent =
                 new BookingCreatedIntegrationEvent(
                         booking.getBookingId().bookingId(),
@@ -74,18 +73,31 @@ public class TransactionalBookingUseCase implements BookingUseCase {
 
         String eventType = "BookingCreated";
         UUID aggregateId = bookingCreatedIntegrationEvent.bookingId();
-        String topic = "booking-created";
+        String topicKafka = "booking-created";
+        String queueMq = "BOOKING.CREATED.Q";
         String payload = objectMapper.writeValueAsString(bookingCreatedIntegrationEvent);
 
-        OutboxEvent outboxEvent = OutboxEvent.pending(
+        OutboxEvent outboxKafkaEvent = OutboxEvent.pending(
+                BrokerName.KAFKA,
                 eventType,
                 aggregateId,
-                topic,
+                topicKafka,
                 payload
         );
 
+        outboxRepository.createOutboxEvent(outboxKafkaEvent);
 
-        outboxRepository.createOutboxEvent(outboxEvent);
+        OutboxEvent outboxIbmMqEvent = OutboxEvent.pending(
+                BrokerName.IBMMQ,
+                eventType,
+                aggregateId,
+                queueMq,
+                payload
+        );
+
+        outboxRepository.createOutboxEvent(outboxIbmMqEvent);
+
+
 
 
         return booking;
