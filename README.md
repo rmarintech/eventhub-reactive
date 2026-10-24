@@ -44,7 +44,7 @@ Booking Service (Spring MVC + JPA)
                                        BOOKING.BACKOUT.Q
 ```
 
-**Integration boundaries:** REST reserve/release handles business capacity. The Booking Service creates **two broker-specific Outbox records** (`KAFKA` and `IBMMQ`) together with the Booking in one local PostgreSQL transaction; independent schedulers publish the same integration-event payload to Kafka and IBM MQ. Neither consumer reserves capacity again. **The two external broker deliveries are not atomic** and may be duplicated.
+**Integration boundaries:** REST reserve/release handles business capacity. The Booking Service creates **two broker-specific Outbox records** (`KAFKA` and `IBMMQ`) together with the Booking in one local PostgreSQL transaction; independent schedulers publish the same integration-event payload (including one shared `integrationEventId`) to Kafka and IBM MQ. Neither consumer reserves capacity again. **The two external broker deliveries are not atomic** and may be duplicated.
 
 The domain and application layers follow **DDD and ports/adapters**. Infrastructure contains HTTP controllers, persistence adapters, messaging adapters and Spring configuration.
 
@@ -55,7 +55,7 @@ The domain and application layers follow **DDD and ports/adapters**. Infrastruct
 | **Event Service** | ✅ WebFlux/R2DBC, Event lifecycle, optimistic capacity management | Broader automated cross-service failure tests |
 | **Booking Service** | ✅ Spring MVC/JPA, API-first booking flow, Flyway, transactional persistence | Durable distributed reconciliation |
 | **REST integration** | ✅ Capacity reservation/release and best-effort compensation; resilience for availability reads | Robust handling of ambiguous remote outcomes |
-| **Kafka** | ✅ Transactional Outbox producer and persistent Inbox consumer, locally verified | DLT, offset/error policy and broker-backed automated tests |
+| **Kafka** | ✅ Transactional Outbox, `integrationEventId`-based Inbox, bounded error-handler retries and DLT publication unit tests | Broker-backed offset/failure E2E tests and controlled DLT replay |
 | **IBM MQ** | ✅ Broker-specific Transactional Outbox relay, JMS consumer + JPA Inbox, rollback/backout, broker-backed Testcontainers tests | Full failure-path automation and relay coordination |
 | **Frontend / deployment** | ⬜ React / TypeScript and extended deployment work planned | See roadmap |
 
@@ -136,7 +136,7 @@ Value Objects enforce validity; aggregate methods control legal state changes. D
 | Domain and API | Unit, controller and adapter tests | See topic-specific documentation |
 | Persistence | PostgreSQL/Testcontainers tests for JPA, Outbox and reactive Inbox | No distributed ACID transaction |
 | Two-service REST | Manual live-service scenarios plus mocked HTTP tests | Durable compensation/reconciliation pending |
-| Kafka | Manual publication, consumption and deduplication; DB integration tests | Full broker-backed automated E2E, DLT/error/offset coverage pending |
+| Kafka | Manual publication/consumption, PostgreSQL Inbox tests, Mockito consumer identity test, Kafka DLT/error-handler unit tests | Full broker-backed automated E2E, offset failure verification and DLT replay pending |
 | IBM MQ | Automated MQ + PostgreSQL Testcontainers tests (JMS round trip, Inbox persistence, duplicate delivery); manual rollback/backout/browse checks | Automated failure-path tests and multi-instance Outbox coordination pending |
 
 Successful local Booking + Outbox commit does not guarantee instant Kafka delivery. The Outbox design is **at least once**, and consumers must account for duplicates. IBM MQ failures are routed to a separate backout queue after the configured threshold in the tested JMS setup.
@@ -174,7 +174,7 @@ Use local environment variables for credentials; do not commit real secrets. **D
 
 ## 🗺️ Roadmap
 
-The [roadmap](docs/ROADMAP.md) separates completed work from planned features, including Kafka failure-path and DLT tests, stronger IBM MQ failure-path automation, frontend development and deployment topics. The Git commit history records *when* the work was performed.
+The [roadmap](docs/ROADMAP.md) separates completed work from planned features, including Kafka broker-backed failure-path/offset tests and DLT recovery, stronger IBM MQ failure-path automation, frontend development and deployment topics. The Git commit history records *when* the work was performed.
 
 ## 👨‍💻 Author
 

@@ -397,3 +397,8 @@ The REST adapter translates reserve 409 to `EventNotAvailableException`, 404 to 
 ## Manual cross-service consistency evidence — 
 
 With Event Service and independent Booking Service running against their actual persistence, a new `PENDING` Booking returned HTTP 201 and Event availability fell from 20 to 19. Repeating the same booking returned `409 BOOKING_ALREADY_EXISTS` and a later Event GET still reported 19 available places. This is **consistent with** the synchronous `CompensatingBookingUseCase` reserving and releasing on duplicate failure. The test did not independently capture the intermediate Event state or inject a controlled JPA failure after a confirmed remote reservation. These results **do not** establish distributed atomicity, durable compensation or idempotency. See [`MICROSERVICES_COMMUNICATION.md`](MICROSERVICES_COMMUNICATION.md).
+
+
+## Integration-event Inbox identity (24 October 2026)
+
+The separate Booking Service (JPA) and Event Service (R2DBC) now deduplicate their incoming integration messages using a unique `integrationEventId`, rather than the Booking aggregate UUID. In Event Service, `InboxEvent` and `InboxEntity` map to PostgreSQL `inbox_events(integration_event_id UUID PRIMARY KEY, processed_at TIMESTAMPTZ NOT NULL)`; `Persistable.isNew=true` forces INSERT, so a repeated delivery raises `DuplicateKeyException`. Booking Service introduces Flyway V6 to rename its Inbox identifier column. This allows multiple legitimate integration events, such as booking creation and a future booking cancellation, to share the same `bookingId` without being mistakenly deduplicated. The new ID does not itself make downstream business processing atomic with the Inbox row.

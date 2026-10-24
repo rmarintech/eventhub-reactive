@@ -27,9 +27,9 @@ Booking created -> TransactionalBookingUseCase (@Transactional)
 ```
 
 - Booking Service uses Spring MVC / JPA, `spring-boot-starter-jms`, and `com.ibm.mq:mq-jms-spring-boot-starter:4.0.1`.
-- Flyway V5 introduces `broker_name` (`KAFKA` / `IBMMQ`) to route individual Outbox records to the appropriate relay. The event payload contains `bookingId`, `eventId`, and `userId`.
+- Flyway V5 introduces `broker_name` (`KAFKA` / `IBMMQ`) to route individual Outbox records to the appropriate relay. The event payload contains `integrationEventId`, `bookingId`, `eventId`, and `userId`.
 - Separate schedulers select `PENDING` records for their broker. `OutboxIBMMQScheduler` uses `IbmMqIntegrationEventAdapter`, which serializes the integration event to JSON and publishes synchronously via `JmsTemplate`. Successful delivery marks only that broker's Outbox record `PUBLISHED`.
-- `BookingCreatedMqConsumer` deserializes the JSON and invokes `ProcessBookingCreatedUseCase`. Booking Service's PostgreSQL `inbox_events(event_id UUID PRIMARY KEY, processed_at TIMESTAMPTZ)` prevents duplicate Inbox rows for the same `bookingId`.
+- `BookingCreatedMqConsumer` deserializes the JSON and invokes `ProcessBookingCreatedUseCase`. Booking Service's PostgreSQL `inbox_events(integration_event_id UUID PRIMARY KEY, processed_at TIMESTAMPTZ)` prevents duplicate Inbox rows for the same logical `integrationEventId` (Flyway V6 column rename).
 - Local atomicity covers Booking plus the **two Outbox inserts**, not either external broker. Each relay can fail independently; publication remains **at least once** and duplicates are possible. Do not claim atomic dual-broker delivery or exactly-once business effects.
 
 ## Local IBM MQ setup
@@ -126,6 +126,6 @@ Green tests reported for:
 - Manual backout, rollback/redelivery, browsing, and controlled reprocessing checks complement the automated happy-path and duplicate-event tests. Do not claim full automated failure-path coverage.
 - Restore the normal consumer after deliberate failure injection. Queue permissions and credentials must be reviewed before production use.
 - Kafka DLT/offset behavior and robust multi-instance relay coordination remain outside the scope of these IBM MQ tests.
-- Next learning focus: **Kafka** consumer failure handling, DLT, and broker-backed integration tests.
+- Kafka DLT publishing and error-handler unit tests have subsequently been added; remaining work includes Kafka broker-backed failure/offset tests and controlled DLT replay.
 
 See also [KAFKA.md](KAFKA.md), [MICROSERVICES_COMMUNICATION.md](MICROSERVICES_COMMUNICATION.md) and [ROADMAP.md](ROADMAP.md).

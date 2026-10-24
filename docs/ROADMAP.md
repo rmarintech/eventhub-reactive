@@ -249,8 +249,8 @@ architecture tests remain pending
 -   [x] Spring Kafka
 -   [x] Event contracts
 -   [x] Event serialization
--   [ ] Retry strategy
--   [ ] Dead Letter Topic
+-   [x] Kafka listener retry/error-handler policy (unit-tested)
+-   [x] Dead Letter Topic publishing (`booking-created.DLT`; unit-tested)
 -   [x] Consumer-side Inbox deduplication (primary key)
 -   [x] Duplicate-event handling in the Inbox (DuplicateKeyException)
 -   [ ] Atomic Inbox + downstream business side effect (not needed for current logging-only consumer)
@@ -276,7 +276,8 @@ architecture tests remain pending
 - [x] R2DBC Inbox (`inbox_events` primary key, `InboxRepository`, `R2dbcInboxRepositoryAdapter`)
 - [x] Inbox PostgreSQL/Testcontainers tests: INSERT, lookup, duplicate rejected
 - [x] Manual Kafka consumer reception and Inbox deduplication checks
-- [ ] Dead Letter Topic, poison-message recovery and Kafka offset/error-handler tests **(next Kafka step)**
+- [x] Kafka DLT publishing and error-handler unit tests (malformed payload, retry exhaustion, failed DLT send)
+- [ ] Controlled DLT recovery/replay and Kafka broker-backed offset/failure tests
 - [ ] Automated Kafka integration tests, poison-message handling, competing relays and durable recovery
 
 **Scope:** producer-side Transactional Outbox and consumer-side Inbox are locally verified. `at-least-once` admits redelivery, and the Inbox deduplicates persisted message IDs. Full broker-backed automated tests and exactly-once side effects are not claimed. Older reactive Booking checklist items describe the original module, not the independent Booking Service.
@@ -620,13 +621,13 @@ Kafka producer / Transactional Outbox       ✅ LOCAL VERIFIED
         ↓
 Kafka consumer + Inbox idempotency          ✅ LOCAL VERIFIED
         ↓
-Kafka DLT / consumer failure tests          ⬜ PENDING
+Kafka DLT / error-handler unit tests         ✅ UNIT TESTED
         ↓
 IBM MQ dual-Outbox relay + Inbox            ✅ LOCAL VERIFIED
         ↓
 IBM MQ + PostgreSQL Testcontainers           ✅ GREEN
         ↓
-Kafka DLT / failure-path integration         🚧 NEXT
+Kafka broker-backed DLT/offset integration   🚧 NEXT
 ```
 
 ---
@@ -737,7 +738,7 @@ Kafka DLT / failure-path integration         🚧 NEXT
 - [x] Transactional Booking creation writes two broker-specific Outbox records (`KAFKA`, `IBMMQ`) in PostgreSQL (Flyway V5)
 - [x] `OutboxKafkaScheduler` and `OutboxIBMMQScheduler` publish their own pending records using the appropriate adapter
 - [x] Manual verification of separate broker Outbox rows transitioning to `PUBLISHED`
-- [x] Booking Service JPA Inbox with `bookingId` primary-key deduplication and real JMS consumer
+- [x] Booking Service JPA Inbox with `integrationEventId` primary-key deduplication (Flyway V6) and real JMS consumer
 - [x] JMS rollback/redelivery, `BOTHRESH(3)`, Backout Queue and browsing demonstrated locally
 - [x] Controlled backout reprocessing exercised locally (manual verification)
 - [x] `IbmMqContainerIT`: IBM MQ + PostgreSQL 17 Testcontainers, queues, JMS send/receive, consumer-to-Inbox and duplicate-delivery observable behavior — **all five tests reported green 20 October 2026**
@@ -747,10 +748,25 @@ Kafka DLT / failure-path integration         🚧 NEXT
 
 **Scope:** Booking plus both Outbox records are inserted in a single local database transaction. Independent relay publication to Kafka and IBM MQ is **at least once**, not atomically coordinated. Green JMS integration tests prove the tested observable scenarios; they do not prove exactly-once side effects or full failure recovery.
 
-# 28. Next: Kafka Consumer Failure Handling and Tests
+# 28. Kafka Consumer Failure Handling and Tests
 
-- [ ] Define consumer error/retry strategy and offset-commit behavior
-- [ ] Implement a Dead Letter Topic for poison messages (preserving event information)
-- [ ] Broker-backed Kafka consumer integration tests with Testcontainers
-- [ ] Verify valid, duplicate, malformed, transient-failure and poison-message cases
-- [ ] Document verified guarantees and failure windows in [KAFKA.md](KAFKA.md)
+- [x] Configure `DefaultErrorHandler` with bounded retries (`FixedBackOff(1000L, 2L)`) and a DLT recoverer
+- [x] Publish exhausted/non-retryable failures to `booking-created.DLT` (configuration/unit tests)
+- [x] Unit-test malformed JSON, two transient retries, exhaustion and failed DLT publication
+- [x] Add `integrationEventId` to producer/consumer contracts and Inbox models; confirm distinct message IDs for one `bookingId` using Mockito
+- [ ] Broker-backed Kafka consumer integration tests with Testcontainers and explicit offset-commit verification
+- [ ] Controlled replay/recovery from the DLT preserving `integrationEventId`
+- [ ] Transactional coupling of Inbox and downstream side effects, if such effects are introduced
+- [ ] Validate Flyway V6 migration behavior against populated preexisting Inbox tables
+
+
+## 24 October 2026 — Integration-event IDs and Kafka DLT tests
+
+- [x] Four-field `BookingCreatedIntegrationEvent(integrationEventId, bookingId, eventId, userId)` in both services.
+- [x] Generate one logical event ID for both Kafka and IBM MQ Outbox payloads; retain `bookingId` as Outbox aggregate ID.
+- [x] Event Service R2DBC Inbox (`integration_event_id` PK) and Booking Service JPA Inbox/Flyway V6 updated.
+- [x] `BookingCreatedKafkaConsumerTest` verifies two distinct integration-event IDs with the same Booking ID (Mockito).
+- [x] Booking Service `mvn clean verify` reported green; focused Event Service consumer tests reported green.
+- [ ] Re-run and record complete Event Service `mvn clean verify` results after documentation update if not already done.
+
+These tests do not establish exactly-once delivery or a complete Kafka broker-backed end-to-end guarantee.
