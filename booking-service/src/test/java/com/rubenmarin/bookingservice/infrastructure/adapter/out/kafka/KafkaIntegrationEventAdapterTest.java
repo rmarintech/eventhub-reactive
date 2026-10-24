@@ -38,11 +38,18 @@ class KafkaIntegrationEventAdapterTest {
     @Test
     void shouldPublishBookingCreatedEvent() {
 
+        UUID integrationEventId = UUID.randomUUID();
         UUID bookingId = UUID.randomUUID();
         UUID eventId = UUID.randomUUID();
         UUID userId = UUID.randomUUID();
 
-        BookingCreatedIntegrationEvent bookingCreatedIntegrationEvent = new BookingCreatedIntegrationEvent(bookingId, eventId, userId);
+        BookingCreatedIntegrationEvent bookingCreatedIntegrationEvent =
+                new BookingCreatedIntegrationEvent(
+                        integrationEventId,
+                        bookingId,
+                        eventId,
+                        userId
+                );
 
         adapter.publish(bookingCreatedIntegrationEvent);
 

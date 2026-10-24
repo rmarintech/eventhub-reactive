@@ -1,9 +1,9 @@
 package com.rubenmarin.bookingservice.application.event;
 
-
 import java.util.UUID;
 
 public record BookingCreatedIntegrationEvent(
+        UUID integrationEventId,
         UUID bookingId,
         UUID eventId,
         UUID userId

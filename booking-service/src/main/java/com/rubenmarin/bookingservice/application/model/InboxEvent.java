@@ -4,7 +4,7 @@ import java.time.OffsetDateTime;
 import java.util.UUID;
 
 public record InboxEvent(
-        UUID eventId,
+        UUID integrationEventId,
         OffsetDateTime processedAt
 ) {
 }

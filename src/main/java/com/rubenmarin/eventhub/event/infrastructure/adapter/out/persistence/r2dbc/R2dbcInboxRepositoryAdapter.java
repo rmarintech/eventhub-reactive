@@ -18,8 +18,8 @@ public class R2dbcInboxRepositoryAdapter implements InboxRepository {
     }
 
     @Override
-    public Mono<Boolean> existsById(UUID eventId) {
-        return springDataInboxRepository.existsById(eventId);
+    public Mono<Boolean> existsById(UUID integrationEventId) {
+        return springDataInboxRepository.existsById(integrationEventId);
     }
 
     @Override
@@ -34,7 +34,7 @@ public class R2dbcInboxRepositoryAdapter implements InboxRepository {
 
     private InboxEntity toEntity(InboxEvent event, boolean isNew) {
         InboxEntity toRet = new InboxEntity(
-                event.eventId(),
+                event.integrationEventId(),
                 event.processedAt(),
                 isNew
 
@@ -44,7 +44,7 @@ public class R2dbcInboxRepositoryAdapter implements InboxRepository {
 
     private InboxEvent toDomain(InboxEntity inboxEntity) {
         InboxEvent  toRet = new InboxEvent(
-                inboxEntity.eventId(),
+                inboxEntity.integrationEventId(),
                 inboxEntity.processedAt()
 
         );

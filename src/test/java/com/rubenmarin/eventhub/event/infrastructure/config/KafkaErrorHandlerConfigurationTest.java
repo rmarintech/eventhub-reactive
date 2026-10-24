@@ -1,8 +1,6 @@
 package com.rubenmarin.eventhub.event.infrastructure.config;
 
 import com.rubenmarin.eventhub.event.application.event.BookingCreatedIntegrationEvent;
-import com.rubenmarin.eventhub.event.application.model.InboxEvent;
-import com.rubenmarin.eventhub.event.application.port.out.InboxRepository;
 import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.producer.ProducerRecord;
@@ -19,13 +17,10 @@ import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.kafka.listener.DefaultErrorHandler;
 import org.springframework.kafka.listener.MessageListenerContainer;
 import org.springframework.kafka.support.SendResult;
-import reactor.core.publisher.Mono;
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.json.JsonMapper;
 
-import java.time.OffsetDateTime;
-import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
 

@@ -31,22 +31,22 @@ class R2dbcInboxRepositoryAdapterIT {
     @Test
     void shouldSaveInboxEvent() {
 
-        UUID eventId = UUID.randomUUID();
+        UUID integrationEventId = UUID.randomUUID();
 
         InboxEvent event = new InboxEvent(
-                eventId,
+                integrationEventId,
                 OffsetDateTime.now()
         );
 
         StepVerifier.create(inboxRepository.save(event))
                 .assertNext(saved -> {
-                    assertEquals(eventId, saved.eventId());
+                    assertEquals(integrationEventId, saved.integrationEventId());
                     assertEquals(event.processedAt(), saved.processedAt());
                 })
                 .verifyComplete();
 
         // Verify the event was persisted in PostgreSQL.
-        StepVerifier.create(inboxRepository.existsById(eventId))
+        StepVerifier.create(inboxRepository.existsById(integrationEventId))
                 .expectNext(true)
                 .verifyComplete();
     }
@@ -54,22 +54,22 @@ class R2dbcInboxRepositoryAdapterIT {
     @Test
     void shouldRejectDuplicateInboxEvent() {
 
-        UUID eventId = UUID.randomUUID();
+        UUID integrationEventId = UUID.randomUUID();
 
         InboxEvent first = new InboxEvent(
-                eventId,
+                integrationEventId,
                 OffsetDateTime.now()
         );
 
         InboxEvent duplicate = new InboxEvent(
-                eventId,
+                integrationEventId,
                 OffsetDateTime.now()
         );
 
         // First INSERT succeeds.
         StepVerifier.create(inboxRepository.save(first))
                 .assertNext(saved ->
-                        assertEquals(eventId, saved.eventId())
+                        assertEquals(integrationEventId, saved.integrationEventId())
                 )
                 .verifyComplete();
 
@@ -79,7 +79,7 @@ class R2dbcInboxRepositoryAdapterIT {
                 .verify();
 
         // The original event is still persisted.
-        StepVerifier.create(inboxRepository.existsById(eventId))
+        StepVerifier.create(inboxRepository.existsById(integrationEventId))
                 .assertNext(exists -> assertTrue(exists))
                 .verifyComplete();
     }

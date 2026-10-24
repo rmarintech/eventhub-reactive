@@ -38,26 +38,26 @@ public class BookingCreatedKafkaConsumer {
         BookingCreatedIntegrationEvent bookingCreatedIntegrationEvent =
                 mapper.readerFor(BookingCreatedIntegrationEvent.class).readValue(payload);
 
-        _log.info("Received BookingCreated event: {}", bookingCreatedIntegrationEvent.bookingId());
+        _log.info("Received BookingCreated event: {}", bookingCreatedIntegrationEvent.integrationEventId());
 
-        UUID eventId = bookingCreatedIntegrationEvent.bookingId();
+        UUID eventId = bookingCreatedIntegrationEvent.integrationEventId();
         OffsetDateTime processedAt =  OffsetDateTime.now();
 // no hace falta preguntar si existe, ya la bbdd  hará su trabajo no permitiendo inserir 2 registros con misma pk
 //        Mono<Boolean> exists = inboxRepository.existsById(eventId);
 //        if(!exists.block()){
 //                InboxEvent inboxEvent = new InboxEvent(eventId, processedAt);
 //                inboxRepository.save(inboxEvent).block();
-//                _log.info("New Inboxed event: {}", bookingCreatedIntegrationEvent.bookingId());
+//                _log.info("New Inboxed event: {}", bookingCreatedIntegrationEvent.integrationEventId());
 //        }else{
-//            _log.info("Ignoring event, It was already inboxed event: {}", bookingCreatedIntegrationEvent.bookingId());
+//            _log.info("Ignoring event, It was already inboxed event: {}", bookingCreatedIntegrationEvent.integrationEventId());
 //        }
 
         try {
             InboxEvent inboxEvent = new InboxEvent(eventId, processedAt);
             inboxRepository.save(inboxEvent).block();
-            _log.info("New Inboxed event: {}", bookingCreatedIntegrationEvent.bookingId());
+            _log.info("New Inboxed event: {}", bookingCreatedIntegrationEvent.integrationEventId());
         }catch (DuplicateKeyException e){
-            _log.info("Ignoring event, It was already inboxed event: {}", bookingCreatedIntegrationEvent.bookingId());
+            _log.info("Ignoring event, It was already inboxed event: {}", bookingCreatedIntegrationEvent.integrationEventId());
         }
 
     }

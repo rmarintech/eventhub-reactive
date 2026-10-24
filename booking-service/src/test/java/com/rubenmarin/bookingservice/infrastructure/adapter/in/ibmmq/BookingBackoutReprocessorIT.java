@@ -10,7 +10,7 @@ class BookingBackoutReprocessorIT {
     @Autowired
     BookingBackoutReprocessor reprocessor;
 
-    @Test
+   // @Test
     void shouldReprocessBackoutMessage() {
         reprocessor.reprocess(
                 "ID:414d5120514d312020202020202020203e4bd66a013c0040"

@@ -16,15 +16,17 @@ class IbmMqBookingPublisherIT {
     @Test
     void shouldPublishtoQueue() {
 
+        UUID integrationEventId = UUID.randomUUID();
         UUID bookingId = UUID.randomUUID();
-       // UUID bookingId = UUID.fromString("db0e05f2-5e82-41cd-8070-05569c72fda1");
         UUID eventId = UUID.randomUUID();
         UUID userId = UUID.randomUUID();
 
         BookingCreatedIntegrationEvent bookingCreatedEvent =
                 new BookingCreatedIntegrationEvent(
+                        integrationEventId,
                         bookingId,
-                        eventId, userId
+                        eventId,
+                        userId
                 );
 
         ibmMqBookingPublisher.publish(bookingCreatedEvent);

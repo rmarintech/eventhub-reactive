@@ -13,21 +13,21 @@ import java.util.UUID;
 public class InboxEntity {
 
     @Id
-    @Column(name = "event_id")
-    UUID eventId;
+    @Column(name="integration_event_id")
+    UUID integrationEventId;
     @Column(name = "processed_at")
     OffsetDateTime processedAt;
 
     protected InboxEntity() {
     }
 
-    public InboxEntity(UUID eventId, OffsetDateTime processedAt) {
-        this.eventId = eventId;
+    public InboxEntity(UUID integrationEventId, OffsetDateTime processedAt) {
+        this.integrationEventId = integrationEventId;
         this.processedAt = processedAt;
     }
 
-    public UUID getEventId() {
-        return eventId;
+    public UUID getIntegrationEventId() {
+        return integrationEventId;
     }
 
     public OffsetDateTime getProcessedAt() {

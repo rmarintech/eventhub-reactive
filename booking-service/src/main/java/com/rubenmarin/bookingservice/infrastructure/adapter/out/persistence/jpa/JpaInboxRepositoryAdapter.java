@@ -48,7 +48,7 @@ public class JpaInboxRepositoryAdapter implements InboxRepository {
 
     private InboxEntity toEntity(InboxEvent event) {
         InboxEntity toRet = new InboxEntity(
-                event.eventId(),
+                event.integrationEventId(),
                 event.processedAt()
         );
         return toRet;
@@ -56,7 +56,7 @@ public class JpaInboxRepositoryAdapter implements InboxRepository {
 
     private InboxEvent toDomain(InboxEntity inboxEntity) {
         InboxEvent toRet = new InboxEvent(
-                inboxEntity.getEventId(),
+                inboxEntity.getIntegrationEventId(),
                 inboxEntity.getProcessedAt()
 
         );

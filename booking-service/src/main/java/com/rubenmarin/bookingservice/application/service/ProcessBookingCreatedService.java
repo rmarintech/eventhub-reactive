@@ -25,11 +25,12 @@ public class ProcessBookingCreatedService implements ProcessBookingCreatedUseCas
         UUID eventId = bookingCreatedIntegrationEvent.eventId();
         UUID userId = bookingCreatedIntegrationEvent.userId();
         UUID bookingId = bookingCreatedIntegrationEvent.bookingId();
+        UUID integrationEventId = bookingCreatedIntegrationEvent.integrationEventId();
 
-        if(!inboxRepository.existsById(bookingId)){
+        if(!inboxRepository.existsById(integrationEventId)){
 
             //Guardarlo en el inbox para que no se vuelva a procesar
-            InboxEvent inboxEvent = new InboxEvent(bookingId, OffsetDateTime.now());
+            InboxEvent inboxEvent = new InboxEvent(integrationEventId, OffsetDateTime.now());
             inboxRepository.save(inboxEvent);
 
             //TODO: procesar el evento con su lógica de negocio

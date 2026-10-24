@@ -12,8 +12,8 @@ import java.util.UUID;
 @Table("inbox_events")
 public record InboxEntity(
         @Id
-        @Column("event_id")
-        UUID eventId,
+        @Column("integration_event_id")
+        UUID integrationEventId,
         @Column("processed_at")
         OffsetDateTime processedAt,
 
@@ -24,6 +24,6 @@ public record InboxEntity(
 
     @Override
     public UUID getId() {
-        return eventId;
+        return integrationEventId;
     }
 }

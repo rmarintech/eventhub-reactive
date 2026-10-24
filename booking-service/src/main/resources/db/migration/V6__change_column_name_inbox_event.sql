@@ -1,0 +1,1 @@
+ALTER TABLE inbox_events RENAME COLUMN event_id TO integration_event_id;

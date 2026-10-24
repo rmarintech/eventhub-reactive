@@ -96,6 +96,7 @@ class BookingCreatedMqConsumerTest {
         return new BookingCreatedIntegrationEvent(
                 UUID.randomUUID(),
                 UUID.randomUUID(),
+                UUID.randomUUID(),
                 UUID.randomUUID()
         );
     }

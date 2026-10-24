@@ -62,9 +62,11 @@ public class TransactionalBookingUseCase implements BookingUseCase {
     public Booking createBooking(EventId eventId, UserId userId) {
 
         Booking booking = delegate.createBooking(eventId, userId);
+        UUID integrationEventId = UUID.randomUUID();
 
         BookingCreatedIntegrationEvent bookingCreatedIntegrationEvent =
                 new BookingCreatedIntegrationEvent(
+                        integrationEventId,
                         booking.getBookingId().bookingId(),
                         booking.getEventId().eventId(),
                         booking.getUserId().userId()
@@ -96,10 +98,6 @@ public class TransactionalBookingUseCase implements BookingUseCase {
         );
 
         outboxRepository.createOutboxEvent(outboxIbmMqEvent);
-
-
-
-
         return booking;
     }
 

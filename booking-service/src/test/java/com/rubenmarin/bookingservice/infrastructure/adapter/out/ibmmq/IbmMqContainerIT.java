@@ -115,18 +115,19 @@ class IbmMqContainerIT {
 
     @Test
     void shouldConsumeBookingCreatedAndPersistInbox() {
-        UUID bookingId = UUID.randomUUID();
+        UUID integrationEventId = UUID.randomUUID();
 
         BookingCreatedIntegrationEvent event =
                 new BookingCreatedIntegrationEvent(
-                        bookingId,
+                        integrationEventId,
+                        UUID.randomUUID(),
                         UUID.randomUUID(),
                         UUID.randomUUID()
                 );
 
         String payload = objectMapper.writeValueAsString(event);
 
-        assertEquals(0L, countInboxEvents(bookingId));
+        assertEquals(0L, countInboxEvents(integrationEventId));
 
         jmsListenerRegistry.start();
 
@@ -136,7 +137,7 @@ class IbmMqContainerIT {
             await()
                     .atMost(Duration.ofSeconds(10))
                     .untilAsserted(() ->
-                            assertEquals(1L, countInboxEvents(bookingId))
+                            assertEquals(1L, countInboxEvents(integrationEventId))
                     );
 
         } finally {
@@ -146,18 +147,19 @@ class IbmMqContainerIT {
 
     @Test
     void shouldIgnoreDuplicateBookingCreatedEvent() {
-        UUID bookingId = UUID.randomUUID();
+        UUID integrationEventId = UUID.randomUUID();
 
         BookingCreatedIntegrationEvent event =
                 new BookingCreatedIntegrationEvent(
-                        bookingId,
+                        integrationEventId,
+                        UUID.randomUUID(),
                         UUID.randomUUID(),
                         UUID.randomUUID()
                 );
 
         String payload = objectMapper.writeValueAsString(event);
 
-        assertEquals(0L, countInboxEvents(bookingId));
+        assertEquals(0L, countInboxEvents(integrationEventId));
 
         jmsListenerRegistry.start();
 
@@ -168,11 +170,11 @@ class IbmMqContainerIT {
             await()
                     .atMost(Duration.ofSeconds(10))
                     .untilAsserted(() -> {
-                        assertEquals(1L, countInboxEvents(bookingId));
+                        assertEquals(1L, countInboxEvents(integrationEventId));
                         assertEquals(0, getQueueDepth(BOOKING_QUEUE));
                     });
 
-            // Segunda entrega: mismo bookingId.
+            // Segunda entrega: mismo integrationEventId.
             jmsTemplate.convertAndSend(BOOKING_QUEUE, payload);
 
             // Esperar a que la cola vuelva a estar vacía.
@@ -181,7 +183,7 @@ class IbmMqContainerIT {
                     .untilAsserted(() -> {
                         assertEquals(0, getQueueDepth(BOOKING_QUEUE));
                         assertEquals(0, getQueueDepth(BACKOUT_QUEUE));
-                        assertEquals(1L, countInboxEvents(bookingId));
+                        assertEquals(1L, countInboxEvents(integrationEventId));
                     });
 
         } finally {
@@ -194,7 +196,7 @@ class IbmMqContainerIT {
                 """
                 SELECT COUNT(*)
                 FROM inbox_events
-                WHERE event_id = ?
+                WHERE integration_event_id = ?
                 """,
                 Long.class,
                 bookingId

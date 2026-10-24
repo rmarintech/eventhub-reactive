@@ -43,11 +43,12 @@ class ProcessBookingCreatedServiceIT {
     @Test
     void shouldRejectConcurrentDuplicateInboxEvents() throws Exception {
 
-        UUID bookingId = UUID.randomUUID();
+        UUID integrationEventId = UUID.randomUUID();
 
         BookingCreatedIntegrationEvent event =
                 new BookingCreatedIntegrationEvent(
-                        bookingId,
+                        integrationEventId,
+                        UUID.randomUUID(),
                         UUID.randomUUID(),
                         UUID.randomUUID()
                 );
@@ -70,7 +71,7 @@ class ProcessBookingCreatedServiceIT {
 
             return exists;
 
-        }).when(inboxRepository).existsById(bookingId);
+        }).when(inboxRepository).existsById(integrationEventId);
 
         ExecutorService executor = Executors.newFixedThreadPool(2);
 
@@ -117,7 +118,7 @@ class ProcessBookingCreatedServiceIT {
             // PostgreSQL conserva exactamente un registro.
             long stored = springDataInboxRepository.findAll()
                     .stream()
-                    .filter(entity -> entity.getEventId().equals(bookingId))
+                    .filter(entity -> entity.getIntegrationEventId().equals(integrationEventId))
                     .count();
 
             Assertions.assertEquals(1, stored);
