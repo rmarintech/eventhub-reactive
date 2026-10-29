@@ -1,6 +1,8 @@
 # Inter-service Resilience — EventHub
 
-This document explains the **synchronous Booking Service → Event Service** resilience work implemented and tested, including Bulkhead. It collects theory, concrete configuration, tested behavior and limitations in one place. It does **not** describe Reactor's reactive `retry()` operator; that belongs in [`REACTIVE.md`](REACTIVE.md).
+> **Messaging resilience update:** Separately from the synchronous HTTP Resilience4j chain described here, Event Service Kafka DLT persistence now retries PostgreSQL outages with a dedicated `DefaultErrorHandler` and a Toxiproxy-tested recovery path; pending events can be manually replayed and errors are tested. HTTP retry/circuit breaker/bulkhead configuration is unchanged. See [KAFKA.md](KAFKA.md).
+
+This document explains the **synchronous Booking Service → Event Service** resilience work implemented and tested, including Bulkhead. It collects theory, concrete configuration, tested behavior and limitations in one place. It does **not** describe Reactor's reactive `retry` operator; that belongs in [`REACTIVE.md`](REACTIVE.md).
 
 ## Scope and architecture
 
@@ -20,7 +22,7 @@ BookingService (application)
             → RestClient → GET /events/{id} → Event Service
 ```
 
-All four adapters implement the same output port. `EventClientConfiguration` wires them using Resilience4j's **core Java API**, without Spring AOP/@Retry/@CircuitBreaker annotations. The application layer remains independent of HTTP and Resilience4j. See [`HEXAGONAL.md`](HEXAGONAL.md#booking-service-circuit-breaker-and-resilience-decorators-16-october-2026) for the dependency-inversion decision.
+All four adapters implement the same output port. `EventClientConfiguration` wires them using Resilience4j's **core Java API**, without Spring AOP/@Retry/@CircuitBreaker annotations. The application layer remains independent of HTTP and Resilience4j. See [`HEXAGONAL.md`](HEXAGONAL.md) for the dependency-inversion decision.
 
 ## What resilience means here
 
@@ -57,11 +59,11 @@ The HTTP adapter requests a minimal `EventResponse(UUID id, String status, int a
 Implemented with `resilience4j-retry` **2.3.0**, `RetryConfig` and `Retry.decorateSupplier(...)` in `RetryableEventAvailabilityAdapter`, surrounding the REST port delegate.
 
 ```java
-RetryConfig config = RetryConfig.custom()
-        .maxAttempts(3)
-        .waitDuration(Duration.ofMillis(500))
-        .retryExceptions(EventServiceUnavailableException.class)
-        .build();
+RetryConfig config = RetryConfig.custom
+.maxAttempts(3)
+.waitDuration(Duration.ofMillis(500))
+.retryExceptions(EventServiceUnavailableException.class)
+.build;
 ```
 
 - **3 total attempts** means one initial execution and at most **2 retries**, not three additional retries.
@@ -75,7 +77,7 @@ The adapter uses the **Decorator pattern**:
 ```java
 @Override
 public boolean isAvailable(EventId eventId) {
-    return Retry.decorateSupplier(retry, () -> delegate.isAvailable(eventId)).get();
+    return Retry.decorateSupplier(retry,  -> delegate.isAvailable(eventId)).get;
 }
 ```
 
@@ -106,15 +108,15 @@ A single failure does not automatically open the production circuit: the configu
 ### Production configuration
 
 ```java
-CircuitBreakerConfig config = CircuitBreakerConfig.custom()
-        .failureRateThreshold(50)
-        .slidingWindowSize(10)
-        .minimumNumberOfCalls(10)
-        .waitDurationInOpenState(Duration.ofSeconds(10))
-        .permittedNumberOfCallsInHalfOpenState(2)
-        .recordExceptions(EventServiceUnavailableException.class)
-        .ignoreExceptions(EventNotFoundException.class)
-        .build();
+CircuitBreakerConfig config = CircuitBreakerConfig.custom
+.failureRateThreshold(50)
+.slidingWindowSize(10)
+.minimumNumberOfCalls(10)
+.waitDurationInOpenState(Duration.ofSeconds(10))
+.permittedNumberOfCallsInHalfOpenState(2)
+.recordExceptions(EventServiceUnavailableException.class)
+.ignoreExceptions(EventNotFoundException.class)
+.build;
 ```
 
 | Setting | Meaning |
@@ -151,7 +153,7 @@ The Circuit Breaker adapter translates OPEN rejection without counting that reje
 public boolean isAvailable(EventId eventId) {
     try {
         return CircuitBreaker.decorateSupplier(
-                circuitBreaker, () -> delegate.isAvailable(eventId)).get();
+                circuitBreaker,  -> delegate.isAvailable(eventId)).get;
     } catch (CallNotPermittedException ex) {
         throw new EventServiceUnavailableException(ex);
     }
@@ -178,10 +180,10 @@ public boolean isAvailable(EventId eventId) {
 The imperative Booking service uses `resilience4j-bulkhead` **2.3.0** and `Bulkhead.decorateSupplier(...)` in `BulkheadEventAvailabilityAdapter`. The production configuration is:
 
 ```java
-BulkheadConfig config = BulkheadConfig.custom()
-        .maxConcurrentCalls(5)
-        .maxWaitDuration(Duration.ZERO)
-        .build();
+BulkheadConfig config = BulkheadConfig.custom
+.maxConcurrentCalls(5)
+.maxWaitDuration(Duration.ZERO)
+.build;
 
 return Bulkhead.of("eventAvailability", config);
 ```
@@ -198,7 +200,7 @@ return Bulkhead.of("eventAvailability", config);
 public boolean isAvailable(EventId eventId) {
     try {
         return Bulkhead.decorateSupplier(
-                bulkhead, () -> delegate.isAvailable(eventId)).get();
+                bulkhead,  -> delegate.isAvailable(eventId)).get;
     } catch (BulkheadFullException ex) {
         throw new EventServiceUnavailableException(ex);
     }
@@ -207,7 +209,7 @@ public boolean isAvailable(EventId eventId) {
 
 ### Tests completed
 
-`BulkheadEventAvailabilityAdapterTest` uses Mockito, `ExecutorService`, `Future` and two `CountDownLatch` objects without Spring. Its test-specific limit is **1 permit**: one call enters the mocked delegate and waits; a concurrent second call is rejected with an `EventServiceUnavailableException` whose cause is `BulkheadFullException`; releasing the first call restores the permit; Mockito verifies that only the admitted call reached the delegate. Latches avoid reliance on `Thread.sleep()`. The test was reported green.
+`BulkheadEventAvailabilityAdapterTest` uses Mockito, `ExecutorService`, `Future` and two `CountDownLatch` objects without Spring. Its test-specific limit is **1 permit**: one call enters the mocked delegate and waits; a concurrent second call is rejected with an `EventServiceUnavailableException` whose cause is `BulkheadFullException`; releasing the first call restores the permit; Mockito verifies that only the admitted call reached the delegate. Latches avoid reliance on `Thread.sleep`. The test was reported green.
 
 `EventClientConfigurationTest` (`@SpringBootTest`) verifies that the Retry, Circuit Breaker, Bulkhead and RestClient beans load and that the `EventAvailabilityPort` bean exposed by Spring is a `BulkheadEventAvailabilityAdapter`. This verifies the outer bean type, not the complete nested chain by reflection. The full `booking-service` `clean verify` suite was reported green.
 
@@ -227,12 +229,12 @@ Bulkhead does not replace an Event Service-side concurrency limit, a global requ
 - Durable/idempotent Event-capacity compensation, distributed consistency guarantees, and real two-service end-to-end integration tests. Basic synchronous capacity reservation/compensation is implemented, but not fault-tolerant.
 - Reusable `docs/MICROSERVICES-CHECKLIST.md` after studying the remaining cross-service reliability concerns.
 
-See [`ROADMAP.md`](ROADMAP.md#23-microservices-evolution) for current/pending implementation milestones. The synchronous best-effort reservation/compensation path is documented separately below; the remaining reliability gaps are not described as implemented.
+See [`ROADMAP.md`](ROADMAP.md) for current/pending implementation milestones. The synchronous best-effort reservation/compensation path is documented separately below; the remaining reliability gaps are not described as implemented.
 
 
 ## Current create-booking path — capacity reservation and compensation
 
-**Important distinction:** the availability `GET /events/{id}` and its `Bulkhead → Circuit Breaker → Retry → REST` decorators remain implemented, but **`BookingService.createBooking()` no longer calls `EventAvailabilityPort.isAvailable()`**. Its current path is:
+**Important distinction:** the availability `GET /events/{id}` and its `Bulkhead → Circuit Breaker → Retry → REST` decorators remain implemented, but **`BookingService.createBooking` no longer calls `EventAvailabilityPort.isAvailable`**. Its current path is:
 
 ```text
 BookingController → CompensatingBookingUseCase
@@ -247,6 +249,5 @@ Both capacity calls use blocking `RestClient` without an automatic mutating-requ
 
 **Verified:** eight `RestEventCapacityAdapterTest` HTTP-mock tests and three `CompensatingBookingUseCaseTest` coordination tests are green. Event Service's insufficient-capacity WebTestClient test is green. **Not verified:** a live two-service booking/compensation flow and durable, idempotent recovery. If reserve or compensation times out, a remote side effect may already have happened; no distributed exactly-once guarantee or persistent compensation log exists. Booking cancellation does not yet release capacity in Event Service.
 
-## Manual live-service failure evidence — 
-
+## Manual live-service failure evidence
 With Event Service stopped, a real `POST /api/bookings` to Booking Service returned **503** with application code `EVENT_SERVICE_UNAVAILABLE` and a controlled message. This validates the observed handling of a stopped remote service for the **current mutating reservation path**. It does **not** demonstrate the GET-specific Circuit Breaker/Retry/Bulkhead decorators handling this POST, nor measured read/connect timeout expiry or an ambiguous result after remote execution. See [`MICROSERVICES_COMMUNICATION.md`](MICROSERVICES_COMMUNICATION.md) for the other manual E2E cases.

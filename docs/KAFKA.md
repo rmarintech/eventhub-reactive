@@ -1,6 +1,6 @@
 # Kafka, Transactional Outbox and Idempotent Inbox — EventHub
 
-> **Implementation scope (updated 24 October 2026).** Booking Service creates separate Kafka and IBM MQ Outbox records atomically with Booking persistence. Kafka publication and Event Service Inbox consumption were verified locally; IBM MQ has additional broker-backed Testcontainers tests documented in [IBMMQ.md](IBMMQ.md). The Kafka path still does **not** have a complete automated broker-backed end-to-end test.
+> **Implementation scope.** Booking Service creates separate Kafka and IBM MQ Outbox records atomically with Booking persistence. Kafka publication and Event Service Inbox consumption were verified locally; IBM MQ has additional broker-backed Testcontainers tests documented in [IBMMQ.md](IBMMQ.md). Kafka DLT persistence and controlled manual republication now have broker-backed integration tests; a complete automated Booking Service → Kafka → Event Service end-to-end and explicit offset-commit verification remain pending.
 
 ## Dual-broker Outbox evolution
 
@@ -20,15 +20,15 @@ Client -> BookingController
                | reserve capacity via REST -> Event Service
                v
       TransactionalBookingUseCase (@Transactional)
-               |-- BookingService.createBooking() -> INSERT bookings
+               |-- BookingService.createBooking -> INSERT bookings
                |-- BookingCreatedIntegrationEvent
                |-- ObjectMapper serializes payload to JSON
-               |-- OutboxRepository.createOutboxEvent()
+               |-- OutboxRepository.createOutboxEvent
                |      -> INSERT outbox_events (PENDING)
                +-- ONE PostgreSQL COMMIT / ROLLBACK
 
 OutboxScheduler (@Scheduled, fixedDelay = 5000)
-       |-- findByStatusPending()
+       |-- findByStatusPending
        |-- ObjectMapper.readValue(payload, BookingCreatedIntegrationEvent.class)
        |-- IntegrationEventPublisherPort.publish(event)
        v
@@ -42,7 +42,7 @@ Kafka topic: booking-created
        v
 Event Service @KafkaListener (group: eventhub-event-service)
        |-- ObjectMapper -> BookingCreatedIntegrationEvent
-       |-- InboxRepository.save(InboxEvent(integrationEventId, processedAt)).block()
+       |-- InboxRepository.save(InboxEvent(integrationEventId, processedAt)).block
        |-- INSERT inbox_events (PostgreSQL/R2DBC)
        |      |-- success -> record newly received event
        |      +-- DuplicateKeyException -> ignore redelivery
@@ -72,21 +72,21 @@ CompletableFuture<Void> publish(IntegrationEvent event);
 
 // Kafka adapter: only complete successfully when Kafka acknowledges the send
 return kafkaTemplate.send(topic, key, payload)
-        .thenApply(sendResult -> null);
+.thenApply(sendResult -> null);
 ```
 
-`KafkaTemplate.send()` is asynchronous. Merely calling `publish()` is **not** proof of successful publication. The relay attaches completion callbacks:
+`KafkaTemplate.send` is asynchronous. Merely calling `publish` is **not** proof of successful publication. The relay attaches completion callbacks:
 
 ```java
 integrationEventPublisher.publish(bookingCreatedIntegrationEvent)
-        .thenRun(() -> outboxRepository.markAsPublished(outbox.id()))
-        .exceptionally(throwable -> {
-            log.error("Outbox publication failed: {}", outbox.id(), throwable);
+.thenRun( -> outboxRepository.markAsPublished(outbox.id))
+.exceptionally(throwable -> {
+            log.error("Outbox publication failed: {}", outbox.id, throwable);
             return null;
         });
 ```
 
-The failure callback also handles an exception from `markAsPublished()`. The event remains `PENDING` in that case, even if Kafka already received it.
+The failure callback also handles an exception from `markAsPublished`. The event remains `PENDING` in that case, even if Kafka already received it.
 
 ## Guarantees and limitations
 
@@ -94,12 +94,12 @@ The failure callback also handles an exception from `markAsPublished()`. The eve
 
 **Duplicate scenarios:** Kafka may acknowledge an event, but the database update to `PUBLISHED` may fail. Also, if the Kafka future has not completed when the next poll starts, the same `PENDING` event may be sent twice. Multiple scheduler instances increase that possibility. We have **not** implemented a claim/lease (`IN_PROGRESS`) mechanism or coordination among scheduler instances. The Event Service consumer implements persistent deduplication using the unique `integrationEventId` as the Inbox primary key, not the aggregate `bookingId`.
 
-**Other limitations:** a `booking-created.DLT` publication path and retry/error-handler unit tests are implemented, but there is still no complete automated broker-backed Kafka end-to-end test, independently verified offset-commit behavior under failure, controlled DLT replay, guaranteed publication deadline, or full poison-message recovery workflow. A malformed stored payload can currently interrupt that polling invocation. Kafka availability is not guaranteed; acknowledgments and retries do not guarantee eventual success under permanent failure.
+**Other limitations:** the `booking-created.DLT` publication path, bounded listener error-handler tests, DLT persistence and manual replay are implemented. Still missing are a complete automated Booking Service-to-Event Service broker-backed E2E test, independently verified Kafka offset-commit behavior, a recovery scheduler/administrative API, lease-based recovery of stale `PROCESSING` records, guaranteed publication deadlines and full poison-message handling. A malformed stored payload can currently interrupt that polling invocation. Kafka availability is not guaranteed; acknowledgments and retries do not guarantee eventual success under permanent failure.
 
 ## Evidence 
 
 - `JpaOutboxRepositoryAdapterIT`: real PostgreSQL/Testcontainers persistence and `markAsPublished` verification (green).
-- `TransactionalBookingUseCaseIT`: verified Booking and pending Outbox row persisted together; simulated `OutboxRepository.createOutboxEvent()` failure rolled back Booking and triggered remote-release request through mocked capacity port (green).
+- `TransactionalBookingUseCaseIT`: verified Booking and pending Outbox row persisted together; simulated `OutboxRepository.createOutboxEvent` failure rolled back Booking and triggered remote-release request through mocked capacity port (green).
 - Manual local scheduler check: repeatedly found `PENDING` event, deserialized its JSON and verified the `bookingId` equals `aggregateId`.
 - Manual local Kafka publication check: log showed the Outbox found, then published; database row verified as `PUBLISHED`.
 
@@ -107,7 +107,7 @@ These are scoped tests and manual observations. They do not constitute an automa
 
 ## Event Service: Kafka consumer and Inbox
 
-The independent **Event Service** uses Spring WebFlux and R2DBC for its Event API and persistence. Kafka consumption is handled by a **Spring Kafka imperative `@KafkaListener`**, rather than by a reactive Kafka receiver. The listener is a Kafka-managed thread: `InboxRepository.save(...).block()` waits for the R2DBC INSERT to finish before returning to Kafka's listener container. Do not call `subscribe()` and immediately return, because the offset could advance before the Inbox write is finished.
+The independent **Event Service** uses Spring WebFlux and R2DBC for its Event API and persistence. Kafka consumption is handled by a **Spring Kafka imperative `@KafkaListener`**, rather than by a reactive Kafka receiver. The listener is a Kafka-managed thread: `InboxRepository.save(...).block` waits for the R2DBC INSERT to finish before returning to Kafka's listener container. Do not call `subscribe` and immediately return, because the offset could advance before the Inbox write is finished.
 
 - **Topic:** `booking-created`. **Consumer group:** `eventhub-event-service`.
 - **Deserializers:** Kafka `StringDeserializer` for key and value; Jackson `ObjectMapper` converts the JSON payload to `BookingCreatedIntegrationEvent(integrationEventId, bookingId, eventId, userId)` in Event Service.
@@ -115,7 +115,7 @@ The independent **Event Service** uses Spring WebFlux and R2DBC for its Event AP
 - **Application model and port:** `InboxEvent(UUID integrationEventId, OffsetDateTime processedAt)` and `InboxRepository` (`Mono<Boolean> existsById(UUID)` and `Mono<InboxEvent> save(InboxEvent)`). Here `InboxEvent.integrationEventId` is the **message deduplication identifier**, populated from the integration event payload.
 - **R2DBC infrastructure:** `InboxEntity` maps `inbox_events`, implements `Persistable<UUID>` and supplies `isNew=true` for new INSERTs; `SpringDataInboxRepository` and `R2dbcInboxRepositoryAdapter` implement the port.
 - **Schema:** `inbox_events(integration_event_id UUID PRIMARY KEY, processed_at TIMESTAMPTZ NOT NULL)` in Event Service's `schema.sql`. The primary key enforces uniqueness, including when duplicate deliveries race.
-- **Listener:** `BookingCreatedKafkaConsumer` is an `@Component` with `@KafkaListener(topics="booking-created", groupId="eventhub-event-service")`. It deserializes the JSON, creates an `InboxEvent` using `integrationEventId`, and calls `inboxRepository.save(inboxEvent).block()`. `DuplicateKeyException` is treated as an already-recorded message; unrelated exceptions are not swallowed.
+- **Listener:** `BookingCreatedKafkaConsumer` is an `@Component` with `@KafkaListener(topics="booking-created", groupId="eventhub-event-service")`. It deserializes the JSON, creates an `InboxEvent` using `integrationEventId`, and calls `inboxRepository.save(inboxEvent).block`. `DuplicateKeyException` is treated as an already-recorded message; unrelated exceptions are not swallowed.
 
 ```text
 booking-created JSON
@@ -124,13 +124,13 @@ BookingCreatedKafkaConsumer @KafkaListener
         ↓ deserialize
 BookingCreatedIntegrationEvent
         ↓ integrationEventId -> InboxEvent.integrationEventId
-InboxRepository.save(...).block()
+InboxRepository.save(...).block
         ├── INSERT succeeds  -> log new event
         ├── duplicate key    -> log ignored duplicate
         └── other failure    -> throw (listener error handling applies)
 ```
 
-The earlier `existsById() -> save()` implementation was simplified: a pre-check is vulnerable to a check-then-insert race and adds a database query. The PostgreSQL primary key plus a narrowly scoped `DuplicateKeyException` handler is the deduplication mechanism actually retained. The `existsById()` port method remains available, but is not required in the final listener path.
+The earlier `existsById -> save` implementation was simplified: a pre-check is vulnerable to a check-then-insert race and adds a database query. The PostgreSQL primary key plus a narrowly scoped `DuplicateKeyException` handler is the deduplication mechanism actually retained. The `existsById` port method remains available, but is not required in the final listener path.
 
 **Scope of this exercise:** receiving and recording events only. Event capacity was already reserved over REST; the consumer must **not** reserve it again. No downstream business side effect is executed. If one is introduced later, it must be committed atomically with the Inbox record using an appropriate reactive transaction.
 
@@ -143,15 +143,27 @@ The earlier `existsById() -> save()` implementation was simplified: a pre-check 
 - Manual Inbox verification: an incoming Booking-created event was persisted in `inbox_events`. Repeating the same logical event was logged as ignored; the database row was not duplicated.
 - `BookingCreatedKafkaConsumerTest`: mocked repository verifies two delivery attempts failing and a third succeeding, plus two events sharing `bookingId` but carrying distinct `integrationEventId` values. These calls are invoked explicitly by the test; they do not prove broker-driven retry behavior.
 - `KafkaErrorHandlerConfigurationTest`: tests non-retryable malformed JSON, two retries, DLT publishing after exhaustion and failure when DLT publication fails. These are error-handler unit tests, not broker-backed end-to-end evidence.
-- **Not verified:** automated broker-backed consumer integration tests, Kafka offset-commit behavior under failure, concurrent duplicate handling under load, controlled DLT replay, or exactly-once semantics.
+- **Not verified:** full automated two-service Kafka E2E tests, Kafka offset-commit behavior under failure, concurrent duplicate handling under load, or exactly-once semantics. **Now verified separately:** broker-backed DLT persistence/retry and controlled republication, as detailed below.
 
 ## Next learning milestone
 
-DLT publication and focused error-handler unit tests are implemented (`booking-created.DLT`). Next: broker-backed failure/offset verification and controlled replay of DLT messages. Preserve the logical `integrationEventId` on reprocessing.
+DLT persistence and manual controlled replay are now implemented and integration-tested. Next: true concurrent replay, stale `PROCESSING` recovery, poison-message handling, technical DLT header filtering, explicit offset-commit verification, and full two-service E2E tests. Preserve the logical `integrationEventId` on replay.
 
 
-## Integration-event identity update (24 October 2026)
+## Integration-event identity
 
-`TransactionalBookingUseCase` generates `UUID.randomUUID()` once for each new `BookingCreatedIntegrationEvent`. Its four-field JSON payload is stored in both broker-specific Outbox rows. `aggregateId` remains the Booking UUID, while the new `integrationEventId` identifies this logical integration event across deliveries. Booking Service has a Flyway V6 Inbox-column rename; Event Service uses `integration_event_id` in `schema.sql` and its R2DBC `InboxEntity`. Database migrations for an existing deployment must preserve its historic Inbox data.
+`TransactionalBookingUseCase` generates `UUID.randomUUID` once for each new `BookingCreatedIntegrationEvent`. Its four-field JSON payload is stored in both broker-specific Outbox rows. `aggregateId` remains the Booking UUID, while the new `integrationEventId` identifies this logical integration event across deliveries. Booking Service has a Flyway V6 Inbox-column rename; Event Service uses `integration_event_id` in `schema.sql` and its R2DBC `InboxEntity`. Database migrations for an existing deployment must preserve its historic Inbox data.
 
 The Kafka listener inserts the Inbox row directly and ignores only `DuplicateKeyException`; other persistence errors propagate to the configured Kafka error handler. The consumer does not yet perform a downstream business effect. If a business effect is added, Inbox insertion and that effect require coordinated atomicity.
+
+
+## DLT persistence and manual recovery
+**Scope:** Event Service; these tests exercise Kafka/PostgreSQL Testcontainers (and Toxiproxy for database-failure injection), not a complete two-service end-to-end workflow.
+
+- `DltRecoveryConsumer` subscribes to `booking-created.DLT` in group `eventhub-dlt-recovery`. It persists DLT records in PostgreSQL `recovery_events` keyed by source topic, partition and offset. It retains message key, raw payload and Kafka headers encoded by `KafkaHeadersCodec`. Duplicate persistence is ignored via `DuplicateKeyException`.
+- A dedicated `dltRecoveryKafkaListenerContainerFactory` uses `DefaultErrorHandler` with an unlimited `FixedBackOff` for transient database persistence failures. In `DltRecoveryRetryIT`, Toxiproxy interrupted PostgreSQL access: database calls failed, repeated delivery was observed, and the original DLT event was persisted after recovery.
+- `EventRecoveryEntity` models `PENDING → PROCESSING → REPUBLISHED`, with `attemptId`, timestamps and `@Version` optimistic locking. `DltRecoveryService.reprocess` finds `PENDING` entries sequentially with Reactor `concatMap`, claims each with a persisted `PROCESSING` transition, sends a `ProducerRecord<String,String>` to `booking-created`, and marks it `REPUBLISHED` only after Kafka acknowledges. The record reconstructs original key, payload and headers via `KafkaHeadersCodec.deserialize`.
+- On publication failure the service attempts to restore `PENDING`; if saving `REPUBLISHED` fails **after Kafka ACK**, that failure propagates and the database can retain `PROCESSING`. This is an ambiguous delivery window, not exactly-once delivery.
+- `DltRecoveryServiceIT` (four passing integration tests): successful republish and independent consumer verification of key, payload, and `correlationId` header bytes; simulated Kafka publish failure restores `PENDING`; stale `@Version` claim fails without publishing; simulated PostgreSQL failure after Kafka ACK leaves persisted `PROCESSING` and propagates an error. The failure scenarios use targeted Mockito spies with real PostgreSQL; the happy-path publication and consumer use real Kafka.
+
+**Still pending:** simultaneous replay test across two executions/instances; lease/timeout and fencing for stale `PROCESSING`; end-to-end deduplication of ambiguous ACK outcomes; distinguishing malformed headers/payload from transient failures and quarantining unrecoverable records; filtering DLT error metadata while retaining business headers; administrative triggering/authorization and metrics. Original Booking Service Outbox relay coordination is a separate pending concern.

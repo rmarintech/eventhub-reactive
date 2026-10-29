@@ -1,6 +1,8 @@
 # IBM MQ and Spring JMS — EventHub
 
-> **Verification scope (20 October 2026).** Booking Service now creates separate Kafka and IBM MQ Outbox records in the same local PostgreSQL transaction. Both relay paths were exercised locally. IBM MQ consumption and Inbox persistence were also tested with isolated IBM MQ and PostgreSQL Testcontainers. This is **not** an exactly-once or distributed transaction guarantee.
+> **Related Kafka integration:** Event Service DLT persistence, Toxiproxy database-failure retries and manual DLT replay (including headers) are verified; see [KAFKA.md](KAFKA.md). IBM MQ Outbox, JMS and backout behavior is described below, along with its outstanding reliability work. The two broker sends remain independent.
+
+> **Verification scope.** Booking Service now creates separate Kafka and IBM MQ Outbox records in the same local PostgreSQL transaction. Both relay paths were exercised locally. IBM MQ consumption and Inbox persistence were also tested with isolated IBM MQ and PostgreSQL Testcontainers. This is **not** an exactly-once or distributed transaction guarantee.
 
 ## Purpose and architecture
 
@@ -52,7 +54,7 @@ ibm:
 
 ```powershell
 docker compose -f compose.ibmmq.yaml up -d
-Get-Content .\ibmmq\init.mqsc | docker exec -i eventhub-ibmmq runmqsc QM1
+Get-Content.\ibmmq\init.mqsc | docker exec -i eventhub-ibmmq runmqsc QM1
 ```
 
 The MQSC setup needed for the tested scenario is:
@@ -70,7 +72,7 @@ SET AUTHREC PROFILE('BOOKING.CREATED.Q') OBJTYPE(QUEUE) PRINCIPAL('app') AUTHADD
 SET AUTHREC PROFILE('BOOKING.BACKOUT.Q') OBJTYPE(QUEUE) PRINCIPAL('app') AUTHADD(PUT,INQ,PASSALL,BROWSE)
 ```
 
-**Note:** `DEFINE ... REPLACE` is suitable for initializing an empty local environment, **not for routinely reapplying to existing queues with messages**. For an existing queue, use `ALTER` and `SET AUTHREC` without redefining it. MQSC uses `*` at the start of the line for comments.
+**Note:** `DEFINE... REPLACE` is suitable for initializing an empty local environment, **not for routinely reapplying to existing queues with messages**. For an existing queue, use `ALTER` and `SET AUTHREC` without redefining it. MQSC uses `*` at the start of the line for comments.
 
 ## Manual tests and evidence
 
@@ -80,7 +82,7 @@ SET AUTHREC PROFILE('BOOKING.BACKOUT.Q') OBJTYPE(QUEUE) PRINCIPAL('app') AUTHADD
 | `@JmsListener` consumes | Logs showed a `BookingCreatedIntegrationEvent` JSON payload; source depth became `CURDEPTH(0)` |
 | Listener deliberately throws `RuntimeException` | Same message was repeatedly redelivered following transaction rollback |
 | Source configured with `BOTHRESH(3)` and `BOQNAME(BOOKING.BACKOUT.Q)` | After required queue permissions, failing message appeared in `BOOKING.BACKOUT.Q` (`CURDEPTH(1)`) |
-| Backout inspector calls `JmsTemplate.browse()` | Logs showed `JMSMessageID` and original JSON payload; backout depth remained `CURDEPTH(1)` |
+| Backout inspector calls `JmsTemplate.browse` | Logs showed `JMSMessageID` and original JSON payload; backout depth remained `CURDEPTH(1)` |
 
 Commands (PowerShell, from the project root or any directory with Docker available):
 
@@ -104,9 +106,9 @@ docker exec eventhub-ibmmq sh -c "tail -n 60 /var/mqm/qmgrs/QM1/errors/AMQERR01.
 
 ## Non-destructive backout inspection
 
-`BookingBackoutInspector` calls `JmsTemplate.browse("BOOKING.BACKOUT.Q", callback)` and uses `QueueBrowser.getEnumeration()` to iterate JMS messages. For `TextMessage`, it logs `getJMSMessageID()` and `getText()`. Browsing does **not acknowledge or remove** the messages; their persistence was checked with `CURDEPTH(1)` after inspection.
+`BookingBackoutInspector` calls `JmsTemplate.browse("BOOKING.BACKOUT.Q", callback)` and uses `QueueBrowser.getEnumeration` to iterate JMS messages. For `TextMessage`, it logs `getJMSMessageID` and `getText`. Browsing does **not acknowledge or remove** the messages; their persistence was checked with `CURDEPTH(1)` after inspection.
 
-## Automated integration tests (20 October 2026)
+## Automated integration tests 
 
 `IbmMqContainerIT` uses **IBM MQ Testcontainers** (`com.ibm.mq:mq-java-testcontainer:2.0.5`) and a separate **PostgreSQL 17 Testcontainer**, with Spring configuration overridden through `@DynamicPropertySource`. Flyway initializes the isolated Booking Service database.
 
@@ -119,7 +121,7 @@ Green tests reported for:
 
 **Test scope caveat:** checking `CURDEPTH(0)` alone cannot prove the exact moment at which the second JMS delivery was transactionally acknowledged. These green tests demonstrate observable deduplication and queue draining, not exactly-once processing under every failure window. They also do not constitute a broker-backed automated Kafka test or a complete test of the dual-Outbox relay itself.
 
-**Testcontainers authentication pitfall:** `MQContainer.configure()` writes its own default app password (`app`) to `/run/secrets/mqAppPassword`. Copying a custom file to the same path is overwritten. Use `.withAppPassword("passw0rd")` in the local integration-test container; this is **test-only** and is not a deployment credential.
+**Testcontainers authentication pitfall:** `MQContainer.configure` writes its own default app password (`app`) to `/run/secrets/mqAppPassword`. Copying a custom file to the same path is overwritten. Use `.withAppPassword("passw0rd")` in the local integration-test container; this is **test-only** and is not a deployment credential.
 
 ## Scope, safety and pending work
 

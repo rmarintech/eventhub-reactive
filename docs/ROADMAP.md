@@ -125,7 +125,7 @@ architecture tests remain pending
 -   [x] `boundedElastic`
 -   [x] `parallel`
 -   [x] Thread model experiments
--   [x] Why `block()` breaks the reactive model
+-   [x] Why `block` breaks the reactive model
 -   [x] Reactor testing with `StepVerifier`
 -   [x] Reactive Programming documentation
 
@@ -639,7 +639,7 @@ Kafka broker-backed DLT/offset integration   🚧 NEXT
 ## Implemented / practiced
 
 - [x] Separate Booking domain model with `Booking`, `BookingId`, `EventId`, `UserId` and `BookingStatus`
-- [x] Initial `PENDING` status; `confirm()` and `cancel()` domain operations
+- [x] Initial `PENDING` status; `confirm` and `cancel` domain operations
 - [x] Immutable-style transition tested (new Booking instance retaining identifier)
 - [x] Application input port `BookingUseCase`
 - [x] Application service `BookingService`: get, create, confirm, cancel
@@ -677,7 +677,7 @@ Kafka broker-backed DLT/offset integration   🚧 NEXT
 - [x] Infrastructure transaction decorator (`TransactionalBookingUseCase`)
 - [x] Commit-visibility test with no test-level `@Transactional`
 - [x] Rollback test with a failing use-case delegate and negative control removing `@Transactional`
-- [x] JPA adapter `saveAndFlush()` and selective constraint-name translation to `BookingAlreadyExistsException`
+- [x] JPA adapter `saveAndFlush` and selective constraint-name translation to `BookingAlreadyExistsException`
 - [x] Unit test preserving unrelated `DataIntegrityViolationException` (Mockito)
 - [x] PostgreSQL integration tests: reject duplicate active booking; permit `CANCELLED` + `PENDING`
 - [x] `ConcurrentBookingIT`: exactly one successful and one rejected concurrent-start request
@@ -727,7 +727,7 @@ Kafka broker-backed DLT/offset integration   🚧 NEXT
 - [x] Event Service Kafka consumer and R2DBC Inbox (manual verification and repository IT)
 - [ ] Containerization, deployment and CI/CD for the independent service
 
-**Concurrency caveat:** the `existsActiveBooking()` then `save()` sequence can still race even inside `@Transactional`, but PostgreSQL now prevents two active duplicates through Flyway V2's partial unique index. `@Version` alone would not prevent inserts with distinct Booking IDs. The two-thread test did not deterministically force both pre-checks to return false.
+**Concurrency caveat:** the `existsActiveBooking` then `save` sequence can still race even inside `@Transactional`, but PostgreSQL now prevents two active duplicates through Flyway V2's partial unique index. `@Version` alone would not prevent inserts with distinct Booking IDs. The two-thread test did not deterministically force both pre-checks to return false.
 
 ------------------------------------------------------------------------
 
@@ -741,8 +741,7 @@ Kafka broker-backed DLT/offset integration   🚧 NEXT
 - [x] Booking Service JPA Inbox with `integrationEventId` primary-key deduplication (Flyway V6) and real JMS consumer
 - [x] JMS rollback/redelivery, `BOTHRESH(3)`, Backout Queue and browsing demonstrated locally
 - [x] Controlled backout reprocessing exercised locally (manual verification)
-- [x] `IbmMqContainerIT`: IBM MQ + PostgreSQL 17 Testcontainers, queues, JMS send/receive, consumer-to-Inbox and duplicate-delivery observable behavior — **all five tests reported green 20 October 2026**
-- [x] Updated [IBMMQ.md](IBMMQ.md), [KAFKA.md](KAFKA.md), and root README
+- [x] `IbmMqContainerIT`: IBM MQ + PostgreSQL 17 Testcontainers, queues, JMS send/receive, consumer-to-Inbox and duplicate-delivery observable behavior — **all five tests **
 - [ ] Automated JMS failure/backout/reprocessing test suite and concurrent multi-relay coordination
 - [ ] Production security review, permissions, secret management
 
@@ -755,18 +754,32 @@ Kafka broker-backed DLT/offset integration   🚧 NEXT
 - [x] Unit-test malformed JSON, two transient retries, exhaustion and failed DLT publication
 - [x] Add `integrationEventId` to producer/consumer contracts and Inbox models; confirm distinct message IDs for one `bookingId` using Mockito
 - [ ] Broker-backed Kafka consumer integration tests with Testcontainers and explicit offset-commit verification
-- [ ] Controlled replay/recovery from the DLT preserving `integrationEventId`
+- [x] Controlled manual replay from the DLT: database-backed `PENDING → PROCESSING → REPUBLISHED`, preserving original payload (including `integrationEventId`), key and headers; four passing `DltRecoveryServiceIT` tests
 - [ ] Transactional coupling of Inbox and downstream side effects, if such effects are introduced
 - [ ] Validate Flyway V6 migration behavior against populated preexisting Inbox tables
 
-
-## 24 October 2026 — Integration-event IDs and Kafka DLT tests
+### Integration-event identity and Inbox
 
 - [x] Four-field `BookingCreatedIntegrationEvent(integrationEventId, bookingId, eventId, userId)` in both services.
 - [x] Generate one logical event ID for both Kafka and IBM MQ Outbox payloads; retain `bookingId` as Outbox aggregate ID.
 - [x] Event Service R2DBC Inbox (`integration_event_id` PK) and Booking Service JPA Inbox/Flyway V6 updated.
 - [x] `BookingCreatedKafkaConsumerTest` verifies two distinct integration-event IDs with the same Booking ID (Mockito).
-- [x] Booking Service `mvn clean verify` reported green; focused Event Service consumer tests reported green.
-- [ ] Re-run and record complete Event Service `mvn clean verify` results after documentation update if not already done.
+- [x] Booking Service Maven test suite and focused Event Service consumer tests pass.
+- [ ] Verify the complete Event Service Maven test suite.
 
 These tests do not establish exactly-once delivery or a complete Kafka broker-backed end-to-end guarantee.
+
+### DLT persistence, recovery and remaining work
+
+- [x] `DltRecoveryConsumer` stores DLT topic/partition/offset, key, payload and Base64/JSON headers in PostgreSQL; duplicates ignored by unique key.
+- [x] Dedicated DLT listener factory with unbounded retry for database outages; `DltRecoveryRetryIT` uses Toxiproxy and Testcontainers to verify redelivery and recovery after PostgreSQL returns.
+- [x] `DltRecoveryService.reprocess` manually republishes `PENDING` events to `booking-created` with the original key, payload and restored headers; tracks `PROCESSING`, `REPUBLISHED`, `attemptId` and timestamps, with optimistic version checks.
+- [x] `DltRecoveryServiceIT`: broker-backed happy path including `correlationId` header, injected Kafka failure back to `PENDING`, stale optimistic-lock claim prevents publish, and injected post-ACK PostgreSQL failure leaves `PROCESSING`. Four integration tests pass.
+- [ ] Test concurrent replay with two actual simultaneous executions; decide behavior for the losing optimistic-lock claimant.
+- [ ] Recover stale `PROCESSING` via safe lease/timeout/fencing, accounting for ambiguous Kafka acknowledgments.
+- [ ] Test duplicate business-effect prevention across Kafka ACK/DB failure via stable `integrationEventId` and Inbox.
+- [ ] Filter DLT technical headers, retain business headers, and handle permanent/poison-message failures.
+- [ ] Add protected manual trigger, monitoring, and optional periodic retry policy.
+- [ ] Explicit broker-backed consumer offset/commit failure test and automated Booking Service → Kafka → Event Service E2E.
+
+**Boundary:** DLT recovery testing is not proof of exactly-once publishing, complete broker-backed two-service E2E, or production-safe crash recovery.

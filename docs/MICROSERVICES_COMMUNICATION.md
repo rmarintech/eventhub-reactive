@@ -1,5 +1,7 @@
 # Microservices Communication — Practical Guide and Testing Checklist
 
+> **Kafka update:** The Event Service Kafka DLT consumer persists failed messages in PostgreSQL and a manually invoked recovery service republishes pending events with original key/payload/headers. Four service integration tests plus Toxiproxy database-outage tests are green. This does **not** satisfy this guide’s pending full two-service automated E2E, HTTP capacity idempotency, distributed compensation or offset-commit verification; see [KAFKA.md](KAFKA.md).
+
 > **Purpose.** A reusable guide for designing, implementing, and **demonstrating through tests** reliable communication between Java/Spring Boot microservices. The running example is **EventHub**: **Event Service** (WebFlux + R2DBC, `:8080`) and **Booking Service** (Spring MVC + JPA, `:8081`). This is not a list of technologies that every project must install: choose the guarantees required by the business.
 >
 > **Evidence rule:** *implemented* does not mean *tested*; a mocked HTTP server is not an end-to-end test; a 200/201 response alone does not prove distributed consistency.
@@ -10,11 +12,11 @@
 Client
   | POST /api/bookings { eventId, userId }
   v
-BookingController (Booking Service :8081)
+BookingController (Booking Service:8081)
   | BookingUseCase (@Primary: CompensatingBookingUseCase)
   | POST /events/{id}/reserve/1/places
   v
-EventController (Event Service :8080)
+EventController (Event Service:8080)
   | ReserveEventPlacesService -> Event.reservePlaces(1)
   | R2DBC + optimistic locking -> Event PostgreSQL
   | HTTP 2xx or 4xx/5xx
@@ -104,7 +106,7 @@ With a Booking already created, repeat the POST with the **same** `eventId` and 
 
 ### Manual walkthrough P0.6 — persistence failure after reservation
 
-Do not confuse Event Service being down **before** reservation with a failure **after** reservation. For an E2E compensation test, `reservePlaces()` must succeed first; only **then** inject a failure during local Booking creation, preferably via a test-only fault injection mechanism disabled in production. Read Event state before and after and verify the Booking transaction rolled back. A Mockito verification of `.releasePlaces(...)` **does not prove** that Event's PostgreSQL capacity was restored.
+Do not confuse Event Service being down **before** reservation with a failure **after** reservation. For an E2E compensation test, `reservePlaces` must succeed first; only **then** inject a failure during local Booking creation, preferably via a test-only fault injection mechanism disabled in production. Read Event state before and after and verify the Booking transaction rolled back. A Mockito verification of `.releasePlaces(...)` **does not prove** that Event's PostgreSQL capacity was restored.
 
 ## 4. How to test each layer in Java/Spring
 
@@ -114,10 +116,10 @@ Do not confuse Event Service being down **before** reservation with a failure **
 
 ```java
 when(transactionalDelegate.createBooking(eventId, userId))
-        .thenThrow(new IllegalStateException("Simulated failure"));
+.thenThrow(new IllegalStateException("Simulated failure"));
 
 assertThrows(IllegalStateException.class,
-        () -> compensatingUseCase.createBooking(eventId, userId));
+         -> compensatingUseCase.createBooking(eventId, userId));
 
 verify(eventCapacityPort).reservePlaces(eventId, 1);
 verify(eventCapacityPort).releasePlaces(eventId, 1);
@@ -131,13 +133,13 @@ verify(eventCapacityPort).releasePlaces(eventId, 1);
 
 ```java
 mockServer.expect(requestTo(
-        "http://localhost:8080/events/" + eventId.eventId() + "/reserve/1/places"))
-    .andExpect(method(HttpMethod.POST))
-    .andRespond(withStatus(HttpStatus.CONFLICT));
+        "http://localhost:8080/events/" + eventId.eventId + "/reserve/1/places"))
+.andExpect(method(HttpMethod.POST))
+.andRespond(withStatus(HttpStatus.CONFLICT));
 
 assertThrows(EventNotAvailableException.class,
-        () -> adapter.reservePlaces(eventId, 1));
-mockServer.verify();
+         -> adapter.reservePlaces(eventId, 1));
+mockServer.verify;
 ```
 
 **Covered scenarios:** `reserve`: 200, 404, 409, 500; `release`: 200, 404, 409, 500. **Semantic distinction:** the current `release` 409 propagates as `HttpClientErrorException.Conflict`, *not* `EventNotAvailableException`. Introduce a release-specific mapping only if the contract requires it.
@@ -146,7 +148,7 @@ mockServer.verify();
 
 **Goal:** verify real commits, rollbacks, and DB uniqueness constraints. Use `@SpringBootTest`, PostgreSQL Testcontainers, and `@ServiceConnection`. Mock `EventCapacityPort` only when the test concerns Booking persistence in isolation; query `BookingRepository` **after** the operation has returned. `TransactionalBookingRollbackIT` injects a delegate that saves and then throws an exception: the row must not remain persisted.
 
-**Important:** `saveAndFlush()` flushes SQL and exposes some constraint violations early, but **flush is not commit**. A successful database transaction must finish before treating Booking persistence as confirmed.
+**Important:** `saveAndFlush` flushes SQL and exposes some constraint violations early, but **flush is not commit**. A successful database transaction must finish before treating Booking persistence as confirmed.
 
 ### D. Real service-to-service integration test
 
@@ -170,7 +172,7 @@ mockServer.verify();
 | Compensation | Reverses an already committed business effect | Inject downstream failure; observe a real `release` | Compensation itself can fail; recovery policy needed |
 | Idempotency key | Prevents reapplying the same intent | Repeat with same operation ID; check single effect | Requires persistent identity and defined replay response |
 
-In EventHub, the legacy availability **GET** uses `Bulkhead → Circuit Breaker → Retry → REST`. It remains implemented for learning, but **`createBooking()` no longer uses it**. Mutating `POST reserve/release` calls have no automatic retry because a repeated request may apply the effect twice. See [RESILIENCE.md](RESILIENCE.md).
+In EventHub, the legacy availability **GET** uses `Bulkhead → Circuit Breaker → Retry → REST`. It remains implemented for learning, but **`createBooking` no longer uses it**. Mutating `POST reserve/release` calls have no automatic retry because a repeated request may apply the effect twice. See [RESILIENCE.md](RESILIENCE.md).
 
 ## 6. Distributed consistency: four failure moments
 
@@ -220,8 +222,7 @@ Limitations/open issue: _______________
 
 **Related docs:** [DDD.md](DDD.md) (domain and decorators), [REACTIVE.md](REACTIVE.md) (WebFlux), [RESILIENCE.md](RESILIENCE.md) (GET and Resilience4j), [ROADMAP.md](ROADMAP.md) (milestones).
 
-## 10. Manual two-service E2E verification — 
-
+## 10. Manual two-service E2E verification
 **Environment:** running Event Service (`:8080`) and Booking Service (`:8081`), with their real PostgreSQL-backed state; requests made manually over HTTP, **without mocks**. These are manual observations, not an automated E2E suite.
 
 | Scenario | Evidence observed | Outcome |

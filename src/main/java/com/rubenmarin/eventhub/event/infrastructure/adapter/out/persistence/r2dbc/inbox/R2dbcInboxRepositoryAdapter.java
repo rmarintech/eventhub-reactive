@@ -1,8 +1,7 @@
-package com.rubenmarin.eventhub.event.infrastructure.adapter.out.persistence.r2dbc;
+package com.rubenmarin.eventhub.event.infrastructure.adapter.out.persistence.r2dbc.inbox;
 
 import com.rubenmarin.eventhub.event.application.model.InboxEvent;
 import com.rubenmarin.eventhub.event.application.port.out.InboxRepository;
-import com.rubenmarin.eventhub.event.domain.model.*;
 import org.springframework.stereotype.Repository;
 import reactor.core.publisher.Mono;
 import java.util.UUID;

@@ -28,6 +28,8 @@ public class KafkaIntegrationEventAdapter implements IntegrationEventPublisherPo
 
         if (event instanceof BookingCreatedIntegrationEvent bookingCreated) {
 
+
+
             String json = objectMapper.writeValueAsString(bookingCreated);
 
             CompletableFuture<SendResult<String, String>> result =

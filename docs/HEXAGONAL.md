@@ -1,5 +1,7 @@
 # Hexagonal Architecture — EventHub
 
+> Event Service now has a Kafka DLT inbound recovery consumer and a recovery service using PostgreSQL and Kafka adapters. The domain/application dependency rules are independent of messaging recovery; see [KAFKA.md](KAFKA.md) for the recovery mechanism and its limits.
+
 Application ports, use cases, inbound/outbound adapters, dependency inversion, Spring wiring and HTTP boundaries. Domain modeling belongs in [DDD.md](DDD.md); transactions and distributed consistency belong in [PERSISTENCE_CONSISTENCY.md](PERSISTENCE_CONSISTENCY.md).
 
 ---
@@ -85,7 +87,7 @@ public interface EventRepository {
     Mono<Event> create(Event event);
     Mono<Event> update(Event event);
     Mono<Event> findById(EventId id);
-    Flux<Event> findAll();
+    Flux<Event> findAll;
 }
 ```
 
@@ -95,7 +97,7 @@ The cardinality is explicit:
 create(...)    → 0..1 result → Mono<Event>
 update(...)    → 0..1 result → Mono<Event>
 findById(...)  → 0..1 result → Mono<Event>
-findAll()      → 0..N results → Flux<Event>
+findAll      → 0..N results → Flux<Event>
 ```
 
 A missing Event is represented by an empty `Mono`, rather than by
@@ -109,11 +111,11 @@ execution. It remains available as a plain Java test adapter, while
 production Event persistence now uses the R2DBC adapter described later
 in this document.
 
-`create()` and `update()` use `Mono.fromSupplier(...)` because the
+`create` and `update` use `Mono.fromSupplier(...)` because the
 subscription lazily produces a value while performing the in-memory
 save.
 
-`findById()` and `findAll()` use deferred publisher creation so the
+`findById` and `findAll` use deferred publisher creation so the
 current contents of the map are inspected at subscription time.
 
 The distinction studied is:
@@ -136,7 +138,7 @@ than creating one interface per simple query:
 ``` java
 public interface EventQueryUseCase {
     Mono<Event> findById(EventId id);
-    Flux<Event> findAll();
+    Flux<Event> findAll;
 }
 ```
 
@@ -150,7 +152,7 @@ EventQueryService
         ↓
 EventRepository
    ├── findById(...)
-   └── findAll()
+   └── findAll
 ```
 
 This is an organization of application responsibilities; CQRS has not
@@ -230,8 +232,8 @@ HTTP JSON
 
 This prevents the HTTP contract from becoming the domain model.
 
-The controller uses `map()` for the synchronous transformation from
-`Event` to `EventResponse`; it does not call `subscribe()` manually.
+The controller uses `map` for the synchronous transformation from
+`Event` to `EventResponse`; it does not call `subscribe` manually.
 WebFlux performs the subscription at the HTTP boundary.
 
 ---
@@ -332,7 +334,7 @@ SPRING / HTTP INPUT ADAPTER
 
 The fake repository was updated to preserve the semantics of the
 reactive port: lazy save/query execution, empty results when
-appropriate, and ID-aware `findById()` behaviour.
+appropriate, and ID-aware `findById` behaviour.
 
 `WebTestClient` tests currently verify the successful create/list/find
 flows. The find-by-id test creates an Event through `POST /events`,
@@ -383,7 +385,7 @@ com.rubenmarin.eventhub.event
 ## HTTP Error Handling
 
 A repository lookup that does not find an Event is represented by
-`Mono.empty()`. The repository does not decide HTTP semantics.
+`Mono.empty`. The repository does not decide HTTP semantics.
 
 `EventQueryService` translates that absence into an application-specific
 error using the Reactor operator already studied:
@@ -391,7 +393,7 @@ error using the Reactor operator already studied:
 ``` text
 EventRepository.findById(...)
         ↓
-Mono.empty()
+Mono.empty
         ↓
 switchIfEmpty(Mono.error(...))
         ↓
@@ -461,7 +463,7 @@ instantiate it directly.
 The list test was changed so it no longer assumes:
 
 ``` text
-events.size() == 1
+events.size == 1
 ```
 
 or that the Event created by the current test is the first element.
@@ -478,7 +480,7 @@ GET /events
     ↓
 filter(event.id == X.id)
     ↓
-findFirst().orElseThrow()
+findFirst.orElseThrow
     ↓
 verify Event X
 ```
@@ -557,7 +559,7 @@ The lifecycle currently studied is intentionally small:
 ``` text
 CONFIRMED
     │
-    │ cancel()
+    │ cancel
     ▼
 CANCELLED
 ```
@@ -625,7 +627,7 @@ create/save Booking
 Mono<Booking>
 ```
 
-`flatMap()` is required because reserving Event places returns a
+`flatMap` is required because reserving Event places returns a
 Publisher and the next operation, saving the Booking, also returns a
 Publisher.
 
@@ -656,15 +658,15 @@ PublishEventService
         ↓
 EventRepository
         ↓
-Event.publish()
+Event.publish
         ↓
 EventRepository.update(...)
 ```
 
 `PublishEventService` loads the Event, translates an empty repository
 result into `EventNotFoundException`, invokes the synchronous domain
-behaviour `event.publish()`, and composes the reactive save operation
-with `flatMap()`.
+behaviour `event.publish`, and composes the reactive save operation
+with `flatMap`.
 
 The service is tested for both the successful `DRAFT → PUBLISHED`
 transition and the missing-Event error path.
@@ -719,7 +721,7 @@ POST /events/{id}/publish
 
 The Event identifier belongs in the URL because it identifies the
 resource on which the publish operation is executed. No request body is
-currently required because `publish()` needs no additional input.
+currently required because `publish` needs no additional input.
 
 The controller delegates to `PublishEventUseCase` rather than accessing
 `EventRepository` directly.
@@ -789,7 +791,7 @@ JpaBookingRepositoryAdapter                     [infrastructure, outbound]
 SpringDataBookingRepository / Hibernate / PostgreSQL
 ```
 
-**Historical wiring (superseded by [synchronous compensation](PERSISTENCE_CONSISTENCY.md#synchronous-event-capacity-reservation-and-booking-compensation-16-october-2026)):** the following paragraph describes the initial transactional-only composition, before the capacity-compensation decorator was added.
+**Historical wiring (superseded by [synchronous compensation](PERSISTENCE_CONSISTENCY.md)):** the following paragraph describes the initial transactional-only composition, before the capacity-compensation decorator was added.
 
 The input port has `getBooking`, `createBooking`, `confirmBooking`, `cancelBooking`. The output port provides `findById`, `save` and `existsActiveBooking`. `BookingService` takes a `BookingRepository` in its constructor. `BookingConfiguration` registers one `BookingUseCase` bean: a `TransactionalBookingUseCase` wrapping the plain-Java service. The production repository is the JPA adapter; the previous in-memory bean registration was removed. The controller delegates via `BookingUseCase`; `BookingMapper` converts the returned domain entity into the generated response DTO. Dependency direction stays toward domain/application; Spring and HTTP are confined to adapters.
 
@@ -828,7 +830,7 @@ The new service's OpenAPI-generated `BookingApi`, `CreateBookingRequest`, `Booki
 ## Tested boundaries
 
 - `@WebMvcTest(BookingController.class)` + `MockMvc` + `@MockitoBean` isolate the HTTP controller, request deserialization, mapper and advice from the real service/persistence. Tested response families: 200, 201, 400, 404 and 409.
-- Mockito unit test of `BookingService` checks active duplicate rejection and `save()` never invoked.
+- Mockito unit test of `BookingService` checks active duplicate rejection and `save` never invoked.
 - Real `InMemoryBookingRepository` tests run with pure JUnit and `@BeforeEach`, covering save/find, missing ID, replacing state and matching/nonmatching booking checks. Active and cancelled cases were subsequently reported green.
 
 ---
@@ -837,7 +839,7 @@ The new service's OpenAPI-generated `BookingApi`, `CreateBookingRequest`, `Booki
 
 The new `booking-service` deliberately uses synchronous Spring MVC and JPA, to practice transactional persistence, concurrency and a classic Java stack alongside the **separate** EventHub WebFlux/R2DBC implementation. Reactive programming is not an intrinsic DDD or hexagonal requirement. It is a technology choice at the port/adapter boundary; the domain remains framework-independent in either approach.
 
-**Still not implemented:** deterministic forcing of both concurrent existence checks to return false, Kafka, durable/idempotent distributed coordination and full deployment. A synchronous best-effort capacity reservation/compensation flow has since been implemented (see [synchronous compensation](PERSISTENCE_CONSISTENCY.md#synchronous-event-capacity-reservation-and-booking-compensation-16-october-2026)). Database-level uniqueness and a two-thread concurrent-start test have been implemented and verified.
+**Still not implemented:** deterministic forcing of both concurrent existence checks to return false, Kafka, durable/idempotent distributed coordination and full deployment. A synchronous best-effort capacity reservation/compensation flow has since been implemented (see [synchronous compensation](PERSISTENCE_CONSISTENCY.md)). Database-level uniqueness and a two-thread concurrent-start test have been implemented and verified.
 
 ---
 
@@ -859,7 +861,7 @@ The adapter translates transport-specific failures to application-specific excep
 
 Infrastructure `EventClientConfiguration` provides the `RestClient` with a configurable Event Service base URL, 2-second connection timeout and 3-second read timeout. `BookingConfiguration` wires the port into `BookingService`, retained behind `TransactionalBookingUseCase`; currently a blocking remote call occurs while the transactional decorator is active. That transaction does **not** extend into Event Service.
 
-Tests: `RestEventAvailabilityAdapterTest` uses `MockRestServiceServer` for business-state responses, JSON with extra fields, remote 404, remote 500 and simulated I/O exceptions. `BookingServiceTest` tests rule decisions with mocked ports. `BookingHttpIT`, `TransactionalBookingUseCaseIT` and `ConcurrentBookingIT` use a Spring `@MockitoBean` for the external port while retaining real Spring/JPA/PostgreSQL integration where appropriate. Maven Failsafe executes `*IT` during `mvn verify` / `mvnw.cmd verify`. A real manual Event Service GET was validated. Actual timeout expiry, service-to-service tracing, and atomic distributed capacity updates have not been implemented/tested. Retry and Circuit Breaker are documented in §[Retry outbound adapter](#booking-service-retry-as-an-outbound-adapter-15-october-2026)–58.
+Tests: `RestEventAvailabilityAdapterTest` uses `MockRestServiceServer` for business-state responses, JSON with extra fields, remote 404, remote 500 and simulated I/O exceptions. `BookingServiceTest` tests rule decisions with mocked ports. `BookingHttpIT`, `TransactionalBookingUseCaseIT` and `ConcurrentBookingIT` use a Spring `@MockitoBean` for the external port while retaining real Spring/JPA/PostgreSQL integration where appropriate. Maven Failsafe executes `*IT` during `mvn verify` / `mvnw.cmd verify`. A real manual Event Service GET was validated. Actual timeout expiry, service-to-service tracing, and atomic distributed capacity updates have not been implemented/tested. Retry and Circuit Breaker are documented in [Retry outbound adapter](RESILIENCE.md).
 
 ---
 
@@ -867,7 +869,7 @@ Tests: `RestEventAvailabilityAdapterTest` uses `MockRestServiceServer` for busin
 
 The application service depends on the `EventAvailabilityPort` abstraction. Infrastructure wraps `RestEventAvailabilityAdapter` with `RetryableEventAvailabilityAdapter`, so transient failure handling is implemented **outside** the domain and application layers. The infrastructure composition root (`EventClientConfiguration`) supplies the implementations; no Spring/Resilience4j annotations are required in the domain.
 
-The Retry policy is implemented and unit-tested. **Configuration values, error classifications, decorator code and test scenarios are documented in [`RESILIENCE.md`](RESILIENCE.md#retry--resilience4j).**
+The Retry policy is implemented and unit-tested. **Configuration values, error classifications, decorator code and test scenarios are documented in [`RESILIENCE.md`](RESILIENCE.md).**
 
 ---
 
@@ -886,4 +888,4 @@ BookingService (application)
 
 The **outer Bulkhead** limits concurrent logical operations to five, including their retries. The Circuit Breaker inside it evaluates the final outcome of Retry. OPEN rejects before further Retry/REST calls; infrastructure maps `CallNotPermittedException` and `BulkheadFullException` to the application exception `EventServiceUnavailableException`, keeping HTTP and Resilience4j out of the application layer. This protects availability, **not** atomic distributed Event-capacity reservation.
 
-The decorators, their detailed failure policy, semaphore concurrency test, CLOSED/OPEN/HALF_OPEN transition tests and still-unverified behavior are explained in **[`RESILIENCE.md`](RESILIENCE.md#circuit-breaker--resilience4j)**. The matching work is tracked in [`ROADMAP.md`](ROADMAP.md#23-microservices-evolution).
+The decorators, their detailed failure policy, semaphore concurrency test, CLOSED/OPEN/HALF_OPEN transition tests and still-unverified behavior are explained in **[`RESILIENCE.md`](RESILIENCE.md)**. The matching work is tracked in [`ROADMAP.md`](ROADMAP.md).

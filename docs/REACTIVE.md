@@ -1,6 +1,8 @@
 # Reactive Programming — EventHub
 
-This document records **only concepts studied and behaviour implemented or tested** in EventHub. It is organized by topic rather than by dated progress snapshots. Kafka producer publication is now implemented in the **independent imperative Booking Service**, not in the historical reactive Booking module. See [KAFKA.md](KAFKA.md).
+> **Reactive Kafka recovery:** Event Service DLT recovery composes R2DBC repository operations and `Mono.fromFuture(kafkaTemplate.send(ProducerRecord))` using `concatMap`, `flatMap` and `onErrorResume`, and waits for the broker ACK before marking `REPUBLISHED`. Dedicated integration tests are green, with manual invocation and known post-ACK failure ambiguity. The Booking Service producer remains imperative. See [KAFKA.md](KAFKA.md).
+
+This document records **only concepts studied and behaviour implemented or tested** in EventHub. It is organized by technical topic. Kafka producer publication is now implemented in the **independent imperative Booking Service**, not in the historical reactive Booking module. See [KAFKA.md](KAFKA.md).
 
 # Reactor fundamentals
 
@@ -47,28 +49,28 @@ Mono.defer(...)        → lazy Publisher creation
 
 ## 5. Operators
 
-`map()` transforms values, `filter()` filters them, `flatMap()` flattens
+`map` transforms values, `filter` filters them, `flatMap` flattens
 nested publishers and can process asynchronous publishers concurrently,
-while `concatMap()` processes them sequentially and preserves order.
+while `concatMap` processes them sequentially and preserves order.
 Operator order matters.
 
-### `switchIfEmpty()`
+### `switchIfEmpty`
 
-`switchIfEmpty()` switches to a fallback Publisher when the original
+`switchIfEmpty` switches to a fallback Publisher when the original
 Publisher completes without emitting a value. If the original Publisher
 emits a value, the fallback Publisher is not used.
 
 ``` text
-Mono.empty()
+Mono.empty
     ↓
 switchIfEmpty(fallback)
     ↓
 fallback value
 ```
 
-### `zip()`
+### `zip`
 
-`zip()` combines values emitted by multiple Publishers. With two `Mono`
+`zip` combines values emitted by multiple Publishers. With two `Mono`
 instances, both must emit a value before a `Tuple2` can be created.
 
 ``` text
@@ -79,12 +81,12 @@ Mono<T2> ──┘
 
 If one of the zipped Publishers completes empty, the zipped result also
 completes without emitting a value. A fallback can be supplied before
-the `zip()` when that matches the required semantics:
+the `zip` when that matches the required semantics:
 
 ``` java
 Mono<Integer> availablePlaces =
-        Mono.<Integer>empty()
-                .switchIfEmpty(Mono.just(0));
+        Mono.<Integer>empty
+.switchIfEmpty(Mono.just(0));
 ```
 
 ## 6. Reactive error handling
@@ -97,18 +99,18 @@ retry          → resubscribe upstream
 timeout        → TimeoutException when work takes too long
 ```
 
-`timeout().retry()` lets retry see the timeout; `retry().timeout()`
+`timeout.retry` lets retry see the timeout; `retry.timeout`
 places the timeout downstream of retry.
 
 ## 7. StepVerifier
 
 `StepVerifier` subscribes and verifies reactive signals without relying
-on `Thread.sleep()`.
+on `Thread.sleep`.
 
 ``` java
 StepVerifier.create(result)
-        .expectNext("SUCCESS")
-        .verifyComplete();
+.expectNext("SUCCESS")
+.verifyComplete;
 ```
 
 ## 8. Cold and hot publishers
@@ -122,7 +124,7 @@ subscribers share an ongoing stream
 late subscribers may miss previous emissions
 ```
 
-We used `publish()` to create a `ConnectableFlux` and `connect()` to
+We used `publish` to create a `ConnectableFlux` and `connect` to
 start its shared upstream subscription.
 
 ## 9. Threading
@@ -134,8 +136,8 @@ by default.
 Reactive != automatically multithreaded
 ```
 
-`subscribeOn()` controls where subscription/upstream work is scheduled.
-`publishOn()` changes the execution context for downstream operators
+`subscribeOn` controls where subscription/upstream work is scheduled.
+`publishOn` changes the execution context for downstream operators
 after that point.
 
 ``` text
@@ -146,21 +148,21 @@ publishOn   → from this point, downstream continues on another Scheduler
 ## 10. Reactor schedulers
 
 ``` text
-Schedulers.parallel()
+Schedulers.parallel
     → CPU-oriented work
     → avoid blocking
 
-Schedulers.boundedElastic()
+Schedulers.boundedElastic
     → blocking / legacy work
     → isolate blocking operations
 ```
 
 ``` java
-Mono.fromCallable(() -> oldBlockingLibrary.call())
-        .subscribeOn(Schedulers.boundedElastic());
+Mono.fromCallable( -> oldBlockingLibrary.call)
+.subscribeOn(Schedulers.boundedElastic);
 ```
 
-`boundedElastic()` does not make blocking code non-blocking; it isolates
+`boundedElastic` does not make blocking code non-blocking; it isolates
 that blocking work.
 
 ## 11. Current learning tests
@@ -199,8 +201,8 @@ Event Loop + blocking operation = bad combination
 When blocking code cannot be avoided:
 
 ``` java
-Mono.fromCallable(() -> blockingOperation())
-        .subscribeOn(Schedulers.boundedElastic());
+Mono.fromCallable( -> blockingOperation)
+.subscribeOn(Schedulers.boundedElastic);
 ```
 
 The persistence distinction discussed conceptually was:
@@ -231,7 +233,7 @@ request → event-loop processing → non-blocking I/O → continuation → resp
 Wrapping blocking JDBC work in `Mono.just(...)` does not make it
 non-blocking because the JDBC call is evaluated before the `Mono` is
 created. When unavoidable blocking work must be isolated, the studied
-pattern is `fromCallable(...).subscribeOn(boundedElastic())`; the target
+pattern is `fromCallable(...).subscribeOn(boundedElastic)`; the target
 persistence stack for EventHub remains R2DBC.
 
 ## 15. Reactive application boundary
@@ -241,12 +243,12 @@ The EventHub application ports now expose reactive results:
 ``` text
 CreateEventUseCase.createEvent(...) → Mono<Event>
 EventQueryUseCase.findById(...)      → Mono<Event>
-EventQueryUseCase.findAll()          → Flux<Event>
+EventQueryUseCase.findAll          → Flux<Event>
 
 EventRepository.create(...)          → Mono<Event>
 EventRepository.update(...)          → Mono<Event>
 EventRepository.findById(...)        → Mono<Event>
-EventRepository.findAll()            → Flux<Event>
+EventRepository.findAll            → Flux<Event>
 ```
 
 The domain remains synchronous. `Event.create(...)` and domain behaviour
@@ -290,8 +292,8 @@ Mono<EventResponse>
 JSON
 ```
 
-`map()` is used because `Event → EventResponse` is a synchronous
-transformation. The controller does not call `subscribe()`; WebFlux
+`map` is used because `Event → EventResponse` is a synchronous
+transformation. The controller does not call `subscribe`; WebFlux
 subscribes at the HTTP boundary.
 
 ## 17. HTTP media types
@@ -329,7 +331,7 @@ from the POST response and uses it in the following GET request.
 ## 19. Empty publishers and HTTP not-found semantics
 
 The unsuccessful query path has now been studied.
-`EventRepository.findById(...)` represents absence with `Mono.empty()`.
+`EventRepository.findById(...)` represents absence with `Mono.empty`.
 An empty publisher is a completion signal, not an error signal, so it
 does not automatically express HTTP `404 Not Found`.
 
@@ -337,7 +339,7 @@ The application service converts the empty result into an application
 error:
 
 ``` text
-Mono.empty()
+Mono.empty
     ↓
 switchIfEmpty(Mono.error(new EventNotFoundException(...)))
     ↓
@@ -372,7 +374,7 @@ globally translating the base exception to HTTP 400 would be too broad.
 ## 21. Reactive coordination between Event and Booking
 
 The Booking application flow has now provided a practical use of
-`flatMap()` across application use cases.
+`flatMap` across application use cases.
 
 ``` text
 reserveEventPlaces(...)
@@ -424,7 +426,7 @@ Mono<Booking>
 201 Created
 ```
 
-The controller uses `map()` because `Booking → BookingResponse` is a
+The controller uses `map` because `Booking → BookingResponse` is a
 synchronous transformation.
 
 A focused controller test was introduced with Mockito and
@@ -475,14 +477,14 @@ access model that fits the reactive pipeline directly.
 `SpringDataEventRepository` extends
 `ReactiveCrudRepository<EventEntity, UUID>`, so its operations already
 return `Mono` and `Flux`. The adapter maps those emitted persistence
-entities synchronously with `map()`:
+entities synchronously with `map`:
 
 ``` text
 Mono<EventEntity> → map(toDomain) → Mono<Event>
 Flux<EventEntity> → map(toDomain) → Flux<Event>
 ```
 
-No manual `subscribe()` is used in the repository adapter.
+No manual `subscribe` is used in the repository adapter.
 
 ## 24. Reactive Create and Update
 
@@ -580,7 +582,7 @@ persistence-agnostic `ConcurrentUpdateException`, while the R2DBC
 adapter owns translation from the Spring Data optimistic-locking
 exception.
 
-## 27. Sequencing verification with `then()` and `count()`
+## 27. Sequencing verification with `then` and `count`
 
 The final concurrency test introduced `then(...)` to sequence a
 verification Publisher after the concurrent booking attempt.
@@ -599,7 +601,7 @@ query persisted Bookings and Event
 successfully, discards any value emitted by that upstream Publisher, and
 continues with the Publisher supplied to `then`.
 
-The Booking query returns `Flux<Booking>`. Calling `count()` produces a
+The Booking query returns `Flux<Booking>`. Calling `count` produces a
 `Mono<Long>`, which makes the number of persisted Bookings directly
 testable.
 
@@ -668,13 +670,13 @@ reactive pipeline:
 ``` text
 Mono<Booking>
     ↓ flatMap
-Booking.domainEvents()
+Booking.domainEvents
     ↓
 Flux.fromIterable(...)
     ↓ flatMap
 publishDomainEvent(...) → Mono<Void>
     ↓
-then() → Mono<Void>
+then → Mono<Void>
     ↓
 then(Mono.just(bookingCreated))
     ↓
@@ -682,13 +684,13 @@ Mono<Booking>
 ```
 
 `Flux.fromIterable(...)` creates a cold `Flux` from the Aggregate's
-recorded events. `then()` represents completion of all upstream
+recorded events. `then` represents completion of all upstream
 publication work as a `Mono<Void>`. `then(Mono.just(bookingCreated))`
 then re-emits the already created Booking so the use case still returns
 `Mono<Booking>`.
 
 This also reinforced that `Mono<Void>` is a Publisher, not `null`.
-`Mono.empty()` represents successful completion without an emitted
+`Mono.empty` represents successful completion without an emitted
 value. The complete test suite is green with Domain Event publication
 included.
 
@@ -710,7 +712,7 @@ Mono<Void>
 The dispatcher and handlers preserve the existing reactive completion
 contract: `Mono<Void>` represents successful completion without an
 emitted value. The focused dispatcher test uses
-`StepVerifier.verifyComplete()` and Mockito to verify that the matching
+`StepVerifier.verifyComplete` and Mockito to verify that the matching
 handler is invoked.
 
 `BookingCreatedHandler` then maps the Domain Event to a
@@ -746,16 +748,15 @@ There is **no Reactor/WebFlux/R2DBC flow in the new service**. Its separate JPA 
 The portfolio deliberately combines **reactive Event development with imperative Booking development** to learn and demonstrate both technologies, even though introducing heterogeneous stacks would not necessarily be an optimal production decision. The old reactive Booking examples are historical study material, **not a second intended live Booking service**. Both approaches can retain DDD/hexagonal boundaries. Kafka remains unimplemented for the new service, and no cross-service reactive communication has been demonstrated yet. The synchronous Booking service does not gain reactive behavior merely by communicating with the reactive Event side; integration strategy is the next topic.
 
 
-## Inter-service HTTP boundary — verified
-
+## Inter-service HTTP boundary
 The new independent Booking Service uses synchronous `RestClient` (Spring MVC/JPA), configured to call the original Event Service's `GET /events/{id}` WebFlux endpoint. This verifies **interoperability over HTTP**, not reactive execution in Booking Service. Availability responses and several errors have been exercised with a mocked HTTP server; a real Event Service GET was also checked manually. Booking's client uses 2-second connection and 3-second read timeouts, but time-based expiry has not yet been independently tested. Imperative Retry (Resilience4j decorator, 3 attempts for `EventServiceUnavailableException`) and a Circuit Breaker wrapped by an outer SemaphoreBulkhead are now implemented and tested; distributed capacity reservation has since been implemented as a synchronous best-effort reservation/compensation workflow (see the subsequent section); the previous "no cross-service communication demonstrated" wording above is now superseded by this section.
 
 
 ## Imperative resilience boundary — Booking Service (not Reactor Retry)
 
-The original reactive Event module uses Reactor operators such as `retry()` and `timeout()`, which act on Publisher subscriptions/signals. The independent Booking Service is **imperative**: Spring MVC/JPA and synchronous `RestClient`, protected by Resilience4j **Retry**, **Circuit Breaker** and **Bulkhead** decorators around `EventAvailabilityPort`. This does not turn Booking into a reactive service.
+The original reactive Event module uses Reactor operators such as `retry` and `timeout`, which act on Publisher subscriptions/signals. The independent Booking Service is **imperative**: Spring MVC/JPA and synchronous `RestClient`, protected by Resilience4j **Retry**, **Circuit Breaker** and **Bulkhead** decorators around `EventAvailabilityPort`. This does not turn Booking into a reactive service.
 
-Timeout configuration, the three-attempt Retry policy, Circuit Breaker behavior, Bulkhead concurrency limits, failure classification, and the verified tests belong in **[`RESILIENCE.md`](RESILIENCE.md)**. The application/hexagonal design rationale remains in [`HEXAGONAL.md`](HEXAGONAL.md#booking-service-retry-as-an-outbound-adapter-15-october-2026). Reactor examples above remain unchanged and continue to document the original learning path.
+Timeout configuration, the three-attempt Retry policy, Circuit Breaker behavior, Bulkhead concurrency limits, failure classification, and the verified tests belong in **[`RESILIENCE.md`](RESILIENCE.md)**. The application/hexagonal design rationale remains in [`HEXAGONAL.md`](HEXAGONAL.md). Reactor examples above remain unchanged and continue to document the original learning path.
 
 
 ## Reactive Event capacity API and imperative Booking compensation
@@ -764,4 +765,4 @@ Event Service now exposes WebFlux `POST /events/{id}/reserve/{places}/places` an
 
 The **independent Booking Service remains fully imperative**: its `CompensatingBookingUseCase` invokes synchronous `EventCapacityPort.reservePlaces(eventId, 1)` via `RestClient` before the JPA transactional booking delegate, then calls `releasePlaces` if booking creation fails. A WebFlux HTTP endpoint **does not make its synchronous HTTP caller reactive**. The earlier availability GET resilience chain still exists separately, but the new mutating POST calls are **not automatically retried** because their outcome can be ambiguous after a timeout.
 
-The HTTP adapter's eight focused tests and the three compensation unit tests passed. A **real two-microservice end-to-end booking/compensation test** and robust idempotent recovery are pending. Architecture and known limits: [`PERSISTENCE_CONSISTENCY.md`](PERSISTENCE_CONSISTENCY.md#synchronous-event-capacity-reservation-and-booking-compensation-16-october-2026).
+The HTTP adapter's eight focused tests and the three compensation unit tests passed. A **real two-microservice end-to-end booking/compensation test** and robust idempotent recovery are pending. Architecture and known limits: [`PERSISTENCE_CONSISTENCY.md`](PERSISTENCE_CONSISTENCY.md).

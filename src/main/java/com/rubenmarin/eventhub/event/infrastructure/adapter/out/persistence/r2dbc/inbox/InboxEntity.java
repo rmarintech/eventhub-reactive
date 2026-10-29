@@ -1,4 +1,4 @@
-package com.rubenmarin.eventhub.event.infrastructure.adapter.out.persistence.r2dbc;
+package com.rubenmarin.eventhub.event.infrastructure.adapter.out.persistence.r2dbc.inbox;
 
 import org.springframework.data.annotation.Id;
 import org.springframework.data.annotation.Transient;

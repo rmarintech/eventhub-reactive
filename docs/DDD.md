@@ -1,5 +1,7 @@
 # Domain-Driven Design — EventHub
 
+Kafka DLT recovery is an infrastructure concern, not a domain invariant. See [KAFKA.md](KAFKA.md) for its design and verification.
+
 Business modeling, aggregates, value objects, invariants and domain events in the original reactive EventHub and the independent Booking Service. Architecture and persistence are documented separately in [HEXAGONAL.md](HEXAGONAL.md) and [PERSISTENCE_CONSISTENCY.md](PERSISTENCE_CONSISTENCY.md).
 
 ---
@@ -64,10 +66,10 @@ Event
 It also has business behaviour:
 
 ``` text
-publish()
-cancel()
-reservePlaces()
-releasePlaces()
+publish
+cancel
+reservePlaces
+releasePlaces
 ```
 
 This means the domain object contains both state and behaviour.
@@ -119,8 +121,8 @@ public record EventId(UUID value) {
         }
     }
 
-    public static EventId generate() {
-        return new EventId(UUID.randomUUID());
+    public static EventId generate {
+        return new EventId(UUID.randomUUID);
     }
 }
 ```
@@ -181,13 +183,13 @@ public record EventName(String value) {
     private static final int MAX_LENGTH = 100;
 
     public EventName {
-        if (value == null || value.isBlank()) {
+        if (value == null || value.isBlank) {
             throw new IllegalArgumentException(
                     "Event name cannot be blank"
             );
         }
 
-        if (value.length() > MAX_LENGTH) {
+        if (value.length > MAX_LENGTH) {
             throw new IllegalArgumentException(
                     "Event name cannot exceed "
                     + MAX_LENGTH
@@ -377,10 +379,10 @@ Instead of reading the state, calculating a new value externally and
 rebuilding the object:
 
 ``` java
-if (capacity.available() >= places) {
+if (capacity.available >= places) {
     capacity = new Capacity(
-            capacity.total(),
-            capacity.available() - places
+            capacity.total,
+            capacity.available - places
     );
 }
 ```
@@ -452,7 +454,7 @@ public record Money(
             );
         }
 
-        if (amount.signum() < 0) {
+        if (amount.signum < 0) {
             throw new IllegalArgumentException(
                     "Amount cannot be negative"
             );
@@ -519,12 +521,12 @@ public enum EventStatus {
 The current lifecycle is:
 
 ``` text
-                  publish()
+                  publish
                      │
                      ▼
 DRAFT ─────────────────────────► PUBLISHED
   │                                  │
-  │ cancel()                         │ cancel()
+  │ cancel                         │ cancel
   │                                  │
   ▼                                  ▼
 CANCELLED                        CANCELLED
@@ -535,8 +537,8 @@ The status is not changed through an unrestricted setter.
 Instead, Event exposes domain operations such as:
 
 ``` java
-event.publish();
-event.cancel();
+event.publish;
+event.cancel;
 ```
 
 ---
@@ -646,7 +648,7 @@ event.setStatus(EventStatus.PUBLISHED);
 we use:
 
 ``` java
-event.publish();
+event.publish;
 ```
 
 Instead of calculating capacity outside the domain:
@@ -716,13 +718,13 @@ For example:
 
 ``` java
 @Test
-void shouldReservePlaces() {
+void shouldReservePlaces {
 
     Capacity capacity = Capacity.of(20);
 
     Capacity updated = capacity.reserve(3);
 
-    assertEquals(17, updated.available());
+    assertEquals(17, updated.available);
 }
 ```
 
@@ -845,7 +847,7 @@ The lifecycle currently studied is intentionally small:
 ``` text
 CONFIRMED
     │
-    │ cancel()
+    │ cancel
     ▼
 CANCELLED
 ```
@@ -917,11 +919,11 @@ return Booking
 Infrastructure provides `InMemoryDomainEventPublisher`, which now
 delegates publication to `DomainEventDispatcher`. The dispatcher
 receives the available `DomainEventHandler<?>` beans and routes each
-Domain Event to the handler whose `eventType()` matches the concrete
+Domain Event to the handler whose `eventType` matches the concrete
 event class.
 
 The application test configures a Mockito publisher returning
-`Mono.empty()` and verifies that `publishDomainEvent(...)` is called
+`Mono.empty` and verifies that `publishDomainEvent(...)` is called
 with `BookingCreated`. The complete test suite is green.
 
 Kafka publication has not yet been implemented.
@@ -957,7 +959,7 @@ internal Booking fact to the outward integration contract.
 
 Application reactions to Domain Events are represented by
 `DomainEventHandler<T extends DomainEvent>`. A handler exposes both
-`handle(T event)` and `eventType()`.
+`handle(T event)` and `eventType`.
 
 `BookingCreatedHandler` handles `BookingCreated`, maps it to
 `BookingCreatedIntegrationEvent`, and delegates publication through
@@ -1009,7 +1011,7 @@ Booking (domain entity)
 └── BookingStatus = PENDING | CONFIRMED | CANCELLED
 ```
 
-`new Booking(eventId, userId)` generates a Booking ID and creates a `PENDING` booking. `booking.confirm()` and `booking.cancel()` express lifecycle transitions through domain behavior instead of an arbitrary status setter. The repository tests verify that `confirm()` returns a different instance retaining the same ID and leaves the original booking in `PENDING`. The exact set of invalid transitions must remain grounded in the domain code/tests when expanded.
+`new Booking(eventId, userId)` generates a Booking ID and creates a `PENDING` booking. `booking.confirm` and `booking.cancel` express lifecycle transitions through domain behavior instead of an arbitrary status setter. The repository tests verify that `confirm` returns a different instance retaining the same ID and leaves the original booking in `PENDING`. The exact set of invalid transitions must remain grounded in the domain code/tests when expanded.
 
 `BookingId`, `EventId` and `UserId` are value-object wrappers over UUIDs; equality by value makes the controller's newly constructed identifiers match Mockito test arguments when implemented as Java records.
 

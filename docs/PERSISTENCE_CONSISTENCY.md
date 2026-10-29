@@ -1,5 +1,7 @@
 # Persistence and Consistency — EventHub
 
+> **Current messaging persistence:** Event Service also persists Kafka DLT records in `recovery_events`, using R2DBC, an optimistic `@Version` claim and `PENDING → PROCESSING → REPUBLISHED` states. Toxiproxy/PostgreSQL retry and replay service tests have passed. This does **not** make the Kafka send and database status update atomic; a post-ACK crash can leave `PROCESSING`. See [KAFKA.md](KAFKA.md).
+
 R2DBC, JPA, optimistic locking, local transactions, duplicate protection and synchronous compensation. For full HTTP failure scenarios see [MICROSERVICES_COMMUNICATION.md](MICROSERVICES_COMMUNICATION.md); for resilience decorators see [RESILIENCE.md](RESILIENCE.md).
 
 ---
@@ -50,7 +52,7 @@ Aggregate.
 
 ## Create vs Update Persistence Intent
 
-Because `Event.create()` generates its UUID before persistence, a
+Because `Event.create` generates its UUID before persistence, a
 non-null `@Id` alone cannot tell Spring Data whether the row is new.
 This was observed in practice: Spring Data treated a new entity as an
 update, the HTTP request returned successfully, but no row was inserted.
@@ -68,8 +70,8 @@ update(Event) → existing Event → isNew = false → UPDATE
 ```
 
 This keeps the persistence concern out of the domain.
-`CreateEventService` calls `create()`, while publication and capacity
-reservation call `update()`.
+`CreateEventService` calls `create`, while publication and capacity
+reservation call `update`.
 
 The in-memory adapter implements the same port, although both operations
 use `Map.put(...)` internally because a `HashMap` does not need to
@@ -244,7 +246,7 @@ entities back to domain `Booking` objects.
 The test composes the concurrent attempt with the later verification
 using Reactor. `then(...)` waits for the first Publisher to terminate
 successfully while discarding its emitted value, then subscribes to the
-Publisher that reads the final persisted state. `Flux.count()` converts
+Publisher that reads the final persisted state. `Flux.count` converts
 the Booking query into a `Mono<Long>` so the final Booking count can be
 asserted together with the persisted Event.
 
@@ -288,13 +290,13 @@ Booking. Both mechanisms are therefore retained.
 ---
 ## JPA/PostgreSQL persistence and Flyway
 
-The independent Booking service persists to PostgreSQL 17 through Spring Data JPA / Hibernate. `BookingJpaEntity` stores UUID fields (`booking_id`, `event_id`, `user_id`) and a string `status`; `BookingJpaEntity.fromDomain()` and `toDomain()` convert between persistence and the immutable domain. `Booking.rehydrate(...)` restores a booking with its existing ID and state; domain creation still starts in `PENDING`.
+The independent Booking service persists to PostgreSQL 17 through Spring Data JPA / Hibernate. `BookingJpaEntity` stores UUID fields (`booking_id`, `event_id`, `user_id`) and a string `status`; `BookingJpaEntity.fromDomain` and `toDomain` convert between persistence and the immutable domain. `Booking.rehydrate(...)` restores a booking with its existing ID and state; domain creation still starts in `PENDING`.
 
 `SpringDataBookingRepository extends JpaRepository<BookingJpaEntity, UUID>`. The `JpaBookingRepositoryAdapter` implements `BookingRepository`, including the Spring Data derived query `existsByEventIdAndUserIdAndStatusNot(..., CANCELLED)`. No JPA annotations leak into domain or application.
 
 Flyway migration `V1__create_bookings_table.sql` creates the database schema. `spring.jpa.hibernate.ddl-auto=none` prevents Hibernate from owning schema creation. PostgreSQL is also available locally with Docker Compose, but the integration tests use a separate Testcontainers PostgreSQL 17 database.
 
-Verified tests cover round-trip entity/domain mapping, insert and lookup, active lookup, exclusion of cancelled bookings, and updating an existing booking from `PENDING` to `CONFIRMED`. Integration tests used `EntityManager.flush()` followed by `clear()` so reads hit the database instead of only the persistence context. `@Transactional` test methods roll back automatically for repository-level tests; `flush()` is **not** `commit()`.
+Verified tests cover round-trip entity/domain mapping, insert and lookup, active lookup, exclusion of cancelled bookings, and updating an existing booking from `PENDING` to `CONFIRMED`. Integration tests used `EntityManager.flush` followed by `clear` so reads hit the database instead of only the persistence context. `@Transactional` test methods roll back automatically for repository-level tests; `flush` is **not** `commit`.
 
 ---
 
@@ -325,7 +327,7 @@ The positive run with the decorator annotation returned green (rollback). As a n
 
 ### Concurrency principle (subsequently addressed)
 
-A service-level transaction at the usual `READ_COMMITTED` isolation does **not** make `existsActiveBooking(eventId, userId)` followed by `save()` a database-level uniqueness guarantee. Two concurrent transactions can both observe no active booking and attempt to insert separate IDs. Flyway V2 now establishes the PostgreSQL partial unique index described below. A simple `UNIQUE(event_id, user_id)` would also block rebooking after cancellation.
+A service-level transaction at the usual `READ_COMMITTED` isolation does **not** make `existsActiveBooking(eventId, userId)` followed by `save` a database-level uniqueness guarantee. Two concurrent transactions can both observe no active booking and attempt to insert separate IDs. Flyway V2 now establishes the PostgreSQL partial unique index described below. A simple `UNIQUE(event_id, user_id)` would also block rebooking after cancellation.
 
 ---
 
@@ -341,15 +343,15 @@ WHERE status <> 'CANCELLED';
 
 The database therefore rejects multiple active (`PENDING` / `CONFIRMED`) reservations for the same event/user while preserving the ability to book again after cancellation. Integration tests against PostgreSQL Testcontainers passed for `PENDING + PENDING` (rejected) and `CANCELLED + PENDING` (allowed). This constraint, not the application's pre-check or `@Transactional` alone, provides the concurrency-safe uniqueness guarantee.
 
-`JpaBookingRepositoryAdapter.save()` uses Spring Data `saveAndFlush()` to trigger the database check while the adapter can handle the failure. `flush()` executes pending SQL but does **not** commit the surrounding transaction. The adapter catches Spring's `DataIntegrityViolationException`, searches its cause chain for Hibernate's `ConstraintViolationException`, and translates **only** constraint `uq_bookings_active_event_user` into the application exception `BookingAlreadyExistsException`. Unrelated integrity exceptions remain unchanged; a Mockito unit test verified this using a different constraint name. The inbound `GlobalExceptionHandler` already maps the application exception to HTTP `409 Conflict`.
+`JpaBookingRepositoryAdapter.save` uses Spring Data `saveAndFlush` to trigger the database check while the adapter can handle the failure. `flush` executes pending SQL but does **not** commit the surrounding transaction. The adapter catches Spring's `DataIntegrityViolationException`, searches its cause chain for Hibernate's `ConstraintViolationException`, and translates **only** constraint `uq_bookings_active_event_user` into the application exception `BookingAlreadyExistsException`. Unrelated integrity exceptions remain unchanged; a Mockito unit test verified this using a different constraint name. The inbound `GlobalExceptionHandler` already maps the application exception to HTTP `409 Conflict`.
 
-The regular application-level `existsActiveBooking()` pre-check is retained for a clear business response in the common sequential case, but is **not** a race-condition guarantee.
+The regular application-level `existsActiveBooking` pre-check is retained for a clear business response in the common sequential case, but is **not** a race-condition guarantee.
 
 ---
 
 ## Concurrent-start and end-to-end tests
 
-`ConcurrentBookingIT` uses a two-thread `ExecutorService`, a readiness `CountDownLatch(2)` and a start `CountDownLatch(1)` to release two independent booking requests for the same event/user. Without test-level `@Transactional`, each call runs through the Spring-managed transactional decorator. The test passed with exactly one successful booking and one `BookingAlreadyExistsException`, and an active booking present afterward. **Limitation:** synchronizing the start does not force both threads to observe `existsActiveBooking() == false`; a deterministic barrier at that read remains an optional stronger race test.
+`ConcurrentBookingIT` uses a two-thread `ExecutorService`, a readiness `CountDownLatch(2)` and a start `CountDownLatch(1)` to release two independent booking requests for the same event/user. Without test-level `@Transactional`, each call runs through the Spring-managed transactional decorator. The test passed with exactly one successful booking and one `BookingAlreadyExistsException`, and an active booking present afterward. **Limitation:** synchronizing the start does not force both threads to observe `existsActiveBooking == false`; a deterministic barrier at that read remains an optional stronger race test.
 
 `TransactionalBookingUseCaseIT` (without test-level `@Transactional`) verifies committed creation and the valid transitions `PENDING → CONFIRMED`, `PENDING → CANCELLED` and `PENDING → CONFIRMED → CANCELLED` against PostgreSQL. It checks the persisted state and that the original immutable domain instances retain their prior statuses.
 
@@ -367,7 +369,7 @@ The regular application-level `existsActiveBooking()` pre-check is retained for 
 
 ## 59.2 Current Booking hexagonal composition
 
-The independent, **imperative** Booking Service uses two distinct output ports: `EventAvailabilityPort` retains the previously implemented read-only GET availability/resilience path, while the **current create-booking flow** uses `EventCapacityPort` (`reservePlaces`, `releasePlaces`) implemented by `RestEventCapacityAdapter` with blocking `RestClient`. `BookingService` now checks for active duplicate bookings and saves them; it does **not** call `isAvailable()`.
+The independent, **imperative** Booking Service uses two distinct output ports: `EventAvailabilityPort` retains the previously implemented read-only GET availability/resilience path, while the **current create-booking flow** uses `EventCapacityPort` (`reservePlaces`, `releasePlaces`) implemented by `RestEventCapacityAdapter` with blocking `RestClient`. `BookingService` now checks for active duplicate bookings and saves them; it does **not** call `isAvailable`.
 
 ```text
 POST /api/bookings
@@ -394,11 +396,10 @@ The REST adapter translates reserve 409 to `EventNotAvailableException`, 404 to 
 **Known limitations:** no shared transaction across the two PostgreSQL databases; no durable compensation retry, reservation ID, idempotency key, outbox or guaranteed resolution of ambiguous network timeouts. A failure or timeout during release can leave capacity inconsistent, and a timeout during reserve can leave an uncertain outcome. Cancellation currently does not trigger remote capacity release. These are deferred design tasks, not established production guarantees.
 
 
-## Manual cross-service consistency evidence — 
-
+## Manual cross-service consistency evidence
 With Event Service and independent Booking Service running against their actual persistence, a new `PENDING` Booking returned HTTP 201 and Event availability fell from 20 to 19. Repeating the same booking returned `409 BOOKING_ALREADY_EXISTS` and a later Event GET still reported 19 available places. This is **consistent with** the synchronous `CompensatingBookingUseCase` reserving and releasing on duplicate failure. The test did not independently capture the intermediate Event state or inject a controlled JPA failure after a confirmed remote reservation. These results **do not** establish distributed atomicity, durable compensation or idempotency. See [`MICROSERVICES_COMMUNICATION.md`](MICROSERVICES_COMMUNICATION.md).
 
 
-## Integration-event Inbox identity (24 October 2026)
+## Integration-event Inbox identity 
 
 The separate Booking Service (JPA) and Event Service (R2DBC) now deduplicate their incoming integration messages using a unique `integrationEventId`, rather than the Booking aggregate UUID. In Event Service, `InboxEvent` and `InboxEntity` map to PostgreSQL `inbox_events(integration_event_id UUID PRIMARY KEY, processed_at TIMESTAMPTZ NOT NULL)`; `Persistable.isNew=true` forces INSERT, so a repeated delivery raises `DuplicateKeyException`. Booking Service introduces Flyway V6 to rename its Inbox identifier column. This allows multiple legitimate integration events, such as booking creation and a future booking cancellation, to share the same `bookingId` without being mistakenly deduplicated. The new ID does not itself make downstream business processing atomic with the Inbox row.

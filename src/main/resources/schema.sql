@@ -24,3 +24,29 @@ CREATE TABLE IF NOT EXISTS inbox_events (
     integration_event_id UUID PRIMARY KEY,
     processed_at TIMESTAMPTZ NOT NULL
 );
+
+
+CREATE TABLE IF NOT EXISTS recovery_events (
+    kafka_topic           VARCHAR(255) NOT NULL,
+    kafka_partition       INTEGER NOT NULL,
+    kafka_offset          BIGINT NOT NULL,
+
+    pending_at      TIMESTAMPTZ NOT NULL,
+    processing_at   TIMESTAMPTZ,
+    republished_at  TIMESTAMPTZ,
+
+    attempt_id      UUID,
+
+    message_key     TEXT,
+    headers         TEXT,
+    payload         TEXT NOT NULL,
+
+    status          VARCHAR(30) NOT NULL DEFAULT 'PENDING',
+    version         BIGINT,
+
+    CONSTRAINT pk_recovery_events
+    PRIMARY KEY (kafka_topic, kafka_partition, kafka_offset),
+
+    CONSTRAINT chk_recovery_status
+    CHECK (status IN ('PENDING', 'PROCESSING', 'REPUBLISHED'))
+    );

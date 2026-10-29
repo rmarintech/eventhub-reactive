@@ -55,7 +55,7 @@ The domain and application layers follow **DDD and ports/adapters**. Infrastruct
 | **Event Service** | ✅ WebFlux/R2DBC, Event lifecycle, optimistic capacity management | Broader automated cross-service failure tests |
 | **Booking Service** | ✅ Spring MVC/JPA, API-first booking flow, Flyway, transactional persistence | Durable distributed reconciliation |
 | **REST integration** | ✅ Capacity reservation/release and best-effort compensation; resilience for availability reads | Robust handling of ambiguous remote outcomes |
-| **Kafka** | ✅ Transactional Outbox, `integrationEventId`-based Inbox, bounded error-handler retries and DLT publication unit tests | Broker-backed offset/failure E2E tests and controlled DLT replay |
+| **Kafka** | ✅ Transactional Outbox/Inbox, DLT persistence, PostgreSQL-outage retries and manually triggered DLT replay with key/payload/headers (Testcontainers + Toxiproxy) | Concurrent replay, stale `PROCESSING` recovery, offset-commit and complete two-service E2E tests |
 | **IBM MQ** | ✅ Broker-specific Transactional Outbox relay, JMS consumer + JPA Inbox, rollback/backout, broker-backed Testcontainers tests | Full failure-path automation and relay coordination |
 | **Frontend / deployment** | ⬜ React / TypeScript and extended deployment work planned | See roadmap |
 
@@ -153,10 +153,10 @@ docker compose -f compose.ibmmq.yaml up -d
 The IBM MQ configuration is in `ibmmq/init.mqsc`; apply it from the repository root if needed:
 
 ```powershell
-Get-Content .\ibmmq\init.mqsc | docker exec -i eventhub-ibmmq runmqsc QM1
+Get-Content.\ibmmq\init.mqsc | docker exec -i eventhub-ibmmq runmqsc QM1
 ```
 
-Use local environment variables for credentials; do not commit real secrets. **Do not routinely rerun `DEFINE ... REPLACE` against queues containing messages.** See [IBM MQ documentation](docs/IBMMQ.md) for setup, privileges and verification.
+Use local environment variables for credentials; do not commit real secrets. **Do not routinely rerun `DEFINE... REPLACE` against queues containing messages.** See [IBM MQ documentation](docs/IBMMQ.md) for setup, privileges and verification.
 
 ## 📚 Technical Documentation
 
@@ -181,3 +181,10 @@ The [roadmap](docs/ROADMAP.md) separates completed work from planned features, i
 **Rubén Marín** — Senior Java Backend Developer.
 
 This repository is a practical portfolio and learning project focused on modern Java backend engineering, software architecture, testing, distributed systems and service integration.
+
+
+### Kafka DLT recovery 
+
+Event Service now persists `booking-created.DLT` records to `recovery_events` and can manually replay pending entries to `booking-created`. Recovery uses `PENDING → PROCESSING → REPUBLISHED`, `@Version` optimistic locking, a stable event payload/`integrationEventId`, and `KafkaHeadersCodec` for restoring headers. Kafka ACK precedes the final database status update. Tests reported green for PostgreSQL interruption/recovery with Toxiproxy and four service integration paths (success, Kafka failure, version conflict, post-ACK database failure), including verification by an independent Kafka consumer of `correlationId` header bytes. See [KAFKA.md](docs/KAFKA.md).
+
+This is **at-least-once**, not exactly-once: crashes after broker ACK can leave `PROCESSING`; concurrent replay and safe stale-claim recovery remain to be hardened.

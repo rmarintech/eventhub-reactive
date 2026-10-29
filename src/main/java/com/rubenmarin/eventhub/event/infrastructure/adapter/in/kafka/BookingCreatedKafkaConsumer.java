@@ -3,13 +3,11 @@ package com.rubenmarin.eventhub.event.infrastructure.adapter.in.kafka;
 import com.rubenmarin.eventhub.event.application.event.BookingCreatedIntegrationEvent;
 import com.rubenmarin.eventhub.event.application.model.InboxEvent;
 import com.rubenmarin.eventhub.event.application.port.out.InboxRepository;
-import com.rubenmarin.eventhub.event.infrastructure.adapter.out.persistence.r2dbc.InboxEntity;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
-import reactor.core.publisher.Mono;
 import tools.jackson.databind.ObjectMapper;
 
 import java.time.OffsetDateTime;

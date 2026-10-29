@@ -1,12 +1,12 @@
 package com.rubenmarin.eventhub.event.infrastructure.config;
 
 import org.apache.kafka.clients.admin.NewTopic;
-import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.common.TopicPartition;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Primary;
 import org.springframework.kafka.config.TopicBuilder;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.kafka.listener.DeadLetterPublishingRecoverer;
@@ -18,12 +18,11 @@ import tools.jackson.core.JacksonException;
 public class KafkaErrorHandlerConfiguration {
 
     private static final Logger _log = LoggerFactory.getLogger(KafkaErrorHandlerConfiguration.class);
-
-    private static final String DLT_TOPIC = "booking-created.DLT";
+    private static final String BOOKING_CREATED_DLT_TOPIC = "booking-created.DLT";
 
     @Bean
     public NewTopic bookingCreatedDltTopic() {
-        return TopicBuilder.name(DLT_TOPIC)
+        return TopicBuilder.name(BOOKING_CREATED_DLT_TOPIC)
                 .partitions(1)
                 .replicas(1)
                 .build();
@@ -31,33 +30,30 @@ public class KafkaErrorHandlerConfiguration {
 
 
     @Bean
+    @Primary
     public DefaultErrorHandler kafkaErrorHandler(KafkaTemplate<String, String> kafkaTemplate) {
-        // 1 intento inicial + 2 reintentos.
-        // Espera de 1000 ms entre intentos.
+        // 1 intento inicial + 2 reintentos.Espera de 1000 ms entre intentos.
         FixedBackOff backOff = new FixedBackOff(1000L, 2L);
 
-        // Publicar el mensaje fallido en nuestra DLT.
-        // Por defecto, Spring Kafka envía el mensaje fallido a la misma partición
-        // del topic DLT. Por eso, la DLT debe tener al menos tantas particiones
-        // como el topic original. Con TopicPartition(DLT_TOPIC, -1),
-        // Kafka puede elegir la partición de destino.
+        // Enviamos el evento a <topic-original>.DLT.
+        // Con partición -1, Kafka selecciona la partición de destino,
+        // utilizando la key del mensaje cuando corresponda.
         DeadLetterPublishingRecoverer recoverer =
                 new DeadLetterPublishingRecoverer(
                         kafkaTemplate,
                         (record, exception) ->
-                                new TopicPartition(DLT_TOPIC, -1)
+                                new TopicPartition(record.topic() + ".DLT", -1)
                 );
 
-        // No dar por recuperado el mensaje si falla su publicación en la DLT.
+        // Evita considerar recuperado un mensaje si falla su publicación en el DLT
         // El recoverer lanzará una excepción si falla la publicación.
-
         recoverer.setFailIfSendResultIsError(true);
 
+        /** ERROR HANDLER (Envío a Dlt, Reintentar si falla) */
         DefaultErrorHandler errorHandler = new DefaultErrorHandler(recoverer, backOff);
 
         // Error de conexión PostgreSQL → Retry → Retry → DLT
-        // SON inválido   → DLT directamente
-        // Un JSON inválido no se arreglará reintentándolo.
+        // JSON inválido → DLT directamente
         errorHandler.addNotRetryableExceptions(JacksonException.class);
 
 

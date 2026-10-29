@@ -1,9 +1,8 @@
-package com.rubenmarin.eventhub.event.infrastructure.adapter.out.persistence.r2dbc;
+package com.rubenmarin.eventhub.event.infrastructure.adapter.out.persistence.r2dbc.event;
 
 import com.rubenmarin.eventhub.event.application.exception.ConcurrentUpdateException;
 import com.rubenmarin.eventhub.event.application.port.out.EventRepository;
 import com.rubenmarin.eventhub.event.domain.model.*;
-import org.springframework.dao.ConcurrencyFailureException;
 import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.stereotype.Repository;
 import reactor.core.publisher.Flux;
