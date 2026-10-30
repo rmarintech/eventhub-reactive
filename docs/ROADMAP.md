@@ -369,9 +369,12 @@ architecture tests remain pending
 -   [ ] Security tests
 -   [x] Full backend HTTP integration tests
 -   [ ] Frontend tests
--   [ ] End-to-end tests
+-   [x] Karate API end-to-end scenarios for Booking Service → Event Service (live local HTTP)
+-   [x] Karate reusable feature calls (`call read`) and shared `karate-config.js` URLs
+-   [x] Karate scenarios: invalid request (400), booking reduces availability, sold-out rejection (409) with capacity remaining at zero
+-   [ ] Full end-to-end coverage of messaging and distributed failure scenarios
 -   [ ] Architecture tests
--   [ ] Testing documentation
+-   [x] Karate API E2E testing documentation (`KARATE_E2E_TESTING.md`)
 
 ------------------------------------------------------------------------
 
@@ -627,7 +630,9 @@ IBM MQ dual-Outbox relay + Inbox            ✅ LOCAL VERIFIED
         ↓
 IBM MQ + PostgreSQL Testcontainers           ✅ GREEN
         ↓
-Kafka broker-backed DLT/offset integration   🚧 NEXT
+Karate Booking/Event REST E2E               ✅ LOCAL SCENARIOS
+        ↓
+Kafka offset/failure-path integration         🚧 NEXT
 ```
 
 ---
@@ -721,6 +726,9 @@ Kafka broker-backed DLT/offset integration   🚧 NEXT
 - [x] Service-to-service Event availability query via REST
 - [x] Basic service-to-service Event capacity coordination with synchronous best-effort compensation (unit/HTTP mock tested)
 - [x] Basic manual E2E: Booking 201 and Event capacity 20→19; duplicate Booking 409 and restored final availability 19; unknown Event 404; full Event 409; Event Service down 503
+- [x] Karate API E2E tests orchestrate live Booking and Event Service using reusable `.feature` files (event creation/publication, booking creation, capacity queries and 400/409 rejection)
+- [x] `karate-config.js` centralizes `bookingBaseUrl` and `eventBaseUrl`, with optional local/docker environment selection
+- [ ] Automated distributed consistency/failure-path E2E beyond the current REST happy-path and rejection scenarios
 - [ ] Controlled E2E injection of Booking persistence/commit failure after remote capacity reservation, with verified release
 - [ ] Durable cross-service consistency, failure recovery and idempotent compensation strategy
 - [x] Kafka producer integration and Transactional Outbox (local verification)
@@ -754,7 +762,7 @@ Kafka broker-backed DLT/offset integration   🚧 NEXT
 - [x] Unit-test malformed JSON, two transient retries, exhaustion and failed DLT publication
 - [x] Add `integrationEventId` to producer/consumer contracts and Inbox models; confirm distinct message IDs for one `bookingId` using Mockito
 - [ ] Broker-backed Kafka consumer integration tests with Testcontainers and explicit offset-commit verification
-- [x] Controlled manual replay from the DLT: database-backed `PENDING → PROCESSING → REPUBLISHED`, preserving original payload (including `integrationEventId`), key and headers; four passing `DltRecoveryServiceIT` tests
+- [x] Controlled manual replay from the DLT: database-backed `PENDING → PROCESSING → REPUBLISHED`, preserving original payload (including `integrationEventId`), key and headers; five passing `DltRecoveryServiceIT` tests
 - [ ] Transactional coupling of Inbox and downstream side effects, if such effects are introduced
 - [ ] Validate Flyway V6 migration behavior against populated preexisting Inbox tables
 
@@ -774,8 +782,9 @@ These tests do not establish exactly-once delivery or a complete Kafka broker-ba
 - [x] `DltRecoveryConsumer` stores DLT topic/partition/offset, key, payload and Base64/JSON headers in PostgreSQL; duplicates ignored by unique key.
 - [x] Dedicated DLT listener factory with unbounded retry for database outages; `DltRecoveryRetryIT` uses Toxiproxy and Testcontainers to verify redelivery and recovery after PostgreSQL returns.
 - [x] `DltRecoveryService.reprocess` manually republishes `PENDING` events to `booking-created` with the original key, payload and restored headers; tracks `PROCESSING`, `REPUBLISHED`, `attemptId` and timestamps, with optimistic version checks.
-- [x] `DltRecoveryServiceIT`: broker-backed happy path including `correlationId` header, injected Kafka failure back to `PENDING`, stale optimistic-lock claim prevents publish, and injected post-ACK PostgreSQL failure leaves `PROCESSING`. Four integration tests pass.
-- [ ] Test concurrent replay with two actual simultaneous executions; decide behavior for the losing optimistic-lock claimant.
+- [x] `DltRecoveryServiceIT`: broker-backed happy path including `correlationId` header, injected Kafka failure back to `PENDING`, stale optimistic-lock claim prevents publish, and injected post-ACK PostgreSQL failure leaves `PROCESSING`. Five integration tests pass, including concurrent-claim protection.
+- [x] `DltRecoveryServiceIT` concurrent-claim test: two callers compete for the same version; one claim fails and only one Kafka publish proceeds (database-backed optimistic locking).
+- [ ] Additional real concurrent replay scheduling/claim hardening for production conditions.
 - [ ] Recover stale `PROCESSING` via safe lease/timeout/fencing, accounting for ambiguous Kafka acknowledgments.
 - [ ] Test duplicate business-effect prevention across Kafka ACK/DB failure via stable `integrationEventId` and Inbox.
 - [ ] Filter DLT technical headers, retain business headers, and handle permanent/poison-message failures.

@@ -18,7 +18,7 @@ The project intentionally uses **reactive** and **imperative** Spring applicatio
 | Data | PostgreSQL 17 |
 | API and integration | REST, OpenAPI, Spring RestClient, Spring Kafka, Spring JMS, IBM MQ |
 | Reliability | Transactional Outbox, persistent Inbox, optimistic locking, synchronous compensation, Resilience4j |
-| Testing | JUnit 5, Mockito, Testcontainers, WebTestClient, MockMvc |
+| Testing | JUnit 5/6, Mockito, Testcontainers, WebTestClient, MockMvc, Karate (API E2E) |
 | Local infrastructure | Docker Compose |
 
 Additional technologies and planned work are tracked in the [roadmap](docs/ROADMAP.md).
@@ -128,6 +128,7 @@ Value Objects enforce validity; aggregate methods control legal state changes. D
 - **Service communication:** synchronous REST capacity reservation with best-effort compensation; availability checks with timeout, Retry, Circuit Breaker and Bulkhead.
 - **Kafka:** Booking and Outbox persisted atomically; scheduled producer; Event Service consumer with PostgreSQL Inbox for duplicate deliveries.
 - **IBM MQ:** Independent Outbox relay, JMS producer/consumer, JPA Inbox deduplication, transactional rollback/redelivery, `BOTHRESH`/backout queue, and Testcontainers integration tests.
+- **API end-to-end tests:** Karate scenarios exercise live Event creation/publication, Booking creation and capacity updates, invalid-request 400 and capacity-exhaustion 409.
 
 ## 🧪 Testing and Guarantees
 
@@ -135,15 +136,15 @@ Value Objects enforce validity; aggregate methods control legal state changes. D
 | --- | --- | --- |
 | Domain and API | Unit, controller and adapter tests | See topic-specific documentation |
 | Persistence | PostgreSQL/Testcontainers tests for JPA, Outbox and reactive Inbox | No distributed ACID transaction |
-| Two-service REST | Manual live-service scenarios plus mocked HTTP tests | Durable compensation/reconciliation pending |
-| Kafka | Manual publication/consumption, PostgreSQL Inbox tests, Mockito consumer identity test, Kafka DLT/error-handler unit tests | Full broker-backed automated E2E, offset failure verification and DLT replay pending |
+| Two-service REST | Local Karate API E2E scenarios against live Booking and Event services (capacity decrement, sold-out 409, invalid 400), plus manual and mocked HTTP tests | Depends on running services; durable compensation/reconciliation and cross-service failure injection pending |
+| Kafka | Transactional Outbox/Inbox tests, DLT/error-handler tests, database-backed DLT replay integration tests including original headers and competing claim protection | Complete automated two-service broker E2E, offset failure verification and stale PROCESSING recovery pending |
 | IBM MQ | Automated MQ + PostgreSQL Testcontainers tests (JMS round trip, Inbox persistence, duplicate delivery); manual rollback/backout/browse checks | Automated failure-path tests and multi-instance Outbox coordination pending |
 
 Successful local Booking + Outbox commit does not guarantee instant Kafka delivery. The Outbox design is **at least once**, and consumers must account for duplicates. IBM MQ failures are routed to a separate backout queue after the configured threshold in the tested JMS setup.
 
 ## ⚙️ Running Locally
 
-The project contains two independently run Spring Boot services and separate local infrastructure. Configuration and prerequisites vary by service; consult the relevant module setup and documentation before starting. Infrastructure examples:
+The project contains two independently run Spring Boot services and separate local infrastructure. Karate E2E API tests in `booking-service` require both services reachable at their configured base URLs (normally `http://localhost:8081` and `http://localhost:8080`); these values are supplied by `src/test/resources/karate-config.js`. Configuration and prerequisites vary by service; consult the relevant module setup and documentation before starting. Infrastructure examples:
 
 ```powershell
 docker compose -f compose.kafka.yaml up -d
@@ -170,6 +171,7 @@ Use local environment variables for credentials; do not commit real secrets. **D
 | Retry, Circuit Breaker and Bulkhead | [Resilience](docs/RESILIENCE.md) |
 | Transactional Outbox and Inbox | [Kafka](docs/KAFKA.md) |
 | Spring JMS, redelivery and Backout Queue | [IBM MQ](docs/IBMMQ.md) |
+| Karate API end-to-end testing | [Karate E2E Testing](docs/KARATE_E2E_TESTING.md) |
 | Completed and pending work | [Roadmap](docs/ROADMAP.md) |
 
 ## 🗺️ Roadmap
@@ -183,8 +185,8 @@ The [roadmap](docs/ROADMAP.md) separates completed work from planned features, i
 This repository is a practical portfolio and learning project focused on modern Java backend engineering, software architecture, testing, distributed systems and service integration.
 
 
-### Kafka DLT recovery 
+### Kafka DLT recovery
 
-Event Service now persists `booking-created.DLT` records to `recovery_events` and can manually replay pending entries to `booking-created`. Recovery uses `PENDING → PROCESSING → REPUBLISHED`, `@Version` optimistic locking, a stable event payload/`integrationEventId`, and `KafkaHeadersCodec` for restoring headers. Kafka ACK precedes the final database status update. Tests reported green for PostgreSQL interruption/recovery with Toxiproxy and four service integration paths (success, Kafka failure, version conflict, post-ACK database failure), including verification by an independent Kafka consumer of `correlationId` header bytes. See [KAFKA.md](docs/KAFKA.md).
+Event Service now persists `booking-created.DLT` records to `recovery_events` and can manually replay pending entries to `booking-created`. Recovery uses `PENDING → PROCESSING → REPUBLISHED`, `@Version` optimistic locking, a stable event payload/`integrationEventId`, and `KafkaHeadersCodec` for restoring headers. Kafka ACK precedes the final database status update. Tests reported green for PostgreSQL interruption/recovery with Toxiproxy and five service integration paths (success, Kafka failure, version conflict, competing claim, post-ACK database failure), including verification by an independent Kafka consumer of `correlationId` header bytes. See [KAFKA.md](docs/KAFKA.md).
 
-This is **at-least-once**, not exactly-once: crashes after broker ACK can leave `PROCESSING`; concurrent replay and safe stale-claim recovery remain to be hardened.
+This is **at-least-once**, not exactly-once: crashes after broker ACK can leave `PROCESSING`; production-grade concurrent replay scheduling and safe stale-claim recovery remain to be hardened.
