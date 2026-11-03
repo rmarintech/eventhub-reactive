@@ -1,6 +1,6 @@
 # Persistence and Consistency — EventHub
 
-> **Current messaging persistence:** Event Service also persists Kafka DLT records in `recovery_events`, using R2DBC, an optimistic `@Version` claim and `PENDING → PROCESSING → REPUBLISHED` states. Toxiproxy/PostgreSQL retry and replay service tests have passed. This does **not** make the Kafka send and database status update atomic; a post-ACK crash can leave `PROCESSING`. See [KAFKA.md](KAFKA.md).
+> **Current messaging persistence:** Event Service also persists Kafka DLT records in `recovery_events`, using R2DBC, an optimistic `@Version` claim and `PENDING → PROCESSING → REPUBLISHED` states. Toxiproxy/PostgreSQL retry and replay service tests have passed. This does **not** make the Kafka send and database status update atomic; a post-ACK crash can leave `PROCESSING`, which the 300-second scheduled unlock now returns to `PENDING` (possibly causing duplicate publication later). See [KAFKA.md](KAFKA.md).
 
 R2DBC, JPA, optimistic locking, local transactions, duplicate protection and synchronous compensation. For full HTTP failure scenarios see [MICROSERVICES_COMMUNICATION.md](MICROSERVICES_COMMUNICATION.md); for resilience decorators see [RESILIENCE.md](RESILIENCE.md).
 
@@ -403,3 +403,10 @@ With Event Service and independent Booking Service running against their actual 
 ## Integration-event Inbox identity 
 
 The separate Booking Service (JPA) and Event Service (R2DBC) now deduplicate their incoming integration messages using a unique `integrationEventId`, rather than the Booking aggregate UUID. In Event Service, `InboxEvent` and `InboxEntity` map to PostgreSQL `inbox_events(integration_event_id UUID PRIMARY KEY, processed_at TIMESTAMPTZ NOT NULL)`; `Persistable.isNew=true` forces INSERT, so a repeated delivery raises `DuplicateKeyException`. Booking Service introduces Flyway V6 to rename its Inbox identifier column. This allows multiple legitimate integration events, such as booking creation and a future booking cancellation, to share the same `bookingId` without being mistakenly deduplicated. The new ID does not itself make downstream business processing atomic with the Inbox row.
+
+
+## Recovery-event stale-state persistence (verified 2026-11-03)
+
+`recovery_events` uses a composite `(kafka_topic, kafka_partition, kafka_offset)` identifier and R2DBC optimistic `@Version`. `DltRecoveryService.unblockExpired()` reads `PROCESSING` records, selects those with `processingAt` older than 300 seconds, then updates them to `PENDING`, clearing the old `attemptId` and `processingAt`. Concurrent stale writes are rejected by optimistic locking and ignored by this recovery scan; unrelated persistence errors are propagated. An inconsistent `PROCESSING` row with `processingAt = NULL` is logged and ignored instead of repaired.
+
+`DltRecoveryUnblockIT` exercises these paths against PostgreSQL, including a SQL-injected null timestamp. The periodic scheduler prevents reentry only within one JVM instance; the database version protects concurrent saves but is not a cross-instance lease. The Kafka ACK and subsequent `REPUBLISHED` database save remain non-atomic; restoring a stale record to `PENDING` can legitimately cause **at-least-once** duplicate publication.

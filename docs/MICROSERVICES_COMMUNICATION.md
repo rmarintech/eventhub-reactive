@@ -1,6 +1,6 @@
 # Microservices Communication — Practical Guide and Testing Checklist
 
-> **Kafka update:** The Event Service Kafka DLT consumer persists failed messages in PostgreSQL and a manually invoked recovery service republishes pending events with original key/payload/headers. Four service integration tests plus Toxiproxy database-outage tests are green. This does **not** satisfy this guide’s pending full two-service automated E2E, HTTP capacity idempotency, distributed compensation or offset-commit verification; see [KAFKA.md](KAFKA.md).
+> **Kafka update:** The Event Service Kafka DLT consumer persists failed messages in PostgreSQL and a manually invoked recovery service republishes pending events with original key/payload/headers; a separate scheduled service unlocks expired `PROCESSING` records. Service integration tests, unlock/scheduler tests and Toxiproxy database-outage tests are green. This does **not** satisfy this guide’s pending full two-service automated E2E, HTTP capacity idempotency, distributed compensation or offset-commit verification; see [KAFKA.md](KAFKA.md).
 
 > **Purpose.** A reusable guide for designing, implementing, and **demonstrating through tests** reliable communication between Java/Spring Boot microservices. The running example is **EventHub**: **Event Service** (WebFlux + R2DBC, `:8080`) and **Booking Service** (Spring MVC + JPA, `:8081`). This is not a list of technologies that every project must install: choose the guarantees required by the business.
 >

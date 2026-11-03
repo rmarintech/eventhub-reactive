@@ -55,7 +55,7 @@ The domain and application layers follow **DDD and ports/adapters**. Infrastruct
 | **Event Service** | ✅ WebFlux/R2DBC, Event lifecycle, optimistic capacity management | Broader automated cross-service failure tests |
 | **Booking Service** | ✅ Spring MVC/JPA, API-first booking flow, Flyway, transactional persistence | Durable distributed reconciliation |
 | **REST integration** | ✅ Capacity reservation/release and best-effort compensation; resilience for availability reads | Robust handling of ambiguous remote outcomes |
-| **Kafka** | ✅ Transactional Outbox/Inbox, DLT persistence, PostgreSQL-outage retries and manually triggered DLT replay with key/payload/headers (Testcontainers + Toxiproxy) | Concurrent replay, stale `PROCESSING` recovery, offset-commit and complete two-service E2E tests |
+| **Kafka** | ✅ Transactional Outbox/Inbox, DLT persistence, PostgreSQL-outage retries and manually triggered DLT replay with key/payload/headers (Testcontainers + Toxiproxy) | Multi-instance recovery coordination, offset-commit and complete two-service E2E tests |
 | **IBM MQ** | ✅ Broker-specific Transactional Outbox relay, JMS consumer + JPA Inbox, rollback/backout, broker-backed Testcontainers tests | Full failure-path automation and relay coordination |
 | **Frontend / deployment** | ⬜ React / TypeScript and extended deployment work planned | See roadmap |
 
@@ -137,7 +137,7 @@ Value Objects enforce validity; aggregate methods control legal state changes. D
 | Domain and API | Unit, controller and adapter tests | See topic-specific documentation |
 | Persistence | PostgreSQL/Testcontainers tests for JPA, Outbox and reactive Inbox | No distributed ACID transaction |
 | Two-service REST | Local Karate API E2E scenarios against live Booking and Event services (capacity decrement, sold-out 409, invalid 400), plus manual and mocked HTTP tests | Depends on running services; durable compensation/reconciliation and cross-service failure injection pending |
-| Kafka | Transactional Outbox/Inbox tests, DLT/error-handler tests, database-backed DLT replay integration tests including original headers and competing claim protection | Complete automated two-service broker E2E, offset failure verification and stale PROCESSING recovery pending |
+| Kafka | Transactional Outbox/Inbox tests, DLT/error-handler tests, database-backed DLT replay integration tests including original headers and competing claim protection | Complete automated two-service broker E2E, offset failure verification and production-grade multi-instance recovery pending |
 | IBM MQ | Automated MQ + PostgreSQL Testcontainers tests (JMS round trip, Inbox persistence, duplicate delivery); manual rollback/backout/browse checks | Automated failure-path tests and multi-instance Outbox coordination pending |
 
 Successful local Booking + Outbox commit does not guarantee instant Kafka delivery. The Outbox design is **at least once**, and consumers must account for duplicates. IBM MQ failures are routed to a separate backout queue after the configured threshold in the tested JMS setup.
@@ -189,4 +189,6 @@ This repository is a practical portfolio and learning project focused on modern 
 
 Event Service now persists `booking-created.DLT` records to `recovery_events` and can manually replay pending entries to `booking-created`. Recovery uses `PENDING → PROCESSING → REPUBLISHED`, `@Version` optimistic locking, a stable event payload/`integrationEventId`, and `KafkaHeadersCodec` for restoring headers. Kafka ACK precedes the final database status update. Tests reported green for PostgreSQL interruption/recovery with Toxiproxy and five service integration paths (success, Kafka failure, version conflict, competing claim, post-ACK database failure), including verification by an independent Kafka consumer of `correlationId` header bytes. See [KAFKA.md](docs/KAFKA.md).
 
-This is **at-least-once**, not exactly-once: crashes after broker ACK can leave `PROCESSING`; production-grade concurrent replay scheduling and safe stale-claim recovery remain to be hardened.
+The Event Service also runs `DltRecoveryScheduler` (Spring `@Scheduled`) to call `DltRecoveryService.unblockExpired()`. Records stuck in `PROCESSING` for more than 300 seconds are returned to `PENDING`; the next **separate invocation of `reprocess()`** can republish them. A per-instance `AtomicBoolean` prevents overlapping scheduler executions and `doFinally()` releases it even after an error. Records with `PROCESSING` and `processingAt = null` are logged and skipped as inconsistent. `DltRecoveryUnblockIT` and `DltRecoverySchedulerTest` cover these behaviors; the latest `mvn verify` run was green.
+
+This is **at-least-once**, not exactly-once: crashes after broker ACK can leave `PROCESSING`; timeout-based unlock may result in a duplicate publish. Production-grade multi-instance scheduling, stronger fencing/leases, monitoring, and explicit offset tests remain pending.

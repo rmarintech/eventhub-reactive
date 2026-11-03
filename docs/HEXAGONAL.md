@@ -1,6 +1,6 @@
 # Hexagonal Architecture — EventHub
 
-> Event Service now has a Kafka DLT inbound recovery consumer and a recovery service using PostgreSQL and Kafka adapters. The domain/application dependency rules are independent of messaging recovery; see [KAFKA.md](KAFKA.md) for the recovery mechanism and its limits.
+> Event Service now has a Kafka DLT inbound recovery consumer and a recovery service and scheduled stale-claim unlock using PostgreSQL and Kafka adapters. The domain/application dependency rules are independent of messaging recovery; see [KAFKA.md](KAFKA.md) for the recovery mechanism and its limits.
 
 Application ports, use cases, inbound/outbound adapters, dependency inversion, Spring wiring and HTTP boundaries. Domain modeling belongs in [DDD.md](DDD.md); transactions and distributed consistency belong in [PERSISTENCE_CONSISTENCY.md](PERSISTENCE_CONSISTENCY.md).
 

@@ -1,6 +1,6 @@
 # IBM MQ and Spring JMS — EventHub
 
-> **Related Kafka integration:** Event Service DLT persistence, Toxiproxy database-failure retries and manual DLT replay (including headers) are verified; see [KAFKA.md](KAFKA.md). IBM MQ Outbox, JMS and backout behavior is described below, along with its outstanding reliability work. The two broker sends remain independent.
+> **Related Kafka integration:** Event Service DLT persistence, Toxiproxy database-failure retries and manual DLT replay (including headers) and scheduled stale-claim unlocking are verified; see [KAFKA.md](KAFKA.md). IBM MQ Outbox, JMS and backout behavior is described below, along with its outstanding reliability work. The two broker sends remain independent.
 
 > **Verification scope.** Booking Service now creates separate Kafka and IBM MQ Outbox records in the same local PostgreSQL transaction. Both relay paths were exercised locally. IBM MQ consumption and Inbox persistence were also tested with isolated IBM MQ and PostgreSQL Testcontainers. This is **not** an exactly-once or distributed transaction guarantee.
 

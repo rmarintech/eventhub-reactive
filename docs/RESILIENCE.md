@@ -1,6 +1,6 @@
 # Inter-service Resilience — EventHub
 
-> **Messaging resilience update:** Separately from the synchronous HTTP Resilience4j chain described here, Event Service Kafka DLT persistence now retries PostgreSQL outages with a dedicated `DefaultErrorHandler` and a Toxiproxy-tested recovery path; pending events can be manually replayed and errors are tested. HTTP retry/circuit breaker/bulkhead configuration is unchanged. See [KAFKA.md](KAFKA.md).
+> **Messaging resilience update:** Separately from the synchronous HTTP Resilience4j chain described here, Event Service Kafka DLT persistence now retries PostgreSQL outages with a dedicated `DefaultErrorHandler` and a Toxiproxy-tested recovery path; pending events can be manually replayed; a scheduler also unlocks expired `PROCESSING` claims (300 seconds), with failure recovery tests. It does not automatically republish the unlocked events. HTTP retry/circuit breaker/bulkhead configuration is unchanged. See [KAFKA.md](KAFKA.md).
 
 This document explains the **synchronous Booking Service → Event Service** resilience work implemented and tested, including Bulkhead. It collects theory, concrete configuration, tested behavior and limitations in one place. It does **not** describe Reactor's reactive `retry` operator; that belongs in [`REACTIVE.md`](REACTIVE.md).
 

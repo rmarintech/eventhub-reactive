@@ -1,6 +1,6 @@
 # Reactive Programming — EventHub
 
-> **Reactive Kafka recovery:** Event Service DLT recovery composes R2DBC repository operations and `Mono.fromFuture(kafkaTemplate.send(ProducerRecord))` using `concatMap`, `flatMap` and `onErrorResume`, and waits for the broker ACK before marking `REPUBLISHED`. Dedicated integration tests are green, with manual invocation and known post-ACK failure ambiguity. The Booking Service producer remains imperative. See [KAFKA.md](KAFKA.md).
+> **Reactive Kafka recovery:** Event Service DLT recovery composes R2DBC repository operations and `Mono.fromFuture(kafkaTemplate.send(ProducerRecord))` using `concatMap`, `flatMap` and `onErrorResume`, and waits for the broker ACK before marking `REPUBLISHED`. Dedicated integration tests are green, with manual replay, scheduled stale-claim unlock and known post-ACK failure ambiguity. The Booking Service producer remains imperative. See [KAFKA.md](KAFKA.md).
 
 This document records **only concepts studied and behaviour implemented or tested** in EventHub. It is organized by technical topic. Kafka producer publication is now implemented in the **independent imperative Booking Service**, not in the historical reactive Booking module. See [KAFKA.md](KAFKA.md).
 
@@ -766,3 +766,12 @@ Event Service now exposes WebFlux `POST /events/{id}/reserve/{places}/places` an
 The **independent Booking Service remains fully imperative**: its `CompensatingBookingUseCase` invokes synchronous `EventCapacityPort.reservePlaces(eventId, 1)` via `RestClient` before the JPA transactional booking delegate, then calls `releasePlaces` if booking creation fails. A WebFlux HTTP endpoint **does not make its synchronous HTTP caller reactive**. The earlier availability GET resilience chain still exists separately, but the new mutating POST calls are **not automatically retried** because their outcome can be ambiguous after a timeout.
 
 The HTTP adapter's eight focused tests and the three compensation unit tests passed. A **real two-microservice end-to-end booking/compensation test** and robust idempotent recovery are pending. Architecture and known limits: [`PERSISTENCE_CONSISTENCY.md`](PERSISTENCE_CONSISTENCY.md).
+
+
+## Reactive scheduled DLT unlock (verified 2026-11-03)
+
+`DltRecoveryService.unblockExpired()` uses a repository `Flux`, `filter` on `processingAt` and `concatMap` to persist sequential `PROCESSING → PENDING` transitions. Records with a null `processingAt` are logged and skipped as inconsistencies. Optimistic-lock conflicts are recovered per item, rather than aborting all records. `then()` returns a `Mono<Void>` after all qualifying updates finish.
+
+The `@Scheduled` method in `DltRecoveryScheduler` invokes `.subscribe(...)` and therefore does not block for the R2DBC pipeline to finish. A per-instance `AtomicBoolean` blocks overlapping invocations; Reactor `doFinally` clears it on termination, including error. Integration tests call `unblockExpired().block()` explicitly to wait for completion; the scheduler unit tests verify overlap and error release using a mock.
+
+The scheduler does **not** call `reprocess()`; automatic republishing is not established. See [KAFKA.md](KAFKA.md).

@@ -277,7 +277,7 @@ architecture tests remain pending
 - [x] Inbox PostgreSQL/Testcontainers tests: INSERT, lookup, duplicate rejected
 - [x] Manual Kafka consumer reception and Inbox deduplication checks
 - [x] Kafka DLT publishing and error-handler unit tests (malformed payload, retry exhaustion, failed DLT send)
-- [ ] Controlled DLT recovery/replay and Kafka broker-backed offset/failure tests
+- [x] Controlled DLT persistence/replay with broker-backed service tests; offset-commit failure tests remain pending
 - [ ] Automated Kafka integration tests, poison-message handling, competing relays and durable recovery
 
 **Scope:** producer-side Transactional Outbox and consumer-side Inbox are locally verified. `at-least-once` admits redelivery, and the Inbox deduplicates persisted message IDs. Full broker-backed automated tests and exactly-once side effects are not claimed. Older reactive Booking checklist items describe the original module, not the independent Booking Service.
@@ -773,7 +773,7 @@ Kafka offset/failure-path integration         🚧 NEXT
 - [x] Event Service R2DBC Inbox (`integration_event_id` PK) and Booking Service JPA Inbox/Flyway V6 updated.
 - [x] `BookingCreatedKafkaConsumerTest` verifies two distinct integration-event IDs with the same Booking ID (Mockito).
 - [x] Booking Service Maven test suite and focused Event Service consumer tests pass.
-- [ ] Verify the complete Event Service Maven test suite.
+- [x] Verify the complete Event Service Maven test suite (`mvn verify` GREEN, 2026-11-03).
 
 These tests do not establish exactly-once delivery or a complete Kafka broker-backed end-to-end guarantee.
 
@@ -784,11 +784,14 @@ These tests do not establish exactly-once delivery or a complete Kafka broker-ba
 - [x] `DltRecoveryService.reprocess` manually republishes `PENDING` events to `booking-created` with the original key, payload and restored headers; tracks `PROCESSING`, `REPUBLISHED`, `attemptId` and timestamps, with optimistic version checks.
 - [x] `DltRecoveryServiceIT`: broker-backed happy path including `correlationId` header, injected Kafka failure back to `PENDING`, stale optimistic-lock claim prevents publish, and injected post-ACK PostgreSQL failure leaves `PROCESSING`. Five integration tests pass, including concurrent-claim protection.
 - [x] `DltRecoveryServiceIT` concurrent-claim test: two callers compete for the same version; one claim fails and only one Kafka publish proceeds (database-backed optimistic locking).
-- [ ] Additional real concurrent replay scheduling/claim hardening for production conditions.
-- [ ] Recover stale `PROCESSING` via safe lease/timeout/fencing, accounting for ambiguous Kafka acknowledgments.
+- [ ] Additional multi-instance concurrent replay scheduling/claim hardening for production conditions (per-instance scheduler overlap test is GREEN).
+- [x] Implement 300-second timeout-based `PROCESSING → PENDING` unlock in `DltRecoveryService.unblockExpired()`; ignore/log `processingAt = null` inconsistencies.
+- [x] Add `DltRecoveryScheduler` (`@Scheduled`, per-instance `AtomicBoolean`, `doFinally` release on success/error); scheduler runs unlock, **not** `reprocess()`.
+- [x] Verify stale/non-stale records, optimistic-lock conflict and null timestamp with PostgreSQL-backed `DltRecoveryUnblockIT`; verify overlap suppression and failure recovery with `DltRecoverySchedulerTest`. Latest `mvn verify`: GREEN.
+- [ ] Harden multi-instance coordination, durable lease/fencing and ambiguous post-ACK publish windows; timeout-based unlock can lead to duplicates.
 - [ ] Test duplicate business-effect prevention across Kafka ACK/DB failure via stable `integrationEventId` and Inbox.
 - [ ] Filter DLT technical headers, retain business headers, and handle permanent/poison-message failures.
-- [ ] Add protected manual trigger, monitoring, and optional periodic retry policy.
+- [ ] Add protected manual replay trigger and monitoring; periodic **unlock** scheduling is implemented, but periodic publication of `PENDING` entries is not.
 - [ ] Explicit broker-backed consumer offset/commit failure test and automated Booking Service → Kafka → Event Service E2E.
 
 **Boundary:** DLT recovery testing is not proof of exactly-once publishing, complete broker-backed two-service E2E, or production-safe crash recovery.
