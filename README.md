@@ -48,6 +48,92 @@ Booking Service (Spring MVC + JPA)
 
 The domain and application layers follow **DDD and ports/adapters**. Infrastructure contains HTTP controllers, persistence adapters, messaging adapters and Spring configuration.
 
+## 🔄 Kafka, Dead Letter Topic & Recovery Architecture
+
+EventHub implements an event-driven communication mechanism between **Booking Service** and **Event Service**, using Apache Kafka, the Transactional Outbox pattern, an idempotent Inbox and a persistent Dead Letter Topic (DLT) recovery mechanism.
+
+The architecture is designed to handle message delivery failures, temporary database outages, duplicate messages and concurrent recovery attempts.
+
+### Architecture Diagram
+
+![EventHub Kafka DLT Recovery Architecture](docs/images/kafka-dlt-recovery.png)
+
+### Message Processing Flow
+
+**1. Transactional Outbox — Booking Service**
+
+When a booking is created, the application persists the booking and its integration events within the same local database transaction.
+
+An asynchronous Outbox scheduler publishes the Kafka event to the `booking-created` topic.
+
+**2. Kafka Consumer & Idempotent Inbox — Event Service**
+
+Event Service consumes the integration event and persists its `integrationEventId` in the Inbox.
+
+The Inbox prevents duplicate processing when Kafka redelivers an event.
+
+**3. Dead Letter Topic — Failure Handling**
+
+Failed messages are handled using Spring Kafka's `DefaultErrorHandler`.
+
+After the configured retries are exhausted, `DeadLetterPublishingRecoverer` redirects the message to `booking-created.DLT`.
+
+**4. Persistent DLT Recovery**
+
+`DltRecoveryConsumer` persists failed messages in PostgreSQL's `recovery_events` table, preserving their original Kafka key, payload and headers.
+
+The recovery service supports controlled republication of pending events.
+
+### Recovery State Machine
+
+```text
+                  reprocess()
+                      │
+                      ▼
+    ┌─────────┐    claim + attemptId    ┌────────────┐
+    │ PENDING │ ──────────────────────► │ PROCESSING │
+    └─────────┘                         └────────────┘
+         ▲                                    │
+         │                                    │ Kafka ACK
+         │                                    ▼
+         │                              ┌─────────────┐
+         │                              │ REPUBLISHED │
+         │                              └─────────────┘
+         │
+         └────────────── PROCESSING
+               Kafka publication failure
+               OR processingAt expired (> 5 min)
+```
+
+Recovery operations use **optimistic locking (`@Version`)** and an **`attemptId`** to protect against conflicting updates and stale recovery attempts.
+
+A scheduled process detects events stuck in `PROCESSING` for more than five minutes and returns them to `PENDING`.
+
+The scheduler uses an `AtomicBoolean` to prevent overlapping executions within the same application instance.
+
+Records with inconsistent state, such as `PROCESSING` with a null `processingAt`, are logged and excluded from automatic unlocking.
+
+### Delivery Guarantees
+
+- **At-least-once delivery:** duplicate messages remain possible.
+- **Idempotent Inbox:** protects against repeated processing of the same integration event.
+- **Optimistic locking:** prevents concurrent recovery attempts from silently overwriting each other.
+- **Persistent recovery:** failed messages remain available for subsequent processing.
+- **Scheduled unlocking:** prevents expired `PROCESSING` records from remaining blocked indefinitely.
+- **No distributed transaction:** Kafka publication and PostgreSQL state updates are not atomic.
+
+The scheduler unlocks expired recovery records; it does **not** automatically invoke `reprocess()`. Republication is currently triggered separately.
+
+### Verification
+
+The recovery mechanism is covered by unit and integration tests using **JUnit, Mockito, PostgreSQL Testcontainers, Kafka Testcontainers and Toxiproxy**.
+
+Verified scenarios include successful republication, publication failures, duplicate protection, optimistic locking conflicts, expired processing recovery and scheduler error handling.
+
+**Latest verification:** `mvn verify` — GREEN.
+
+📖 **[Detailed Kafka Architecture & Recovery Documentation](docs/KAFKA.md)**
+
 ## 📍 Current Situation Overview
 
 | Area | Current state | Next concerns |
