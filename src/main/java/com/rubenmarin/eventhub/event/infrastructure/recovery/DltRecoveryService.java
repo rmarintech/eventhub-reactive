@@ -6,10 +6,13 @@ import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.common.header.Headers;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Mono;
 
+import java.time.Instant;
+import java.time.temporal.TemporalUnit;
 import java.util.UUID;
 
 @Service
@@ -30,8 +33,36 @@ public class DltRecoveryService {
         this.kafkaHeadersCodec = kafkaHeadersCodec;
     }
 
-    public Mono<Void> reprocess() {
+    public Mono<Void> unblockExpired() {
+        // PROCESSING → PENDING
+        Instant deadline = Instant.now().minusSeconds(300L);
+        return recoveryRepository.findAllByStatus(RecoveryStatus.PROCESSING)
+                .filter(eventRecoveryEntity -> {
+                    Instant processingAt = eventRecoveryEntity.getProcessingAt();
+                    if (processingAt==null){
+                        log.error("Inconsistent processing at for EventRecoveryEntity {}:" ,  eventRecoveryEntity.getEventRecoveryEntityId());
+                        return false;
+                    }
+                    return processingAt.isBefore(deadline);
+                })
+                .concatMap(eventRecoveryEntity -> {
+                    eventRecoveryEntity.markAsPendingFromProcessing();
+                    return recoveryRepository.save(eventRecoveryEntity)
+                            .onErrorResume(throwable -> {
+                                if (throwable instanceof OptimisticLockingFailureException ex) {
+                                    log.warn("Optimistic Locking Failure", ex);
+                                    return Mono.empty();
+                                }
 
+                                return Mono.error(throwable);
+
+                            });
+                }).then();
+
+    }
+
+    public Mono<Void> reprocess() {
+        //PENDING → PROCESSING → REPUBLISHED
         return recoveryRepository
                 .findAllByStatus(RecoveryStatus.PENDING)
                 .concatMap(eventRecovery -> {
@@ -41,24 +72,19 @@ public class DltRecoveryService {
 
                     return recoveryRepository.save(eventRecovery)
                             .flatMap(eventRecoveryEntity -> {
+                                Headers headers = kafkaHeadersCodec.deserialize(
+                                        eventRecoveryEntity.getHeaders()
+                                );
 
-                                return Mono.defer(() -> {
-
-                                            Headers headers = kafkaHeadersCodec.deserialize(
-                                                    eventRecoveryEntity.getHeaders()
-                                            );
-
-                                            ProducerRecord<String, String> record =
-                                                    new ProducerRecord<>(
-                                                            "booking-created",
-                                                            null,
-                                                            eventRecoveryEntity.getMessageKey(),
-                                                            eventRecoveryEntity.getPayload(),
-                                                            headers
-                                                    );
-
-                                            return Mono.fromFuture(kafkaTemplate.send(record));
-                                        })
+                                ProducerRecord<String, String> record =
+                                        new ProducerRecord<>(
+                                                "booking-created",
+                                                null,
+                                                eventRecoveryEntity.getMessageKey(),
+                                                eventRecoveryEntity.getPayload(),
+                                                headers
+                                        );
+                                return Mono.fromFuture(kafkaTemplate.send(record))
                                         .onErrorResume(ex -> {
                                             log.error("Error publishing to Kafka: {}", ex.getMessage(), ex);
                                             eventRecoveryEntity.markAsPendingFromProcessing();
@@ -68,11 +94,16 @@ public class DltRecoveryService {
                                             eventRecoveryEntity.markAsRepublished(attemptId);
                                             return recoveryRepository.save(eventRecoveryEntity);
                                         });
+                            })
+                            .onErrorResume(throwable -> {
+                                if (throwable instanceof OptimisticLockingFailureException exe) {
+                                    log.warn("Optimistic Locking Failure", exe);
+                                    return Mono.empty();
+                                }
+                                return Mono.error(throwable);
                             });
-
-
                 })
                 .then();
-
     }
+
 }
