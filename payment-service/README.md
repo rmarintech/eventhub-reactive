@@ -1,12 +1,12 @@
 # 💳 EventHub — Payment Service
 
-**Payment Service** será el microservicio responsable del procesamiento de pagos dentro de **EventHub Reactive**, una plataforma distribuida de gestión de eventos y reservas.
+**Payment Service** es el microservicio de pagos de **EventHub Reactive**, una plataforma distribuida de gestión de eventos y reservas. Su dominio y persistencia están implementados; el procesamiento asíncrono de pagos todavía está en desarrollo.
 
 El objetivo es incorporar un tercer *bounded context* y completar el flujo de negocio: **crear evento → solicitar reserva → solicitar pago → confirmar pago → confirmar reserva**. Booking Service actuará como **Saga Orchestrator**; Payment Service gestionará sus propios pagos y publicará el resultado mediante Kafka.
 
-> **Estado:** fase de diseño e inicialización. Las funcionalidades descritas son objetivos de implementación, no capacidades verificadas todavía. El procesamiento del pago se simulará inicialmente, sin pasarela de pagos real.
+> **Estado:** dominio, persistencia, pruebas e idempotencia secuencial implementados. Kafka, Inbox, Outbox y Saga están pendientes. La ejecución del pago será inicialmente simulada, sin pasarela de pagos real.
 
-## Tecnologías previstas
+## Tecnologías: implementadas y previstas
 
 | Área | Tecnología |
 |---|---|
@@ -14,12 +14,21 @@ El objetivo es incorporar un tercer *bounded context* y completar el flujo de ne
 | Arquitectura | DDD, Hexagonal Architecture |
 | Aplicación | Spring MVC |
 | Persistencia | Spring Data JPA, Hibernate, PostgreSQL, Flyway |
-| Mensajería | Apache Kafka, Spring Kafka |
-| Fiabilidad | Transactional Outbox, Idempotent Inbox, Payment Idempotency |
+| Mensajería (pendiente) | Apache Kafka, Spring Kafka |
+| Fiabilidad | Payment Idempotency secuencial implementada; Transactional Outbox e Idempotent Inbox pendientes |
 | Pruebas | JUnit, Mockito, Testcontainers |
 | Infraestructura | Docker Compose |
 
-## Responsabilidades
+## Funcionalidad implementada
+
+- Modelo de dominio `Payment`: estados `PENDING`, `COMPLETED` y `FAILED`, transiciones protegidas y Value Objects (`PaymentId`, `PaymentRequestId`, `BookingId`, `Money`).
+- `CreatePaymentUseCase` y `CreatePaymentService`, con idempotencia secuencial por `PaymentRequestId` y detección de conflictos si cambian los datos.
+- Persistencia con Spring Data JPA/Hibernate, PostgreSQL y migraciones Flyway. La columna `payment_request_id` tiene restricción `UNIQUE`.
+- Unit tests e integration tests con JUnit, Mockito y Testcontainers.
+
+**Limitación conocida:** dos solicitudes simultáneas con el mismo `PaymentRequestId` pueden competir por el `INSERT`. PostgreSQL impide crear pagos duplicados, pero una petición puede fallar con `DataIntegrityViolationException` en vez de recuperar el pago existente. El test del comportamiento concurrente deseado está deshabilitado y documentado.
+
+## Responsabilidades previstas
 
 Payment Service recibirá solicitudes `PaymentRequested`, registrará y procesará pagos simulados, y emitirá `PaymentCompleted` o `PaymentFailed`. No modificará reservas ni accederá a bases de datos de otros microservicios.
 
@@ -38,11 +47,13 @@ payment-service/
 ├── docs/
 │   ├── ARCHITECTURE.md
 │   └── ROADMAP.md
-├── pom.xml                 # cuando se inicialice
-└── src/                    # cuando se inicialice
+├── pom.xml
+└── src/
+    ├── main/
+    └── test/
 ```
 
-El código se incorporará progresivamente, empezando por el dominio `Payment` y sus tests.
+El siguiente incremento previsto es implementar `Idempotent Inbox`, procesar `PaymentRequested` y persistir el resultado mediante `Transactional Outbox`, antes de conectar la Saga.
 
 ## Ecosistema EventHub
 

@@ -1,6 +1,8 @@
 # 🏗️ Payment Service — Arquitectura y diseño técnico
 
-> **Documento de diseño, no descripción de una implementación existente.** La primera versión simulará el procesamiento del pago; no se almacenarán credenciales ni datos de tarjetas.
+> **Documento mixto:** recoge componentes ya implementados (dominio, persistencia e idempotencia secuencial) y la arquitectura prevista para Kafka, Inbox, Outbox y Saga. El procesamiento de pagos seguirá siendo simulado; no se almacenarán credenciales ni datos de tarjetas.
+
+**Implementado y probado:** agregado `Payment`, Value Objects, transiciones de estado, `CreatePaymentUseCase`/`CreatePaymentService`, `PaymentRepository`, adaptador JPA, PostgreSQL, Flyway, restricción `UNIQUE(payment_request_id)`, unit tests y integration tests con Testcontainers. **Pendiente:** Inbox/Outbox, consumidores/productores Kafka, Saga y tratamiento de colisiones concurrentes.
 
 ## 1. Contextos y responsabilidades
 
@@ -52,16 +54,16 @@ Booking Service (Inbox de resultados)
 
 **Aggregate Root:** `Payment`.
 
-Atributos propuestos:
+Atributos implementados:
 
 - `PaymentId`: identidad del pago.
 - `PaymentRequestId`: identidad estable de la operación de pago (idempotencia de negocio).
 - `BookingId`: reserva que originó la solicitud.
-- `Amount` + `Currency`: valor monetario; importe con `BigDecimal`.
+- `Money`: Value Object con `BigDecimal amount` y `Currency currency`; importe estrictamente positivo y moneda obligatoria.
 - `PaymentStatus`: `PENDING`, `COMPLETED`, `FAILED`.
-- Fechas de creación y resolución, según lo requieran los casos de uso.
+- Fechas de creación y resolución: pendientes si los casos de uso las requieren.
 
-Transiciones propuestas:
+Transiciones implementadas:
 
 ```text
                  create()
@@ -74,7 +76,7 @@ Transiciones propuestas:
          COMPLETED   FAILED
 ```
 
-Los estados terminales no deberían cambiar mediante las operaciones normales. Las reglas concretas (importe cero, reintentos de pago, fallos técnicos frente a rechazo de negocio) se decidirán y cubrirán con tests antes de implementarse.
+El agregado impide transiciones desde estados terminales a través de `markAsCompleted()` y `markAsFailed()`. `Money` rechaza importes nulos, cero o negativos y divisas nulas. La simulación del resultado del pago, los reintentos y la distinción entre fallo técnico y rechazo de negocio siguen pendientes.
 
 ## 4. Saga Orchestration
 
@@ -105,6 +107,8 @@ amount / currency      # datos necesarios para procesar el pago
 
 ## 6. Idempotent Inbox vs Payment Idempotency
 
+**Estado:** `Payment Idempotency` secuencial ya implementada y probada. El `Idempotent Inbox` todavía no está implementado.
+
 **Inbox:** evita volver a ejecutar el procesamiento de un `integrationEventId` ya registrado. Requiere restricción única en PostgreSQL y manejo correcto de carreras entre consumidores.
 
 **Payment Idempotency:** evita procesar dos veces la **misma solicitud lógica**, aunque lleguen dos eventos con diferentes `integrationEventId`.
@@ -116,6 +120,10 @@ PaymentRequested(eventId=B, paymentRequestId=123)
 Inbox: A y B son mensajes distintos
 Payment: 123 representa una única operación
 ```
+
+En el estado actual, `CreatePaymentService` consulta por `paymentRequestId`: devuelve el pago existente si coinciden `bookingId`, importe numérico y divisa; en caso contrario lanza `PaymentIdempotencyConflictException`. PostgreSQL impone `UNIQUE` sobre `payment_request_id`.
+
+**Limitación conocida:** si dos peticiones idénticas llegan al mismo tiempo, ambas pueden consultar antes del primer `INSERT`; una inserción prospera y la otra puede fallar con `DataIntegrityViolationException`. Un test de integración reprodujo este comportamiento; el test de la respuesta concurrente deseada permanece deshabilitado con `@Disabled`. Se deberá recuperar el pago ganador desde una transacción válida y validar la causa concreta de la colisión antes de considerar la operación plenamente idempotente.
 
 El registro Inbox, la persistencia del pago y el Outbox del resultado deben pertenecer a **una transacción local**. Un simple `existsById()` previo no basta como protección concurrente; se necesitarán restricciones únicas y tratamiento de conflictos.
 
@@ -146,7 +154,11 @@ La garantía práctica buscada es **at-least-once**, no exactly-once a través d
 - **Reserva de capacidad REST:** necesita identidad idempotente por operación para resistir reintentos y respuestas perdidas.
 - **Múltiples instancias:** no depender únicamente de locks en memoria para coordinar trabajo distribuido.
 
-## 9. Hexagonal Architecture prevista
+## 9. Hexagonal Architecture: implementado y previsto
+
+**Implementado:** `CreatePaymentUseCase` → `CreatePaymentService` → `PaymentRepository` (puerto de salida) → `JpaPaymentRepositoryAdapter`/`SpringDataPaymentRepository` → PostgreSQL. `PaymentMapper` transforma entre dominio y entidad JPA.
+
+**Previsto para la integración Kafka:**
 
 ```text
 infrastructure/adapter/in/kafka   → PaymentRequestedConsumer
@@ -176,7 +188,7 @@ El dominio no dependerá de Spring, JPA o Kafka. Los contratos y adapters se int
 - **Kafka integration:** redelivery, eventos duplicados, fallos del relay y reintentos con Kafka Testcontainers.
 - **E2E Saga:** pago correcto → reserva confirmada; pago fallido → reserva cancelada + plaza liberada; caída temporal de dependencias y reconciliación.
 
-**Estado de pruebas:** pendientes de desarrollo para Payment Service.
+**Estado de pruebas:** realizados unit tests del agregado, Value Objects, mapper y servicio de aplicación; integration tests con PostgreSQL/Testcontainers para persistencia, restricciones e idempotencia secuencial. La colisión concurrente está reproducida y documentada; el test que exige que ambas solicitudes terminen con éxito está deshabilitado. Pendientes las pruebas Inbox/Outbox, Kafka y E2E Saga.
 
 ## 11. Relación con el trabajo existente
 
