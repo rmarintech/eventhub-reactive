@@ -1,6 +1,6 @@
 # EventHub Reactive
 
-EventHub is a backend portfolio project for **event management and bookings**, built with **Java 21, Spring Boot 4.1, DDD and Hexagonal Architecture**. It deliberately combines a reactive Event Service with an imperative Booking Service to explore both programming models. **React and TypeScript are planned, not implemented.**
+EventHub is a backend portfolio project for **event management, bookings and payments**, built with **Java 21, Spring Boot 4.1, DDD and Hexagonal Architecture**. It combines a reactive Event Service with imperative Booking and Payment services. **Payment Service domain and PostgreSQL persistence are implemented; its Kafka integration and the distributed payment Saga are still planned.** React and TypeScript are planned, not implemented.
 
 ## 🎯 Project Goal
 
@@ -15,6 +15,7 @@ The project intentionally uses **reactive** and **imperative** Spring applicatio
 | Core | Java 21, Spring Boot 4.1, Maven |
 | Event Service | Spring WebFlux, Project Reactor, Spring Data R2DBC |
 | Booking Service | Spring MVC, Spring Data JPA, Hibernate, Flyway |
+| Payment Service | Spring MVC, Spring Data JPA, Hibernate, Flyway |
 | Data | PostgreSQL 17 |
 | API and integration | REST, OpenAPI, Spring RestClient, Spring Kafka, Spring JMS, IBM MQ |
 | Reliability | Transactional Outbox, persistent Inbox, optimistic locking, synchronous compensation, Resilience4j |
@@ -25,10 +26,15 @@ Additional technologies and planned work are tracked in the [roadmap](docs/ROADM
 
 ## 🏗️ Architecture Overview
 
-| Component | Responsibilities | Programming model |
-| --- | --- | --- |
-| **Event Service** (`:8080`) | Event lifecycle, capacity management, Kafka consumption and deduplication | Reactive: WebFlux / Reactor / R2DBC |
-| **Booking Service** (`:8081`) | Booking lifecycle, capacity orchestration, persistence, asynchronous publication | Imperative: Spring MVC / JPA |
+EventHub now contains **three independent Spring Boot services**. Payment Service is already present with a tested domain model and JPA/PostgreSQL persistence; the payment messaging flow shown below is the **target architecture**, not a completed integration.
+
+| Component | Responsibilities | Programming model | Status |
+| --- | --- | --- | --- |
+| **Event Service** (`:8080`) | Event lifecycle, capacity management, Kafka consumption and deduplication | Reactive: WebFlux / Reactor / R2DBC | ✅ Implemented |
+| **Booking Service** (`:8081`) | Booking lifecycle, capacity reservation and compensation, Outbox publication | Imperative: Spring MVC / JPA | ✅ Existing booking flow |
+| **Payment Service** (`:8082`) | Payment aggregate, payment persistence; future payment-request processing and result publication | Imperative: Spring MVC / JPA | 🟡 Domain and persistence implemented; Kafka integration pending |
+
+### Existing integration flow — Event + Booking
 
 ```text
 Client
@@ -44,7 +50,48 @@ Booking Service (Spring MVC + JPA)
                                        BOOKING.BACKOUT.Q
 ```
 
-**Integration boundaries:** REST reserve/release handles business capacity. The Booking Service creates **two broker-specific Outbox records** (`KAFKA` and `IBMMQ`) together with the Booking in one local PostgreSQL transaction; independent schedulers publish the same integration-event payload (including one shared `integrationEventId`) to Kafka and IBM MQ. Neither consumer reserves capacity again. **The two external broker deliveries are not atomic** and may be duplicated.
+**Existing guarantees:** Booking creation and its two broker-specific Outbox records (`KAFKA`, `IBMMQ`) share one local PostgreSQL transaction. Broker publication is asynchronous, independent and **at least once**; duplicate deliveries are possible. The current booking flow is **not yet conditional on payment confirmation**.
+
+### Planned integration flow — Booking + Payment Saga
+
+```text
+Client
+  | 1. Create / publish event
+  v
+Event Service (:8080)
+  ^
+  | 3. Reserve capacity (REST)           8b. Release capacity on payment failure
+  |                                                ^
+  +--------------- Booking Service (:8081) --------+
+                       ^    |
+  2. Create booking -->|    | 4. Booking PENDING + PaymentRequested Outbox
+                            v
+                           Kafka  [PLANNED PAYMENT FLOW]
+                            |
+                            | 5. PaymentRequested
+                            v
+                     Payment Service (:8082)
+                     Inbox + Payment + Outbox
+                            |
+                            | 6. PaymentCompleted / PaymentFailed
+                            v
+                           Kafka
+                            |
+                            v
+                     Booking Service Inbox
+                            |
+                +-----------+-----------+
+                |                       |
+       7a. Payment success       7b. Payment failure
+       Booking CONFIRMED          Booking CANCELLED
+                                  + capacity release
+```
+
+**Saga design (planned):** Booking Service coordinates the workflow. It reserves capacity and creates a `PENDING` booking, then requests payment asynchronously. Payment Service processes `PaymentRequested` and emits `PaymentCompleted` or `PaymentFailed`; Booking Service confirms the booking or compensates by releasing capacity. The design will use a transactional Inbox/Outbox on the payment path, a stable `paymentRequestId` for business idempotency, and local transactions rather than distributed ACID.
+
+**Implementation boundary:** `Payment`, `PaymentId`, `BookingId`, `PaymentRequestId`, `Money`, `CreatePaymentUseCase`, the JPA adapter, Flyway migration, and PostgreSQL/Testcontainers tests have been implemented and reported green. **Kafka payment consumers, payment-result producers, the Booking Saga coordinator and cross-service payment E2E tests have not yet been implemented.**
+
+See [Payment Service README](payment-service/README.md), [Payment Architecture](payment-service/docs/ARCHITECTURE.md) and [Payment Roadmap](payment-service/docs/ROADMAP.md).
 
 The domain and application layers follow **DDD and ports/adapters**. Infrastructure contains HTTP controllers, persistence adapters, messaging adapters and Spring configuration.
 
@@ -139,7 +186,9 @@ Verified scenarios include successful republication, publication failures, dupli
 | Area | Current state | Next concerns |
 | --- | --- | --- |
 | **Event Service** | ✅ WebFlux/R2DBC, Event lifecycle, optimistic capacity management | Broader automated cross-service failure tests |
-| **Booking Service** | ✅ Spring MVC/JPA, API-first booking flow, Flyway, transactional persistence | Durable distributed reconciliation |
+| **Booking Service** | ✅ Spring MVC/JPA, API-first booking flow, Flyway, transactional persistence | Adapt booking lifecycle for payment Saga |
+| **Payment Service** | 🟡 Payment domain, Money/identity value objects, CreatePayment use case, JPA/PostgreSQL and Testcontainers integration tests | Kafka PaymentRequested consumer, transactional Inbox/Outbox and payment-result publication |
+| **Payment Saga** | ⬜ Planned; not yet connected to Booking Service | Orchestration, payment confirmation, compensation, business idempotency and E2E tests |
 | **REST integration** | ✅ Capacity reservation/release and best-effort compensation; resilience for availability reads | Robust handling of ambiguous remote outcomes |
 | **Kafka** | ✅ Transactional Outbox/Inbox, DLT persistence, PostgreSQL-outage retries and manually triggered DLT replay with key/payload/headers (Testcontainers + Toxiproxy) | Multi-instance recovery coordination, offset-commit and complete two-service E2E tests |
 | **IBM MQ** | ✅ Broker-specific Transactional Outbox relay, JMS consumer + JPA Inbox, rollback/backout, broker-backed Testcontainers tests | Full failure-path automation and relay coordination |
@@ -230,7 +279,7 @@ Successful local Booking + Outbox commit does not guarantee instant Kafka delive
 
 ## ⚙️ Running Locally
 
-The project contains two independently run Spring Boot services and separate local infrastructure. Karate E2E API tests in `booking-service` require both services reachable at their configured base URLs (normally `http://localhost:8081` and `http://localhost:8080`); these values are supplied by `src/test/resources/karate-config.js`. Configuration and prerequisites vary by service; consult the relevant module setup and documentation before starting. Infrastructure examples:
+The project contains three independently run Spring Boot services (the third, Payment Service, is under development) and separate local infrastructure. The existing Karate E2E API tests in `booking-service` require Event and Booking services reachable at their configured base URLs (normally `http://localhost:8081` and `http://localhost:8080`); these values are supplied by `src/test/resources/karate-config.js`. Payment Service runs on `http://localhost:8082` and uses a separate PostgreSQL database (`paymentdb`, local port `5434`). Payment-to-Booking Kafka integration is not yet available. Configuration and prerequisites vary by service; consult the relevant module setup and documentation before starting. Infrastructure examples:
 
 ```powershell
 docker compose -f compose.kafka.yaml up -d
@@ -259,10 +308,13 @@ Use local environment variables for credentials; do not commit real secrets. **D
 | Spring JMS, redelivery and Backout Queue | [IBM MQ](docs/IBMMQ.md) |
 | Karate API end-to-end testing | [Karate E2E Testing](docs/KARATE_E2E_TESTING.md) |
 | Completed and pending work | [Roadmap](docs/ROADMAP.md) |
+| Payment Service overview | [Payment README](payment-service/README.md) |
+| Payment domain, Saga design and integration boundaries | [Payment Architecture](payment-service/docs/ARCHITECTURE.md) |
+| Payment implementation milestones | [Payment Roadmap](payment-service/docs/ROADMAP.md) |
 
 ## 🗺️ Roadmap
 
-The [roadmap](docs/ROADMAP.md) separates completed work from planned features, including Kafka broker-backed failure-path/offset tests and DLT recovery, stronger IBM MQ failure-path automation, frontend development and deployment topics. The Git commit history records *when* the work was performed.
+The [roadmap](docs/ROADMAP.md) separates completed work from planned features, including Kafka broker-backed failure-path/offset tests, stronger IBM MQ failure-path automation, the new Payment Service and planned payment Saga, frontend development and deployment topics. The Git commit history records *when* the work was performed.
 
 ## 👨‍💻 Author
 
