@@ -1,4 +1,4 @@
-package com.rubenmarin.paymentservice.infrastructure.adapter.out.persistence;
+package com.rubenmarin.paymentservice.infrastructure.adapter.out.persistence.jpa.payment;
 
 import com.rubenmarin.paymentservice.application.port.out.PaymentRepository;
 import com.rubenmarin.paymentservice.domain.model.*;
@@ -11,7 +11,6 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.postgresql.PostgreSQLContainer;
-import org.testcontainers.shaded.org.yaml.snakeyaml.constructor.DuplicateKeyException;
 
 import java.math.BigDecimal;
 import java.util.Currency;
@@ -35,14 +34,9 @@ class JpaPaymentRepositoryAdapterIT {
         PaymentRequestId paymentRequestId = PaymentRequestId.generatePaymentRequestId();
         Money money = new Money(new BigDecimal("47.77"), Currency.getInstance("EUR"));
 
-
         Payment payment = Payment.create(bookingId, paymentRequestId, money);
-
         Payment saved = paymentRepository.save(payment);
-
-        Payment retrieved = paymentRepository
-                .findById(saved.getPaymentId())
-                .orElseThrow();
+        Payment retrieved = paymentRepository.findById(saved.getPaymentId()).orElseThrow();
 
         Assertions.assertEquals(payment.getPaymentId(), retrieved.getPaymentId());
         Assertions.assertEquals(payment.getPaymentRequestId(), retrieved.getPaymentRequestId());
@@ -61,9 +55,9 @@ class JpaPaymentRepositoryAdapterIT {
         Money money = new Money(new BigDecimal("47.77"), Currency.getInstance("EUR"));
 
         Payment payment = Payment.create(bookingId, paymentRequestId, money);
-
         Payment saved = paymentRepository.save(payment);
         Payment retrieved = paymentRepository.findById(payment.getPaymentId()).orElseThrow();
+
         Assertions.assertEquals(payment.getPaymentId(), retrieved.getPaymentId());
         Assertions.assertEquals(PaymentStatus.PENDING, retrieved.getPaymentStatus());
 
@@ -78,7 +72,7 @@ class JpaPaymentRepositoryAdapterIT {
     }
 
     @Test
-    void shouldRejectDuplicatePaymentRequestId(){
+    void shouldRejectDuplicatePaymentRequestId() {
 
         BookingId booking1Id = BookingId.generateBookingId();
         BookingId booking2Id = BookingId.generateBookingId();
@@ -91,12 +85,14 @@ class JpaPaymentRepositoryAdapterIT {
 
         Payment saved = paymentRepository.save(payment1);
 
-        Assertions.assertThrows(DataIntegrityViolationException.class, () -> {paymentRepository.save(payment2);});
+        Assertions.assertThrows(DataIntegrityViolationException.class, () -> {
+            paymentRepository.save(payment2);
+        });
 
     }
 
     @Test
-    void shouldPreserveMoneyAmountAndCurrency(){
+    void shouldPreserveMoneyAmountAndCurrency() {
 
         BookingId bookingId = BookingId.generateBookingId();
         PaymentRequestId paymentRequestId = PaymentRequestId.generatePaymentRequestId();

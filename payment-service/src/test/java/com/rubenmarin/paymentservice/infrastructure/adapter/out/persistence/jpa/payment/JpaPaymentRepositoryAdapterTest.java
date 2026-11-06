@@ -1,4 +1,4 @@
-package com.rubenmarin.paymentservice.infrastructure.adapter.out.persistence;
+package com.rubenmarin.paymentservice.infrastructure.adapter.out.persistence.jpa.payment;
 
 import com.rubenmarin.paymentservice.domain.model.*;
 import org.junit.jupiter.api.Assertions;
@@ -13,7 +13,6 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.math.BigDecimal;
 import java.util.Currency;
 import java.util.Optional;
-import java.util.UUID;
 
 @ExtendWith(MockitoExtension.class)
 class JpaPaymentRepositoryAdapterTest {
@@ -81,9 +80,7 @@ class JpaPaymentRepositoryAdapterTest {
 
         // Simular que Spring Data JPA devuelve la entidad persistida.
         // thenAnswer() devuelve el mismo argumento recibido por save().
-        Mockito.when(springDataPaymentRepository.save(
-                        Mockito.any(PaymentJpaEntity.class)
-                ))
+        Mockito.when(springDataPaymentRepository.save(Mockito.any(PaymentJpaEntity.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
 
         // WHEN: guardar el pago a través del adaptador.
@@ -141,8 +138,7 @@ class JpaPaymentRepositoryAdapterTest {
         Assertions.assertEquals(paymentRequestId, foundPayment.getPaymentRequestId());
         Assertions.assertEquals(paymentId, foundPayment.getPaymentId());
 
-        Mockito.verify(springDataPaymentRepository)
-                .findByPaymentRequestId(paymentRequestId.paymentRequestId());
+        Mockito.verify(springDataPaymentRepository).findByPaymentRequestId(paymentRequestId.paymentRequestId());
 
     }
 

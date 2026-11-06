@@ -1,4 +1,4 @@
-package com.rubenmarin.paymentservice.infrastructure.adapter.out.persistence;
+package com.rubenmarin.paymentservice.infrastructure.adapter.out.persistence.jpa.payment;
 
 import com.rubenmarin.paymentservice.application.port.out.PaymentRepository;
 import com.rubenmarin.paymentservice.domain.model.Payment;
