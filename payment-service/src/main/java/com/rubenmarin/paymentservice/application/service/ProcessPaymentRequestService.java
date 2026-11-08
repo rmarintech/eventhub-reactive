@@ -37,6 +37,10 @@ public class ProcessPaymentRequestService implements ProcessPaymentRequestUseCas
         Instant receivedAt = Instant.now();
         InboxEvent inboxEvent = new InboxEvent(integrationEventId , receivedAt);
 
+        // Inbox register event for creating payment request
+        // Create Payment Request
+        // Outbox payment Request created
+
         boolean registeredAsNew = inboxRepository.register(inboxEvent);
         if (registeredAsNew) {
             BookingId bookingId = processPaymentRequestCommand.bookingId();

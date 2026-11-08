@@ -2,7 +2,6 @@ package com.rubenmarin.paymentservice.infrastructure.adapter.out.persistence.jpa
 
 import com.rubenmarin.paymentservice.application.model.InboxEvent;
 import com.rubenmarin.paymentservice.application.port.out.InboxRepository;
-import com.rubenmarin.paymentservice.domain.model.Payment;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -94,7 +93,6 @@ class JpaInboxRepositoryAdapterIT {
 
             Future<Boolean> future1 = executorService.submit(task1);
             Future<Boolean> future2 = executorService.submit(task2);
-
 
             // Liberar los dos hilos después de enviar ambas tareas.
             startLatch.countDown();

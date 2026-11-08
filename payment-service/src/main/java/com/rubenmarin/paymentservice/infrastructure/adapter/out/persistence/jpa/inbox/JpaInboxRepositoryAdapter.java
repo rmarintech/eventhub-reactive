@@ -2,8 +2,6 @@ package com.rubenmarin.paymentservice.infrastructure.adapter.out.persistence.jpa
 
 import com.rubenmarin.paymentservice.application.model.InboxEvent;
 import com.rubenmarin.paymentservice.application.port.out.InboxRepository;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.time.Instant;
 import java.util.UUID;
