@@ -1,6 +1,7 @@
 package com.rubenmarin.paymentservice.infrastructure.adapter.out.persistence.jpa.outbox;
 
 import com.rubenmarin.paymentservice.application.model.OutboxEvent;
+import com.rubenmarin.paymentservice.application.model.OutboxEventId;
 import com.rubenmarin.paymentservice.application.model.OutboxEventStatus;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -28,6 +29,7 @@ class JpaOutboxRepositoryAdapterTest {
 
         // Given
         OutboxEvent outboxEvent = OutboxEvent.pending(
+                OutboxEventId.generate(),
                 UUID.randomUUID().toString(),
                 "PaymentCompleted",
                 UUID.randomUUID(),
@@ -56,7 +58,7 @@ class JpaOutboxRepositoryAdapterTest {
 
         OutboxJpaEntity capturedEntity = captor.getValue();
 
-        Assertions.assertEquals(outboxEvent.id().id(), capturedEntity.getId());
+        Assertions.assertEquals(outboxEvent.id().outboxEventId(), capturedEntity.getId());
         Assertions.assertEquals(outboxEvent.messageKey(), capturedEntity.getMessageKey());
         Assertions.assertEquals(outboxEvent.eventType(), capturedEntity.getEventType());
         Assertions.assertEquals(outboxEvent.aggregateId(), capturedEntity.getAggregateId());
@@ -72,6 +74,7 @@ class JpaOutboxRepositoryAdapterTest {
 
         // Given
         OutboxEvent olderEvent = OutboxEvent.pending(
+                OutboxEventId.generate(),
                 "booking-1",
                 "PaymentCompleted",
                 UUID.randomUUID(),
@@ -80,6 +83,7 @@ class JpaOutboxRepositoryAdapterTest {
         );
 
         OutboxEvent newerEvent = OutboxEvent.pending(
+                OutboxEventId.generate(),
                 "booking-2",
                 "PaymentFailed",
                 UUID.randomUUID(),

@@ -23,7 +23,7 @@ public class OutboxMapper {
 
     public static OutboxJpaEntity toEntity(OutboxEvent outboxEvent) {
         return new OutboxJpaEntity(
-                outboxEvent.id().id(),
+                outboxEvent.id().outboxEventId(),
                 outboxEvent.messageKey(),
                 outboxEvent.eventType(),
                 outboxEvent.aggregateId(),

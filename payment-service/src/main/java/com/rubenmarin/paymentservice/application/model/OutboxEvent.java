@@ -55,6 +55,7 @@ public record OutboxEvent(
 
 
     public static OutboxEvent pending(
+            OutboxEventId id,
             String messageKey,
             String eventType,
             UUID aggregateId,
@@ -62,7 +63,7 @@ public record OutboxEvent(
             String payload) {
 
         return new OutboxEvent(
-                new OutboxEventId(UUID.randomUUID()),
+                id,
                  messageKey,
                 eventType,
                 aggregateId,

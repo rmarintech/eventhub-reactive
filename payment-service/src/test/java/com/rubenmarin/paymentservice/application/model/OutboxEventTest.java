@@ -16,6 +16,7 @@ class OutboxEventTest {
     void shouldCreatePendingOutboxEvent() {
 
         // Given
+        OutboxEventId id = OutboxEventId.generate();
         UUID aggregateId = UUID.randomUUID();
         String messageKey = UUID.randomUUID().toString();
         String eventType = "PaymentCompleted";
@@ -29,6 +30,7 @@ class OutboxEventTest {
 
         // When
         OutboxEvent outboxEvent = OutboxEvent.pending(
+                id,
                 messageKey,
                 eventType,
                 aggregateId,
@@ -38,7 +40,7 @@ class OutboxEventTest {
 
         // Then
         Assertions.assertNotNull(outboxEvent.id());
-        Assertions.assertNotNull(outboxEvent.id().id());
+        Assertions.assertNotNull(outboxEvent.id().outboxEventId());
 
         Assertions.assertEquals(OutboxEventStatus.PENDING, outboxEvent.status());
 
@@ -56,6 +58,7 @@ class OutboxEventTest {
     void shouldMarkPendingOutboxEventAsPublished() {
 
         // Given
+        OutboxEventId id = OutboxEventId.generate();
         UUID aggregateId = UUID.randomUUID();
         String messageKey = UUID.randomUUID().toString();
         String eventType = "PaymentCompleted";
@@ -68,6 +71,7 @@ class OutboxEventTest {
                 """.formatted(aggregateId);
 
         OutboxEvent pendingEvent = OutboxEvent.pending(
+                id,
                 messageKey,
                 eventType,
                 aggregateId,
@@ -105,6 +109,7 @@ class OutboxEventTest {
     void shouldRejectPublishingAlreadyPublishedOutboxEvent() {
 
         // Given
+        OutboxEventId id = OutboxEventId.generate();
         UUID aggregateId = UUID.randomUUID();
         String messageKey = UUID.randomUUID().toString();
         String eventType = "PaymentCompleted";
@@ -117,6 +122,7 @@ class OutboxEventTest {
                 """.formatted(aggregateId);
 
         OutboxEvent pendingEvent = OutboxEvent.pending(
+                id,
                 messageKey,
                 eventType,
                 aggregateId,
@@ -141,6 +147,7 @@ class OutboxEventTest {
     @MethodSource("invalidNullFields")
     void shouldRejectNullRequiredFields(
             String scenario,
+            OutboxEventId id,
             String messageKey,
             String eventType,
             UUID aggregateId,
@@ -151,6 +158,7 @@ class OutboxEventTest {
         Assertions.assertThrows(
                 NullPointerException.class,
                 () -> OutboxEvent.pending(
+                        id,
                         messageKey,
                         eventType,
                         aggregateId,
@@ -162,12 +170,15 @@ class OutboxEventTest {
 
     static Stream<Arguments> invalidNullFields() {
         UUID aggregateId = UUID.randomUUID();
+        OutboxEventId outboxEventId = OutboxEventId.generate();
+
         return Stream.of(
-                Arguments.of("Null messageKey", null, "PaymentCompleted", aggregateId, "payment-completed", "{}"),
-                Arguments.of("Null eventType", "booking-123", null, aggregateId, "payment-completed", "{}"),
-                Arguments.of("Null aggregateId", "booking-123", "PaymentCompleted", null, "payment-completed", "{}"),
-                Arguments.of("Null topic", "booking-123", "PaymentCompleted", aggregateId, null, "{}"),
-                Arguments.of("Null payload", "booking-123", "PaymentCompleted", aggregateId, "payment-completed", null)
+                Arguments.of("Null OutboxEventId", null, "booking-123", "PaymentCompleted", aggregateId, "payment-completed", "{}"),
+                Arguments.of("Null messageKey", outboxEventId, null, "PaymentCompleted", aggregateId, "payment-completed", "{}"),
+                Arguments.of("Null eventType", outboxEventId, "booking-123", null, aggregateId, "payment-completed", "{}"),
+                Arguments.of("Null aggregateId", outboxEventId, "booking-123", "PaymentCompleted", null, "payment-completed", "{}"),
+                Arguments.of("Null topic", outboxEventId, "booking-123", "PaymentCompleted", aggregateId, null, "{}"),
+                Arguments.of("Null payload", outboxEventId, "booking-123", "PaymentCompleted", aggregateId, "payment-completed", null)
         );
     }
 
@@ -183,6 +194,7 @@ class OutboxEventTest {
         Assertions.assertThrows(
                 IllegalArgumentException.class,
                 () -> OutboxEvent.pending(
+                        OutboxEventId.generate(),
                         messageKey,
                         eventType,
                         UUID.randomUUID(),

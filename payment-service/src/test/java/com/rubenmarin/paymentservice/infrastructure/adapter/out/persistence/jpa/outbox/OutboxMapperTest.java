@@ -18,6 +18,7 @@ class OutboxMapperTest {
         UUID aggregateId = UUID.randomUUID();
 
         OutboxEvent outboxEvent = OutboxEvent.pending(
+                OutboxEventId.generate(),
                 "booking-123",
                 "PaymentCompleted",
                 aggregateId,
@@ -34,7 +35,7 @@ class OutboxMapperTest {
         OutboxJpaEntity entity = OutboxMapper.toEntity(outboxEvent);
 
         // Then
-        Assertions.assertEquals(outboxEvent.id().id(), entity.getId());
+        Assertions.assertEquals(outboxEvent.id().outboxEventId(), entity.getId());
         Assertions.assertEquals(outboxEvent.messageKey(), entity.getMessageKey());
         Assertions.assertEquals(outboxEvent.eventType(), entity.getEventType());
         Assertions.assertEquals(outboxEvent.aggregateId(), entity.getAggregateId());
@@ -90,6 +91,7 @@ class OutboxMapperTest {
 
         // Given
         OutboxEvent publishedEvent = OutboxEvent.pending(
+                OutboxEventId.generate(),
                 "booking-123",
                 "PaymentCompleted",
                 UUID.randomUUID(),

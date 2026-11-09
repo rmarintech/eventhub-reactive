@@ -1,6 +1,7 @@
 package com.rubenmarin.paymentservice.infrastructure.adapter.out.persistence.jpa.outbox;
 
 import com.rubenmarin.paymentservice.application.model.OutboxEvent;
+import com.rubenmarin.paymentservice.application.model.OutboxEventId;
 import com.rubenmarin.paymentservice.application.model.OutboxEventStatus;
 import com.rubenmarin.paymentservice.application.port.out.OutboxRepository;
 import org.junit.jupiter.api.Assertions;
@@ -37,6 +38,7 @@ class JpaOutboxRepositoryAdapterIT {
 
         // Given
         OutboxEvent event = OutboxEvent.pending(
+                OutboxEventId.generate(),
                 UUID.randomUUID().toString(),
                 "PaymentCompleted",
                 UUID.randomUUID(),
@@ -52,11 +54,11 @@ class JpaOutboxRepositoryAdapterIT {
         OutboxEvent savedEvent = outboxRepository.save(event);
 
         OutboxJpaEntity persisted = springDataOutboxRepository
-                .findById(savedEvent.id().id())
+                .findById(savedEvent.id().outboxEventId())
                 .orElseThrow();
 
         // Then
-        Assertions.assertEquals(event.id().id(), persisted.getId());
+        Assertions.assertEquals(event.id().outboxEventId(), persisted.getId());
         Assertions.assertEquals(event.messageKey(), persisted.getMessageKey());
         Assertions.assertEquals(event.eventType(), persisted.getEventType());
         Assertions.assertEquals(event.aggregateId(), persisted.getAggregateId());
@@ -77,6 +79,7 @@ class JpaOutboxRepositoryAdapterIT {
 
         // Given
         OutboxEvent pendingEvent = OutboxEvent.pending(
+                OutboxEventId.generate(),
                 UUID.randomUUID().toString(),
                 "PaymentCompleted",
                 UUID.randomUUID(),
@@ -92,11 +95,11 @@ class JpaOutboxRepositoryAdapterIT {
         outboxRepository.save(publishedEvent);
 
         OutboxJpaEntity persisted = springDataOutboxRepository
-                .findById(pendingEvent.id().id())
+                .findById(pendingEvent.id().outboxEventId())
                 .orElseThrow();
 
         // Then
-        Assertions.assertEquals(pendingEvent.id().id(), persisted.getId());
+        Assertions.assertEquals(pendingEvent.id().outboxEventId(), persisted.getId());
         Assertions.assertEquals(OutboxEventStatus.PUBLISHED, persisted.getStatus());
         Assertions.assertNotNull(persisted.getPublishedAt());
 
@@ -122,7 +125,7 @@ class JpaOutboxRepositoryAdapterIT {
     void shouldFindPendingEventsOrderedByCreatedAt() {
 
         // Given
-        OffsetDateTime baseTime = OffsetDateTime.now()                .truncatedTo(ChronoUnit.MICROS);
+        OffsetDateTime baseTime = OffsetDateTime.now().truncatedTo(ChronoUnit.MICROS);
 
         OutboxEvent olderEvent = new OutboxEvent(
                 new com.rubenmarin.paymentservice.application.model.OutboxEventId(UUID.randomUUID()),
@@ -149,6 +152,7 @@ class JpaOutboxRepositoryAdapterIT {
         );
 
         OutboxEvent publishedEvent = OutboxEvent.pending(
+                OutboxEventId.generate(),
                 UUID.randomUUID().toString(),
                 "PaymentCompleted",
                 UUID.randomUUID(),
