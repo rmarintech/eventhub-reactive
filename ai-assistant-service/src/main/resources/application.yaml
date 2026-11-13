@@ -1,0 +1,16 @@
+spring:
+  application:
+    name: ai-assistant-service
+
+  profiles:
+    active: dev
+
+  config:
+    import: optional:file:.env[.properties]
+
+  ai:
+    openai:
+      api-key: ${OPENAI_API_KEY}
+
+server:
+  port: 8083
