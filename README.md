@@ -1,6 +1,6 @@
 # EventHub Reactive
 
-EventHub is a backend portfolio project for **event management, bookings and payments**, built with **Java 21, Spring Boot 4.1, DDD and Hexagonal Architecture**. It combines a reactive Event Service with imperative Booking and Payment services. **Payment Service domain and PostgreSQL persistence are implemented; its Kafka integration and the distributed payment Saga are still planned.** React and TypeScript are planned, not implemented.
+EventHub is a backend portfolio project for **event management, bookings, payments and AI-assisted interactions**, built with **Java 21, Spring Boot 4.1, DDD and Hexagonal Architecture**. It combines a reactive Event Service and AI Assistant Service with imperative Booking and Payment services. **Payment Service domain and PostgreSQL persistence are implemented; its Kafka integration and the distributed payment Saga are still planned.** The AI Assistant provides basic prompt/response and SSE streaming, but Tool Calling and connections to Event/Booking services are planned. React and TypeScript are planned, not implemented.
 
 ## 🎯 Project Goal
 
@@ -16,6 +16,7 @@ The project intentionally uses **reactive** and **imperative** Spring applicatio
 | Event Service | Spring WebFlux, Project Reactor, Spring Data R2DBC |
 | Booking Service | Spring MVC, Spring Data JPA, Hibernate, Flyway |
 | Payment Service | Spring MVC, Spring Data JPA, Hibernate, Flyway |
+| AI Assistant Service | Spring AI, OpenAI ChatClient, Spring WebFlux, Reactor, SSE, Spring Profiles |
 | Data | PostgreSQL 17 |
 | API and integration | REST, OpenAPI, Spring RestClient, Spring Kafka, Spring JMS, IBM MQ |
 | Reliability | Transactional Outbox, persistent Inbox, optimistic locking, synchronous compensation, Resilience4j |
@@ -26,13 +27,47 @@ Additional technologies and planned work are tracked in the [roadmap](docs/ROADM
 
 ## 🏗️ Architecture Overview
 
-EventHub now contains **three independent Spring Boot services**. Payment Service is already present with a tested domain model and JPA/PostgreSQL persistence; the payment messaging flow shown below is the **target architecture**, not a completed integration.
+EventHub now contains **four independent Spring Boot services**, including the new AI Assistant Service. Payment Service is already present with a tested domain model and JPA/PostgreSQL persistence; the payment messaging flow shown below is the **target architecture**, not a completed integration. The AI Assistant is currently independent of the Event/Booking business flows.
 
 | Component | Responsibilities | Programming model | Status |
 | --- | --- | --- | --- |
 | **Event Service** (`:8080`) | Event lifecycle, capacity management, Kafka consumption and deduplication | Reactive: WebFlux / Reactor / R2DBC | ✅ Implemented |
 | **Booking Service** (`:8081`) | Booking lifecycle, capacity reservation and compensation, Outbox publication | Imperative: Spring MVC / JPA | ✅ Existing booking flow |
 | **Payment Service** (`:8082`) | Payment aggregate, payment persistence; future payment-request processing and result publication | Imperative: Spring MVC / JPA | 🟡 Domain and persistence implemented; Kafka integration pending |
+| **AI Assistant Service** (`:8083`) | AI prompts, synchronous responses, SSE streaming; fake/real model adapters | Reactive HTTP: WebFlux / Reactor; Spring AI | 🟡 Initial standalone integration implemented; Tool Calling and service integration pending |
+
+### AI Assistant Service — Current standalone integration
+
+The independent `ai-assistant-service` demonstrates **Spring AI with Hexagonal Architecture**. Its inbound HTTP adapter (`AiController`) invokes the `AskAiUseCase` port; `AiService` delegates to `AiModelPort`; infrastructure supplies either `SpringAiAdapter` (real OpenAI `ChatClient`) or `FakeAiAdapter` (simulated responses). `AiConfiguration` registers application and adapter beans explicitly and selects model adapters with Spring profiles (`dev` for fake, `prod` for real).
+
+```text
+Client
+  | POST /api/v1/ai/ask                (JSON → Mono<String>)
+  | POST /api/v1/ai/ask/stream         (JSON → text/event-stream)
+  v
+AiController                         HTTP inbound adapter
+  |
+  v
+AskAiUseCase → AiService             application layer
+                    |
+                    v
+                AiModelPort          outbound port
+                    ^
+            +-------+-------+
+            |               |
+       FakeAiAdapter   SpringAiAdapter
+         (dev)             (prod)
+       fixed text       ChatClient → OpenAI
+       + timed Flux
+```
+
+- **Synchronous endpoint:** `POST /api/v1/ai/ask` accepts `{"question":"..."}`. Its blocking application call is wrapped with `Mono.fromCallable(...).subscribeOn(Schedulers.boundedElastic())`, keeping that call off WebFlux event-loop threads.
+- **Streaming endpoint:** `POST /api/v1/ai/ask/stream` accepts the same JSON body and responds with `text/event-stream` using `Flux<String>`. Local testing of the fake adapter returned HTTP 200 with SSE-formatted chunks; the PowerShell client buffered the displayed response, so this alone does not measure live chunk arrival times.
+- **Fake model:** a no-cost `FakeAiAdapter` uses fixed text and `Flux.just(...).delayElements(...)` to simulate streaming. In the `prod` profile, `SpringAiAdapter` uses Spring AI's `.call()` and `.stream()` APIs to invoke a configured OpenAI model.
+- **Tests:** an `AiServiceTest` with Mockito verifies port delegation and the returned response. Local startup, initial real-model response, and fake SSE endpoint have been exercised manually. Broader HTTP/adapter integration and automated streaming tests remain pending.
+- **Security:** real keys must not be committed. Use the `OPENAI_API_KEY` placeholder and a locally ignored `.env`, environment variable, or deployment secrets. `.env.example` may document the required variable without a real value.
+
+**Not implemented yet:** Tool Calling, event discovery or availability lookups through existing EventHub APIs, booking actions, structured output, RAG, AI authorization, and production-grade resilience/observability.
 
 ### Existing integration flow — Event + Booking
 
@@ -188,6 +223,7 @@ Verified scenarios include successful republication, publication failures, dupli
 | **Event Service** | ✅ WebFlux/R2DBC, Event lifecycle, optimistic capacity management | Broader automated cross-service failure tests |
 | **Booking Service** | ✅ Spring MVC/JPA, API-first booking flow, Flyway, transactional persistence | Adapt booking lifecycle for payment Saga |
 | **Payment Service** | 🟡 Payment domain, Money/identity value objects, CreatePayment use case, JPA/PostgreSQL and Testcontainers integration tests | Kafka PaymentRequested consumer, transactional Inbox/Outbox and payment-result publication |
+| **AI Assistant Service** | 🟡 Spring AI ChatClient, hexagonal ports/adapters, fake/real profiles, REST and SSE endpoints, Mockito application test | Tool Calling, Event/Booking integrations, automated adapter/HTTP tests, access control |
 | **Payment Saga** | ⬜ Planned; not yet connected to Booking Service | Orchestration, payment confirmation, compensation, business idempotency and E2E tests |
 | **REST integration** | ✅ Capacity reservation/release and best-effort compensation; resilience for availability reads | Robust handling of ambiguous remote outcomes |
 | **Kafka** | ✅ Transactional Outbox/Inbox, DLT persistence, PostgreSQL-outage retries and manually triggered DLT replay with key/payload/headers (Testcontainers + Toxiproxy) | Multi-instance recovery coordination, offset-commit and complete two-service E2E tests |
@@ -279,7 +315,7 @@ Successful local Booking + Outbox commit does not guarantee instant Kafka delive
 
 ## ⚙️ Running Locally
 
-The project contains three independently run Spring Boot services (the third, Payment Service, is under development) and separate local infrastructure. The existing Karate E2E API tests in `booking-service` require Event and Booking services reachable at their configured base URLs (normally `http://localhost:8081` and `http://localhost:8080`); these values are supplied by `src/test/resources/karate-config.js`. Payment Service runs on `http://localhost:8082` and uses a separate PostgreSQL database (`paymentdb`, local port `5434`). Payment-to-Booking Kafka integration is not yet available. Configuration and prerequisites vary by service; consult the relevant module setup and documentation before starting. Infrastructure examples:
+The project contains four independently run Spring Boot services (Payment Service and AI Assistant Service have incomplete integrations) and separate local infrastructure. The existing Karate E2E API tests in `booking-service` require Event and Booking services reachable at their configured base URLs (normally `http://localhost:8081` and `http://localhost:8080`); these values are supplied by `src/test/resources/karate-config.js`. Payment Service runs on `http://localhost:8082` and uses a separate PostgreSQL database (`paymentdb`, local port `5434`). Payment-to-Booking Kafka integration is not yet available. The AI Assistant runs locally on `http://localhost:8083`, exposes `POST /api/v1/ai/ask` and `POST /api/v1/ai/ask/stream`, and can run with fake responses under the `dev` profile. To use the real OpenAI-backed adapter, configure the `prod` profile and provide `OPENAI_API_KEY` securely; the OpenAI starter may still initialize when a fake adapter is active, so verify startup credentials and auto-configuration separately. Configuration and prerequisites vary by service; consult the relevant module setup and documentation before starting. Infrastructure examples:
 
 ```powershell
 docker compose -f compose.kafka.yaml up -d
@@ -311,10 +347,11 @@ Use local environment variables for credentials; do not commit real secrets. **D
 | Payment Service overview | [Payment README](payment-service/README.md) |
 | Payment domain, Saga design and integration boundaries | [Payment Architecture](payment-service/docs/ARCHITECTURE.md) |
 | Payment implementation milestones | [Payment Roadmap](payment-service/docs/ROADMAP.md) |
+| AI assistant implementation | [`ai-assistant-service`](ai-assistant-service/) (service source; standalone README if present) |
 
 ## 🗺️ Roadmap
 
-The [roadmap](docs/ROADMAP.md) separates completed work from planned features, including Kafka broker-backed failure-path/offset tests, stronger IBM MQ failure-path automation, the new Payment Service and planned payment Saga, frontend development and deployment topics. The Git commit history records *when* the work was performed.
+The [roadmap](docs/ROADMAP.md) separates completed work from planned features, including Kafka broker-backed failure-path/offset tests, stronger IBM MQ failure-path automation, the Payment Service and planned payment Saga, the new Spring AI learning track (Tool Calling pending), frontend development and deployment topics. The Git commit history records *when* the work was performed.
 
 ## 👨‍💻 Author
 

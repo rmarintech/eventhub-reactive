@@ -795,3 +795,55 @@ These tests do not establish exactly-once delivery or a complete Kafka broker-ba
 - [ ] Explicit broker-backed consumer offset/commit failure test and automated Booking Service → Kafka → Event Service E2E.
 
 **Boundary:** DLT recovery testing is not proof of exactly-once publishing, complete broker-backed two-service E2E, or production-safe crash recovery.
+
+---
+
+# 29. Spring AI — Independent AI Assistant Service
+
+> **Scope (2026-11-13):** a standalone, learning-oriented `ai-assistant-service`. It is not yet connected to Event Service or Booking Service. Items marked complete below reflect code shown and local checks reported during development, not a complete automated integration suite.
+
+## Foundation and architecture
+
+- [x] Create independent `ai-assistant-service` with Java 21, Spring Boot 4.1 and Maven
+- [x] Add Spring AI OpenAI model starter and BOM
+- [x] Configure OpenAI credentials via `OPENAI_API_KEY` placeholder (secret stored outside committed configuration)
+- [x] Define `AskAiUseCase` inbound port and `AiModelPort` outbound port
+- [x] Implement `AiService` delegating to `AiModelPort` without direct Spring AI dependency
+- [x] Implement `SpringAiAdapter` backed by Spring AI `ChatClient`
+- [x] Explicit bean wiring in infrastructure `AiConfiguration`
+- [x] Separate `FakeAiAdapter` for no-token development
+- [x] Configure Spring Profiles (`dev` fake, `prod` real)
+- [x] Create `.gitignore` rules and safe `.env.example` without committing the real key
+- [ ] Add architecture enforcement tests (e.g., ArchUnit)
+
+## API and reactive behavior
+
+- [x] Implement `POST /api/v1/ai/ask` using `AiRequest` with `question`
+- [x] Return `Mono<String>` from the synchronous request route
+- [x] Isolate the blocking use-case call with `Mono.fromCallable()` and `Schedulers.boundedElastic()`
+- [x] Inspect worker-thread execution (`boundedElastic-1` observed locally)
+- [x] Implement `Flux<String>` streaming port and use-case operations
+- [x] Implement SSE `POST /api/v1/ai/ask/stream` (`text/event-stream`)
+- [x] Simulate streaming with `Flux.just(...).delayElements(...)` without OpenAI charges
+- [x] Manually verify fake SSE response (`200 OK`, SSE format)
+- [ ] Add automated WebFlux controller tests for both HTTP endpoints
+- [ ] Add `StepVerifier` tests for simulated streaming and cancellation
+- [ ] Test streaming behavior, client disconnects, timeouts and model errors
+- [ ] Validate request input and standardize error responses
+
+## AI capabilities and integration
+
+- [x] Learn LLM, prompts, `ChatModel` versus `ChatClient`, synchronous versus streaming responses
+- [x] Make an initial successful real OpenAI text-generation call
+- [ ] Introduce Spring AI Tool Calling with a read-only mock tool
+- [ ] Implement Event Service API client and application port for event search
+- [ ] Add read-only event availability lookup through existing EventHub services
+- [ ] Build a natural-language event-search assistant
+- [ ] Add structured output and input validation
+- [ ] Evaluate RAG, embeddings and vector search only if justified by a concrete use case
+- [ ] Add authentication, tool authorization and explicit confirmation before any state-changing operations
+- [ ] Add AI provider error handling, model rate-limit handling, latency/cost controls and observability
+- [ ] Add automated adapter and end-to-end integration tests
+- [ ] Create a dedicated AI service README covering local setup, profiles, endpoints and security
+
+**Implementation boundary:** The current AI feature answers generic prompts and streams generated/fake text. It cannot yet retrieve live EventHub event data or modify bookings through LLM-selected tools. Streaming delivery does not imply that every underlying client operation is non-blocking. Local SSE response verification did not independently measure per-chunk arrival times.
