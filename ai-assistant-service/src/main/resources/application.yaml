@@ -14,3 +14,7 @@ spring:
 
 server:
   port: 8083
+
+eventhub:
+  event-service:
+    base-url: http://localhost:8080

@@ -3,8 +3,9 @@ package com.rubenmarin.aiassistantservice.infrastructure.config;
 import com.rubenmarin.aiassistantservice.application.port.in.AskAiUseCase;
 import com.rubenmarin.aiassistantservice.application.port.out.AiModelPort;
 import com.rubenmarin.aiassistantservice.application.service.AiService;
-import com.rubenmarin.aiassistantservice.infrastructure.adapter.out.FakeAiAdapter;
-import com.rubenmarin.aiassistantservice.infrastructure.adapter.out.SpringAiAdapter;
+import com.rubenmarin.aiassistantservice.infrastructure.adapter.out.ai.FakeAiAdapter;
+import com.rubenmarin.aiassistantservice.infrastructure.adapter.out.ai.SpringAiAdapter;
+import com.rubenmarin.aiassistantservice.infrastructure.adapter.out.ai.tool.EventTools;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -21,14 +22,23 @@ public class AiConfiguration {
 
     @Bean
     @Profile("prod")
-    public AiModelPort springAiModelPort(ChatClient.Builder builder) {
-        return new SpringAiAdapter(builder);
+    public AiModelPort springAiModelPort(
+            ChatClient.Builder builder,
+            EventTools eventTools
+    ) {
+        return new SpringAiAdapter(builder, eventTools);
     }
 
     @Bean
     //@Profile("dev")
     @Profile("!prod")
-    public AiModelPort fakeAiModelPort() {
-        return new FakeAiAdapter();
+    public AiModelPort fakeAiModelPort(EventTools eventTools) {
+        return new FakeAiAdapter(eventTools);
     }
+
+    @Bean
+    public EventTools eventTools() {
+        return new EventTools();
+    }
+
 }
