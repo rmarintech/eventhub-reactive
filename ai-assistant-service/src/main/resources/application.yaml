@@ -12,6 +12,9 @@ spring:
     openai:
       api-key: ${OPENAI_API_KEY}
 
+    tools:
+      throw-exception-on-error: false #explicitly enable returning tool errors to the model
+
 server:
   port: 8083
 

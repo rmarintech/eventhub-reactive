@@ -1,6 +1,7 @@
 package com.rubenmarin.aiassistantservice.infrastructure.config;
 
 import com.rubenmarin.aiassistantservice.application.port.in.AskAiUseCase;
+import com.rubenmarin.aiassistantservice.application.port.in.GetAvailableSeatsUseCase;
 import com.rubenmarin.aiassistantservice.application.port.out.AiModelPort;
 import com.rubenmarin.aiassistantservice.application.service.AiService;
 import com.rubenmarin.aiassistantservice.infrastructure.adapter.out.ai.FakeAiAdapter;
@@ -37,8 +38,8 @@ public class AiConfiguration {
     }
 
     @Bean
-    public EventTools eventTools() {
-        return new EventTools();
+    public EventTools eventTools(GetAvailableSeatsUseCase getAvailableSeatsUseCase) {
+        return new EventTools(getAvailableSeatsUseCase);
     }
 
 }

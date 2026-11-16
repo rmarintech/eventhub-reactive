@@ -35,7 +35,7 @@ public class RestEventAvailabilityAdapter implements EventAvailabilityPort {
                 )
 
                 .bodyToMono(EventAvailabilityResponse.class)
-                .map(response -> response.availableCapacity())
+                .map(response -> response.available())
                 .onErrorMap(throwable -> {
                             if (throwable instanceof WebClientRequestException) {
                                 return new EventServiceUnavailableException(throwable);
@@ -51,6 +51,6 @@ public class RestEventAvailabilityAdapter implements EventAvailabilityPort {
 
         // No DTO
         // .bodyToMono(JsonNode.class)
-        // .map(json -> json.get("availableCapacity").asInt());
+        // .map(json -> json.get("available").asInt());
     }
 }

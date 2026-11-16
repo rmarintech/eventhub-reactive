@@ -20,7 +20,7 @@ class RestEventAvailabilityAdapterTest {
     /**
      * WebClient sends a GET request to /events/{id}.
      * The JSON response is deserialized correctly.
-     * The adapter extracts availableCapacity.
+     * The adapter extracts available.
      * No real Event Service or OpenAI connection is required.
      */
 
@@ -51,14 +51,14 @@ class RestEventAvailabilityAdapterTest {
         // GIVEN
         UUID eventId = UUID.randomUUID();
 
-        // Configure WireMock to return availableCapacity = 25
+        // Configure WireMock to return available = 25
         wireMockServer.stubFor(
                 WireMock.get(WireMock.urlEqualTo("/events/" + eventId))
                         .willReturn(
                                 WireMock.okJson("""
                                         {
-                                            "availableCapacity": 25,
-                                            "totalCapacity": 100,
+                                            "available": 25,
+                                            "capacity": 100,
                                             "name": "Java Conference"
                                         }
                                         """)
@@ -127,12 +127,6 @@ class RestEventAvailabilityAdapterTest {
 
         // GIVEN
         UUID eventId = UUID.randomUUID();
-
-        wireMockServer.stubFor(
-                WireMock.get(WireMock.urlEqualTo("/events/" + eventId))
-                        .willReturn(WireMock.serviceUnavailable())
-        );
-
         wireMockServer.stop();
 
         // WHEN
