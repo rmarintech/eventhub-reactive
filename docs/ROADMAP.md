@@ -800,7 +800,7 @@ These tests do not establish exactly-once delivery or a complete Kafka broker-ba
 
 # 29. Spring AI — Independent AI Assistant Service
 
-> **Scope (2026-11-13):** a standalone, learning-oriented `ai-assistant-service`. It is not yet connected to Event Service or Booking Service. Items marked complete below reflect code shown and local checks reported during development, not a complete automated integration suite.
+> **Scope (updated 2026-11-16):** a standalone, learning-oriented `ai-assistant-service`, now connected to Event Service for read-only availability queries through Spring AI Tool Calling. Booking Service is not integrated. Completed items reflect reported local tests and observed manual execution, not a comprehensive production-ready suite.
 
 ## Foundation and architecture
 
@@ -835,15 +835,23 @@ These tests do not establish exactly-once delivery or a complete Kafka broker-ba
 
 - [x] Learn LLM, prompts, `ChatModel` versus `ChatClient`, synchronous versus streaming responses
 - [x] Make an initial successful real OpenAI text-generation call
-- [ ] Introduce Spring AI Tool Calling with a read-only mock tool
-- [ ] Implement Event Service API client and application port for event search
-- [ ] Add read-only event availability lookup through existing EventHub services
+- [x] Configure Spring AI Tool Calling via `ChatClient.defaultTools(eventTools)` and `@Tool` / `@ToolParam`
+- [x] Implement `EventTools.getAvailableSeats(String eventId)` with UUID validation and timeout-bounded lookup
+- [x] Define `GetAvailableSeatsUseCase`, `EventAvailabilityPort` and `EventAvailabilityService`
+- [x] Implement `RestEventAvailabilityAdapter` using WebClient to call Event Service `GET /events/{id}`
+- [x] Parse the Event Service `available` response field without coupling to the full response DTO
+- [x] Map HTTP 404/503 and WebClient connection failures to explicit exceptions
+- [x] Test HTTP adapter with WireMock and Reactor StepVerifier (200, 404, 503, connection error)
+- [x] Test Spring AI tool calling using mocked `ChatModel`, capturing the follow-up tool response in the prompt
+- [x] Verify `EventToolsIT` against the running real Event Service
+- [x] Manually verify OpenAI invoked `EventTools` and returned the real availability count (999990 on 2026-11-16)
+- [ ] Implement natural-language event search/discovery (not needed for UUID-based availability)
 - [ ] Build a natural-language event-search assistant
 - [ ] Add structured output and input validation
 - [ ] Evaluate RAG, embeddings and vector search only if justified by a concrete use case
 - [ ] Add authentication, tool authorization and explicit confirmation before any state-changing operations
 - [ ] Add AI provider error handling, model rate-limit handling, latency/cost controls and observability
-- [ ] Add automated adapter and end-to-end integration tests
-- [ ] Create a dedicated AI service README covering local setup, profiles, endpoints and security
+- [ ] Add deterministic fully automated AI → Event Service end-to-end tests (existing mocked and live component/integration checks are complete)
+- [x] Create a dedicated AI service README covering local setup, profiles, endpoints and security
 
-**Implementation boundary:** The current AI feature answers generic prompts and streams generated/fake text. It cannot yet retrieve live EventHub event data or modify bookings through LLM-selected tools. Streaming delivery does not imply that every underlying client operation is non-blocking. Local SSE response verification did not independently measure per-chunk arrival times.
+**Implementation boundary:** The AI service answers prompts, streams generated/fake text and retrieves live EventHub Event availability when the user provides an Event UUID. Its tool is read-only; it cannot discover events from natural-language criteria or modify bookings. A real OpenAI tool call and live Event Service lookup were observed locally, but this is not proof of deterministic automated E2E behavior or production-grade error handling. Streaming delivery does not imply every underlying operation is non-blocking; local SSE verification did not independently measure per-chunk arrival times.
