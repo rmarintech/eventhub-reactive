@@ -5,6 +5,9 @@ import com.rubenmarin.aiassistantservice.infrastructure.adapter.out.ai.tool.Even
 import reactor.core.publisher.Flux;
 
 import java.time.Duration;
+import java.util.UUID;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public class FakeAiAdapter implements AiModelPort {
 
@@ -16,9 +19,22 @@ public class FakeAiAdapter implements AiModelPort {
 
     @Override
     public String generateResponse(String prompt) {
-        int seats = eventTools.getAvailableSeats("123");
 
-        return prompt + "? Event 123 has " + seats + " available seats.";
+        Pattern pattern = Pattern.compile(
+                "\\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\\b"
+        );
+
+        Matcher matcher = pattern.matcher(prompt);
+        UUID eventId = UUID.randomUUID();
+        if (matcher.find()) {
+            eventId = UUID.fromString(matcher.group());
+            System.out.println(eventId);
+        }
+
+
+        int seats = eventTools.getAvailableSeats(eventId.toString());
+
+        return prompt + "? Event " + eventId.toString() + " has " + seats + " available seats.";
 
 //        return "Fake Response to save tokens:" +
 //                "Spring AI " +

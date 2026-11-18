@@ -1,4 +1,4 @@
-package com.rubenmarin.aiassistantservice.infrastructure.adapter.in;
+package com.rubenmarin.aiassistantservice.infrastructure.adapter.in.web;
 
 import com.rubenmarin.aiassistantservice.application.port.in.AskAiUseCase;
 import org.springframework.http.MediaType;

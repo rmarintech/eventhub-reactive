@@ -1,8 +1,11 @@
 package com.rubenmarin.aiassistantservice.infrastructure.adapter.out.ai;
 
+import com.openai.errors.RateLimitException;
 import com.rubenmarin.aiassistantservice.application.port.in.GetAvailableSeatsUseCase;
+import com.rubenmarin.aiassistantservice.infrastructure.adapter.out.ai.exception.AiProviderException;
 import com.rubenmarin.aiassistantservice.infrastructure.adapter.out.ai.tool.EventTools;
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -30,18 +33,34 @@ class SpringAiAdapterTest {
     private ChatModel chatModel;
     @Mock
     private GetAvailableSeatsUseCase getAvailableSeatsUseCase;
+    @Mock
+    private EventTools eventTools;
 
-    @Test
-    void shouldGenerateResponse() {
+    private SpringAiAdapter springAiAdapter;
 
-        EventTools eventTools = Mockito.spy(new EventTools(getAvailableSeatsUseCase));
+    private ChatClient.Builder builder;
+
+    @BeforeEach
+    void setUp() {
+        builder = ChatClient.builder(chatModel);
+
+//        Mockito.when(chatModel.getOptions())
+//                .thenReturn(OpenAiChatOptions.builder()
+//                        .model("gpt-5-nano")
+//                        .build());
 
         Mockito.when(chatModel.getOptions())
                 .thenReturn(ToolCallingChatOptions.builder().build());
 
-        ChatClient chatClient = ChatClient.builder(chatModel)
-                .defaultTools(eventTools)
-                .build();
+
+    }
+
+    @Test
+    void shouldGenerateResponse() {
+
+        EventTools spyEventTools = Mockito.spy(new EventTools(getAvailableSeatsUseCase));
+
+        springAiAdapter = new SpringAiAdapter(builder, spyEventTools);
 
         // GIVEN
         UUID eventId = UUID.randomUUID();
@@ -78,10 +97,7 @@ class SpringAiAdapterTest {
                 .thenReturn(toolCallResponse)
                 .thenReturn(finalResponse);
 
-        String response = chatClient.prompt()
-                .user(prompt)
-                .call()
-                .content();
+        String response = springAiAdapter.generateResponse(prompt);
 
         Assertions.assertEquals(llmMessage, response);
 
@@ -93,6 +109,18 @@ class SpringAiAdapterTest {
         List<Prompt> capturedPrompts = promptCaptor.getAllValues();
 
         Prompt firstPrompt = capturedPrompts.get(0);
+        Assertions.assertTrue(firstPrompt.getOptions() instanceof ToolCallingChatOptions);
+
+        ToolCallingChatOptions options = (ToolCallingChatOptions) firstPrompt.getOptions();
+
+        Assertions.assertTrue(
+                options.getToolCallbacks().stream()
+                        .anyMatch(callback ->
+                                callback.getToolDefinition()
+                                        .name()
+                                        .equals("getAvailableSeats"))
+        );
+
         Prompt secondPrompt = capturedPrompts.get(1);
 
         Message userMessage = secondPrompt.getUserMessage();
@@ -103,11 +131,28 @@ class SpringAiAdapterTest {
         Assertions.assertEquals("25", responseData);
 
 
-        Mockito.verify(eventTools, Mockito.times(1))
+        Mockito.verify(spyEventTools, Mockito.times(1))
                 .getAvailableSeats(eventId.toString());
 
         Mockito.verify(getAvailableSeatsUseCase, Mockito.times(1))
                 .getAvailableSeats(eventId);
+    }
+
+    @Test
+    void shouldThrowAiProviderExceptionWhenRateLimitExceeded() {
+        RateLimitException rateLimitExc = Mockito.mock(RateLimitException.class);
+
+        Mockito.when(chatModel.call(Mockito.any(Prompt.class))).thenThrow(rateLimitExc);
+
+        springAiAdapter = new SpringAiAdapter(builder, eventTools);
+
+        AiProviderException aiProviderExc = Assertions.assertThrows(
+                AiProviderException.class,
+                () -> springAiAdapter.generateResponse("How many seats are available?")
+        );
+
+        Assertions.assertSame(rateLimitExc, aiProviderExc.getCause());
+
     }
 
 }
