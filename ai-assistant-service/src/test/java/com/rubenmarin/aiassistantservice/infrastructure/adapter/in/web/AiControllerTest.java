@@ -2,6 +2,7 @@ package com.rubenmarin.aiassistantservice.infrastructure.adapter.in.web;
 
 import com.rubenmarin.aiassistantservice.application.port.in.AskAiUseCase;
 import com.rubenmarin.aiassistantservice.infrastructure.adapter.out.ai.exception.AiProviderException;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -10,8 +11,14 @@ import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.test.web.reactive.server.FluxExchangeResult;
 import org.springframework.test.web.reactive.server.WebTestClient;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
+import reactor.core.publisher.Sinks;
+import reactor.test.StepVerifier;
 
+import java.time.Duration;
 import java.util.Map;
 
 @ActiveProfiles("test")
@@ -45,5 +52,107 @@ class AiControllerTest {
                 .expectBody()
                 .jsonPath("$.error").isEqualTo("AI_SERVICE_UNAVAILABLE")
                 .jsonPath("$.message").isEqualTo("AI service temporarily unavailable");
+    }
+
+    @Test
+    void shouldStreamResponseAsSse() {
+
+        // GIVEN
+        Mockito.when(askAiUseCase.stream("Say Hello World!"))
+                .thenReturn(Flux.just("Hello ", "World!"));
+
+        // WHEN & THEN
+        webTestClient.post()
+                .uri("/api/v1/ai/ask/stream")
+                .contentType(MediaType.APPLICATION_JSON)
+                .accept(MediaType.TEXT_EVENT_STREAM)
+                .bodyValue(Map.of("question", "Say Hello World!"))
+                .exchange()
+                .expectStatus().isOk()
+                .expectHeader()
+                .contentTypeCompatibleWith(MediaType.TEXT_EVENT_STREAM)
+                .returnResult(String.class)
+                .getResponseBody()
+                .as(flux -> StepVerifier.create(flux))
+                .expectNext("Hello ")
+                .expectNext("World!")
+                .verifyComplete();
+
+        // Verify that the controller delegates to the use case.
+        Mockito.verify(askAiUseCase)
+                .stream("Say Hello World!");
+
+    }
+
+    @Test
+    void shouldReturn503WhenStreamingFailsBeforeFirstEvent() {
+
+        // GIVEN
+        AiProviderException exception = new AiProviderException(
+                "AI service temporarily unavailable",
+                new RuntimeException("OpenAI credits exhausted")
+        );
+
+        Mockito.when(askAiUseCase.stream("Hello")).thenReturn(Flux.error(exception));
+
+        // WHEN & THEN
+        webTestClient.post()
+                .uri("/api/v1/ai/ask/stream")
+                .contentType(MediaType.APPLICATION_JSON)
+                .accept(MediaType.TEXT_EVENT_STREAM)
+                .bodyValue(Map.of("question", "Hello"))
+                .exchange()
+                .expectStatus().isEqualTo(503);
+
+        Mockito.verify(askAiUseCase).stream("Hello");
+    }
+
+    @Test
+    void shouldHandleErrorAfterFirstSseEvent() {
+
+        // GIVEN
+        AiProviderException exception = new AiProviderException(
+                "AI service temporarily unavailable",
+                new RuntimeException("OpenAI credits exhausted")
+        );
+
+//        Mockito.when(askAiUseCase.stream("Hello"))
+//                .thenReturn(Flux.just("Hello ")
+//                        .concatWith(Flux.error(exception)));
+
+        // Creamos un Sink para controlar cuándo se emite el error.
+        Sinks.Many<String> sink = Sinks.many()
+                .unicast()
+                .onBackpressureBuffer();
+
+        // Primero enviamos "Hello ".
+        // Después, el Flux queda esperando eventos del Sink.
+        Mockito.when(askAiUseCase.stream("Hello"))
+                .thenReturn(
+                        Flux.concat(
+                                Mono.just("Hello "),
+                                sink.asFlux()
+                        )
+                );
+
+        // WHEN
+        FluxExchangeResult<String> result = webTestClient.post()
+                .uri("/api/v1/ai/ask/stream")
+                .contentType(MediaType.APPLICATION_JSON)
+                .accept(MediaType.TEXT_EVENT_STREAM)
+                .bodyValue(Map.of("question", "Hello"))
+                .exchange()
+                .expectStatus().isOk()
+                .returnResult(String.class);
+
+        // THEN
+        StepVerifier.create(result.getResponseBody())
+                .expectNext("Hello ")
+                .then(() -> {
+                    // Emitimos el error solo después de recibir el primer evento.
+                    Assertions.assertEquals(Sinks.EmitResult.OK, sink.tryEmitError(exception));
+                })
+                .expectError(AiProviderException.class)
+                .verify(Duration.ofSeconds(5));
     }
 }

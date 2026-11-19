@@ -73,7 +73,11 @@ public class SpringAiAdapter implements AiModelPort {
         return chatClient.prompt()
                 .user(prompt)
                 .stream()
-                .content();
+                .content()
+                .onErrorMap(
+                        RateLimitException.class,
+                        e -> new AiProviderException("AI service temporarily unavailable", e)
+                );
 
     }
 }
