@@ -22,6 +22,7 @@ import reactor.test.StepVerifier;
 
 import java.time.Duration;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 @ActiveProfiles("test")
 @WebFluxTest(AiController.class)
@@ -177,5 +178,43 @@ class AiControllerTest {
                     );
                 })
                 .verifyComplete();
+    }
+
+    @Test
+    void shouldCancelUpstreamWhenClientDisconnects() {
+
+        // GIVEN: Track whether the upstream Flux is cancelled.
+        AtomicBoolean cancelled = new AtomicBoolean(false);
+
+        Flux<String> upstream = Flux.just("Hello ")
+                .concatWith(Flux.never())
+                .doOnCancel(() -> cancelled.set(true));
+
+        Mockito.when(askAiUseCase.stream("Hello")).thenReturn(upstream);
+
+        // WHEN: Open the SSE connection.
+        FluxExchangeResult<ServerSentEvent<String>> result =
+                webTestClient.post()
+                        .uri("/api/v1/ai/ask/stream")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .accept(MediaType.TEXT_EVENT_STREAM)
+                        .bodyValue(Map.of("question", "Hello"))
+                        .exchange()
+                        .expectStatus().isOk()
+                        .returnResult(
+                                new ParameterizedTypeReference<ServerSentEvent<String>>() {}
+                        );
+
+        // THEN: Receive the first event and cancel the subscription.
+        StepVerifier.create(result.getResponseBody())
+                .assertNext(event -> {
+                    Assertions.assertEquals("message", event.event());
+                    Assertions.assertEquals("Hello ", event.data());
+                })
+                .thenCancel()
+                .verify();
+
+        Assertions.assertTrue(cancelled.get());
+
     }
 }

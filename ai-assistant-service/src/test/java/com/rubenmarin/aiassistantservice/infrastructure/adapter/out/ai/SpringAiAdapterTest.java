@@ -27,6 +27,7 @@ import reactor.test.StepVerifier;
 
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 @ExtendWith(MockitoExtension.class)
 class SpringAiAdapterTest {
@@ -249,6 +250,35 @@ class SpringAiAdapterTest {
 
         Assertions.assertSame(rateLimitExc, aiProviderExc.getCause());
 
+    }
+
+    @Test
+    void shouldCancelChatModelStreaming() {
+        // GIVEN: Detect cancellation of the underlying ChatModel Flux.
+        AtomicBoolean cancelled = new AtomicBoolean(false);
+
+        ChatResponse firstResponse = new ChatResponse(
+                List.of(new Generation(new AssistantMessage("Hello ")))
+        );
+
+        Flux<ChatResponse> modelStream = Flux.just(firstResponse)
+                .concatWith(Flux.never())
+                .doOnCancel(() -> cancelled.set(true));
+
+        Mockito.when(chatModel.stream(Mockito.any(Prompt.class))).thenReturn(modelStream);
+
+        springAiAdapter = new SpringAiAdapter(builder, eventTools);
+
+        // WHEN & THEN: Subscribe, receive the first chunk, then cancel.
+        StepVerifier.create(springAiAdapter.streamResponse("Say Hello"))
+                .expectNext("Hello ")
+                .thenCancel()
+                .verify();
+
+        // Verify cancellation propagated to ChatModel.
+        Assertions.assertTrue(cancelled.get());
+
+        Mockito.verify(chatModel, Mockito.times(1)).stream(Mockito.any(Prompt.class));
     }
 
 }
