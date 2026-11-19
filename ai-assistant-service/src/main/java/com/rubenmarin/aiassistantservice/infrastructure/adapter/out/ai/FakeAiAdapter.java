@@ -2,6 +2,8 @@ package com.rubenmarin.aiassistantservice.infrastructure.adapter.out.ai;
 
 import com.rubenmarin.aiassistantservice.application.port.out.AiModelPort;
 import com.rubenmarin.aiassistantservice.infrastructure.adapter.out.ai.tool.EventTools;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Flux;
 
 import java.time.Duration;
@@ -11,6 +13,7 @@ import java.util.regex.Pattern;
 
 public class FakeAiAdapter implements AiModelPort {
 
+    private static final Logger log = LoggerFactory.getLogger(FakeAiAdapter.class);
     private final EventTools eventTools;
 
     public FakeAiAdapter(EventTools eventTools) {
@@ -20,6 +23,7 @@ public class FakeAiAdapter implements AiModelPort {
     @Override
     public String generateResponse(String prompt) {
 
+        log.info("FakeAiAdapter - generateResponse for {}", prompt);
         Pattern pattern = Pattern.compile(
                 "\\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\\b"
         );
@@ -28,9 +32,8 @@ public class FakeAiAdapter implements AiModelPort {
         UUID eventId = UUID.randomUUID();
         if (matcher.find()) {
             eventId = UUID.fromString(matcher.group());
-            System.out.println(eventId);
+            log.info("FakeAiAdapter - eventId{}", eventId);
         }
-
 
         int seats = eventTools.getAvailableSeats(eventId.toString());
 
@@ -46,6 +49,9 @@ public class FakeAiAdapter implements AiModelPort {
 
     @Override
     public Flux<String> streamResponse(String prompt) {
+
+        log.info("FakeAiAdapter - streamResponse for {}", prompt);
+
         return Flux.just(
                 "Fake Response to save tokens:",
                 "Spring AI ",

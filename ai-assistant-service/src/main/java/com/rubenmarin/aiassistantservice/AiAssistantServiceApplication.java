@@ -1,6 +1,8 @@
 package com.rubenmarin.aiassistantservice;
 
 import com.rubenmarin.aiassistantservice.application.port.in.GetAvailableSeatsUseCase;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
@@ -13,6 +15,8 @@ import java.util.UUID;
 @SpringBootApplication
 public class AiAssistantServiceApplication {
 
+    private static final Logger log = LoggerFactory.getLogger(AiAssistantServiceApplication.class);
+
     public static void main(String[] args) {
         SpringApplication.run(AiAssistantServiceApplication.class, args);
     }
@@ -21,7 +25,7 @@ public class AiAssistantServiceApplication {
     @Profile("!test")
     CommandLineRunner test(GetAvailableSeatsUseCase getAvailableSeatsUseCase) {
         return args -> {
-            System.out.println("Application started!");
+            log.info("Application started!");
 
             UUID uuid = UUID.fromString("0ebbca7e-87bb-4c1d-915c-676b59ffe329");
             Integer available = getAvailableSeatsUseCase
@@ -29,7 +33,7 @@ public class AiAssistantServiceApplication {
                     .blockOptional(Duration.ofSeconds(10))
                     .orElse(null);
 
-            System.out.println("Available Seats: " + available);
+            log.info("Available Seats: {}", available);
         };
     }
 }

@@ -2,6 +2,9 @@ package com.rubenmarin.aiassistantservice.infrastructure.adapter.in.web;
 
 import com.rubenmarin.aiassistantservice.application.port.in.AskAiUseCase;
 import com.rubenmarin.aiassistantservice.infrastructure.adapter.out.ai.exception.AiProviderException;
+import io.micrometer.tracing.Tracer;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.MediaType;
 import org.springframework.http.codec.ServerSentEvent;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -16,19 +19,26 @@ import reactor.core.scheduler.Schedulers;
 @RequestMapping("/api/v1/ai")
 public class AiController {
 
+    private static final Logger log = LoggerFactory.getLogger(AiController.class);
     private final AskAiUseCase askAiUseCase;
 
-    public AiController(AskAiUseCase askAiUseCase) {
+    private final Tracer tracer;
+
+    public AiController(AskAiUseCase askAiUseCase, Tracer tracer) {
         this.askAiUseCase = askAiUseCase;
+        this.tracer = tracer;
     }
+
+    /*public AiController(AskAiUseCase askAiUseCase) {
+        this.askAiUseCase = askAiUseCase;
+    }*/
 
     @PostMapping("/ask")
     public Mono<String> post(@RequestBody AiRequest request) {
         return Mono.fromCallable(
                 () -> {
-                    System.out.println(
-                            "Executing on: " + Thread.currentThread().getName()
-                    );
+                    //log.info("Current span: {}", tracer.currentSpan());
+                    log.info("Executing on: {}", Thread.currentThread().getName());
                     return askAiUseCase.ask(request.question());
                 }
         ).subscribeOn(Schedulers.boundedElastic());
