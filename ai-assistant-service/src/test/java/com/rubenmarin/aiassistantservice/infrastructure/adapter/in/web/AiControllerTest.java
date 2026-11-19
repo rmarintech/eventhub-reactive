@@ -8,7 +8,9 @@ import org.mockito.Mockito;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webflux.test.autoconfigure.WebFluxTest;
 import org.springframework.context.annotation.Import;
+import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.MediaType;
+import org.springframework.http.codec.ServerSentEvent;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.reactive.server.FluxExchangeResult;
@@ -57,30 +59,40 @@ class AiControllerTest {
     @Test
     void shouldStreamResponseAsSse() {
 
-        // GIVEN
+        // GIVEN: Simulamos una respuesta de IA en dos fragmentos.
         Mockito.when(askAiUseCase.stream("Say Hello World!"))
                 .thenReturn(Flux.just("Hello ", "World!"));
 
-        // WHEN & THEN
-        webTestClient.post()
-                .uri("/api/v1/ai/ask/stream")
-                .contentType(MediaType.APPLICATION_JSON)
-                .accept(MediaType.TEXT_EVENT_STREAM)
-                .bodyValue(Map.of("question", "Say Hello World!"))
-                .exchange()
-                .expectStatus().isOk()
-                .expectHeader()
-                .contentTypeCompatibleWith(MediaType.TEXT_EVENT_STREAM)
-                .returnResult(String.class)
-                .getResponseBody()
-                .as(flux -> StepVerifier.create(flux))
-                .expectNext("Hello ")
-                .expectNext("World!")
+        // WHEN: Ejecutamos el endpoint SSE.
+        FluxExchangeResult<ServerSentEvent<String>> result =
+                webTestClient.post()
+                        .uri("/api/v1/ai/ask/stream")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .accept(MediaType.TEXT_EVENT_STREAM)
+                        .bodyValue(Map.of("question", "Say Hello World!"))
+                        .exchange()
+                        .expectStatus().isOk()
+                        .expectHeader()
+                        .contentTypeCompatibleWith(MediaType.TEXT_EVENT_STREAM)
+                        .returnResult(
+                                new ParameterizedTypeReference<ServerSentEvent<String>>() {
+                                }
+                        );
+
+        // THEN: Verificamos el tipo y contenido de cada evento SSE.
+        StepVerifier.create(result.getResponseBody())
+                .assertNext(event -> {
+                    Assertions.assertEquals("message", event.event());
+                    Assertions.assertEquals("Hello ", event.data());
+                })
+                .assertNext(event -> {
+                    Assertions.assertEquals("message", event.event());
+                    Assertions.assertEquals("World!", event.data());
+                })
                 .verifyComplete();
 
-        // Verify that the controller delegates to the use case.
-        Mockito.verify(askAiUseCase)
-                .stream("Say Hello World!");
+        // Verificamos que el controlador delegó en el caso de uso.
+        Mockito.verify(askAiUseCase, Mockito.times(1)).stream("Say Hello World!");
 
     }
 
@@ -136,23 +148,34 @@ class AiControllerTest {
                 );
 
         // WHEN
-        FluxExchangeResult<String> result = webTestClient.post()
+        FluxExchangeResult
+                <ServerSentEvent<String>> result = webTestClient.post()
                 .uri("/api/v1/ai/ask/stream")
                 .contentType(MediaType.APPLICATION_JSON)
                 .accept(MediaType.TEXT_EVENT_STREAM)
                 .bodyValue(Map.of("question", "Hello"))
                 .exchange()
                 .expectStatus().isOk()
-                .returnResult(String.class);
+                .returnResult(new ParameterizedTypeReference<ServerSentEvent<String>>() {
+                });
 
         // THEN
         StepVerifier.create(result.getResponseBody())
-                .expectNext("Hello ")
+                .assertNext(event -> {
+                    Assertions.assertEquals("message", event.event());
+                    Assertions.assertEquals("Hello ", event.data());
+                })
                 .then(() -> {
                     // Emitimos el error solo después de recibir el primer evento.
                     Assertions.assertEquals(Sinks.EmitResult.OK, sink.tryEmitError(exception));
                 })
-                .expectError(AiProviderException.class)
-                .verify(Duration.ofSeconds(5));
+                .assertNext(event -> {
+                    Assertions.assertEquals("error", event.event());
+                    Assertions.assertEquals(
+                            "AI service temporarily unavailable",
+                            event.data()
+                    );
+                })
+                .verifyComplete();
     }
 }
