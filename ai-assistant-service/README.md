@@ -2,7 +2,7 @@
 
 `ai-assistant-service` is an independent Spring Boot microservice in the **EventHub Reactive** portfolio project. It explores **Spring AI, Hexagonal Architecture, reactive HTTP, and AI integration** through an incremental, testable implementation.
 
-**Current scope:** Prompt/response endpoints, OpenAI-backed and fake model adapters, Server-Sent Events (SSE), **Spring AI Tool Calling**, and **read-only availability lookup through EventHub's real Event Service** have been implemented and exercised. Booking Service integration, additional AI tools, and production hardening are still planned.
+**Current scope:** Prompt/response endpoints, OpenAI-backed and fake model adapters, **typed Server-Sent Events (SSE) with controlled provider-error events**, Spring AI Tool Calling, **read-only availability lookup through EventHub's real Event Service**, and automated adapter/controller tests have been implemented and exercised. Booking Service integration, additional AI tools, and production hardening are still planned.
 
 ## 🎯 Project Goal
 
@@ -19,13 +19,13 @@ The service is **a learning and portfolio implementation**, not a production-rea
 | AI integration | Spring AI 2.x, `ChatClient`, `@Tool`, `@ToolParam`, OpenAI model starter |
 | HTTP | Spring WebFlux, REST, `WebClient` (Event Service outbound integration) |
 | Reactive | Project Reactor (`Mono`, `Flux`, `boundedElastic`) |
-| Streaming | Server-Sent Events (`text/event-stream`) |
+| Streaming | Server-Sent Events (`text/event-stream`), typed `ServerSentEvent<String>` (`message` / `error`) |
 | Architecture | Hexagonal Architecture (ports and adapters) |
 | Configuration | Spring `@Configuration`, `@Bean`, `@Profile` |
-| Testing | JUnit 5, Mockito, WireMock (standalone), Reactor Test / `StepVerifier` |
+| Testing | JUnit 5, Mockito, WireMock (standalone), Reactor Test / `StepVerifier`, `WebTestClient`, `@WebFluxTest` |
 | Build | Maven / Maven Wrapper |
 
-Spring AI versions and the selected model are controlled by `pom.xml` and application configuration; verify these files for the exact versions used in your checkout.
+The Spring AI version reported during development is **2.0.1** (`spring-ai.version`); the selected model is configured in application properties. Verify `pom.xml` and the active configuration for your checkout.
 
 ## 🏗️ Architecture Overview
 
@@ -117,6 +117,7 @@ src/
 │   │       │       ├── ai/
 │   │       │       │   ├── FakeAiAdapter.java
 │   │       │       │   ├── SpringAiAdapter.java
+│   │       │       │   ├── exception/AiProviderException.java
 │   │       │       │   └── tool/EventTools.java
 │   │       │       └── event/
 │   │       │           ├── RestEventAvailabilityAdapter.java
@@ -128,11 +129,15 @@ src/
 └── test/java/com/rubenmarin/aiassistantservice/
     ├── AiAssistantServiceApplicationTests.java
     ├── application/service/AiServiceTest.java
-    └── infrastructure/adapter/out/
-        ├── ai/SpringAiAdapterTest.java
-        ├── ai/tool/EventToolsIT.java
-        └── event/RestEventAvailabilityAdapterTest.java
+    └── infrastructure/adapter/
+        ├── in/AiControllerTest.java
+        └── out/
+            ├── ai/SpringAiAdapterTest.java
+            ├── ai/tool/EventToolsIT.java
+            └── event/RestEventAvailabilityAdapterTest.java
 ```
+
+A global WebFlux exception handler (`GlobalExceptionHandler`) is also used for controlled HTTP errors; its exact package is not asserted in this tree.
 
 A dedicated domain model has not been introduced: the AI use cases coordinate prompts and event availability reads without reproducing Event Service business logic. Domain concepts will be added only when justified by behavior.
 
@@ -183,12 +188,17 @@ Client → AiController → AskAiUseCase.stream(...)
                           Flux<String>
                               |
                               v
+                 AiController: ServerSentEvent<String>
+                              |
+                              v
                    HTTP text/event-stream (SSE)
 ```
 
 The real adapter uses `ChatClient.prompt().user(prompt).stream().content()`; the fake adapter emits fixed chunks using `Flux.just(...).delayElements(...)`.
 
-`Flux<String>` may emit multiple text chunks. A chunk is **not necessarily a full word, sentence, or semantic unit**. Streaming responses do not, on their own, guarantee non-blocking behavior for every underlying library operation.
+`Flux<String>` may emit multiple text chunks. The controller maps each chunk to a typed SSE `message` event. A chunk is **not necessarily a full word, sentence, or semantic unit**. Streaming responses do not, on their own, guarantee non-blocking behavior for every underlying library operation.
+
+For provider failures, `SpringAiAdapter.streamResponse()` maps `RateLimitException` to `AiProviderException` using `onErrorMap()`. The controller uses `switchOnFirst()` to distinguish an error **before the first signal** (handled as HTTP 503) from an error **after streaming has started** (sent as a typed SSE `error` event, then the stream completes). Once the HTTP response has been committed, its status cannot be changed. The first-signal distinction does not by itself guarantee a response has been committed: that depends on actual HTTP emission.
 
 ### Tool Calling and live availability
 
@@ -225,7 +235,7 @@ Current adapter error translation: HTTP 404 → `EventNotFoundException`; HTTP 5
 | Fake model adapter | ✅ | Fixed strings and delayed chunks; no API tokens |
 | Spring Profiles | ✅ | `dev` selects fake; `prod` selects real adapter |
 | Synchronous endpoint | ✅ | `POST /api/v1/ai/ask` |
-| SSE endpoint | ✅ | `POST /api/v1/ai/ask/stream` |
+| SSE endpoint | ✅ | `POST /api/v1/ai/ask/stream`; typed `message` and `error` events |
 | Blocking-call isolation | ✅ | `Mono.fromCallable` + `boundedElastic` |
 | Application unit test | ✅ | Mockito-based response and delegation check |
 | Manual real-model smoke test | ✅ | Initial OpenAI response was received |
@@ -234,7 +244,11 @@ Current adapter error translation: HTTP 404 → `EventNotFoundException`; HTTP 5
 | Event Service read-only availability | ✅ | `WebClient` to `GET /events/{id}` using event UUID |
 | Live model → tool → Event Service smoke test | ✅ | Real request and execution log confirmed |
 | WireMock HTTP adapter tests | ✅ | 200, 404, 503 and connection failure scenarios |
-| Mocked-model Tool Calling test | ✅ | Two prompts, tool execution, result `25` in `ToolResponseMessage` |
+| Mocked-model Tool Calling test | ✅ | Two prompts, registered tool, tool execution, result `25` in `ToolResponseMessage` |
+| AI provider exception translation | ✅ | `RateLimitException` → `AiProviderException` for regular and streaming calls |
+| HTTP error mapping | ✅ | `GlobalExceptionHandler` returns a controlled HTTP 503 for synchronous requests / early stream failures |
+| Spring AI streaming tests | ✅ | Chunk emission and `Flux.error()` mapping with `StepVerifier` |
+| WebFlux controller tests | ✅ | `WebTestClient` validates successful SSE events, early HTTP 503 and late typed `error` events |
 | Live EventTools integration test | ✅ | Reads from running Event Service; environment-dependent |
 | Booking Service tools / event search | ⬜ | Not implemented |
 
@@ -294,16 +308,42 @@ Accept: text/event-stream
 **Illustrative response**
 
 ```text
+event:message
 data:Spring AI
 
+event:message
 data:is a framework
 
+event:message
 data:for AI integration
 ```
 
-The response uses `Content-Type: text/event-stream` and emits events as the `Flux` produces text. The fake adapter currently delays its elements to make streaming easier to observe.
+The response uses `Content-Type: text/event-stream` and emits **`event: message`** events as the `Flux` produces text. The fake adapter currently delays its elements to make streaming easier to observe.
 
-**Current API limitations:** No authentication, authorization, rate limiting, request validation policy, or documented error contract is established yet. These endpoints should not be exposed publicly as-is.
+**Controlled late-stream error (illustrative):**
+
+```text
+event:message
+data:Hello
+
+event:error
+data:AI service temporarily unavailable
+```
+
+If the AI provider fails before the first streamed element, the controller lets the exception propagate to `GlobalExceptionHandler`, which can return **HTTP 503**. If failure occurs after response streaming starts, an HTTP status change is no longer possible; the controller converts `AiProviderException` into an **SSE `error` event** containing a generic message, then completes the stream. This SSE `error` event is an application-level event, **not** an HTTP error status. A browser client should listen for named events and handle connection termination.
+
+For a synchronous `/ask` provider failure, the global exception handler returns a controlled response such as:
+
+```json
+{
+  "error": "AI_SERVICE_UNAVAILABLE",
+  "message": "AI service temporarily unavailable"
+}
+```
+
+This hides upstream billing/rate-limit details from API clients; internal logs retain the original cause as appropriate.
+
+**Current API limitations:** Basic provider-error handling is implemented, but comprehensive error contracts (for validation, downstream service failures and every stream termination), authentication, authorization, rate limiting and request validation are not established. These endpoints should not be exposed publicly as-is.
 
 ## ⚙️ Running Locally
 
@@ -328,6 +368,20 @@ Basic fake responses and generic model prompts can run independently. **Live eve
 Configure the active profile explicitly, for example with the environment variable `SPRING_PROFILES_ACTIVE=dev`. The name `prod` here means **real adapter selection**, not production readiness.
 
 Current bean wiring uses `@Profile("!prod")` for the fake adapter and `@Profile("prod")` for the OpenAI-backed adapter. **No active profile selects the fake adapter.** Setting `prod` selects the real adapter even if another profile is active; using `prod` therefore consumes API tokens when a model request is made.
+
+### OpenAI model selection
+
+For Spring AI **2.0.1**, the project can choose a model via the `spring.ai.openai.chat.model` property. Example (merge into your existing `spring` configuration):
+
+```yaml
+spring:
+  ai:
+    openai:
+      chat:
+        model: ${OPENAI_MODEL:gpt-5-nano}
+```
+
+Model availability, pricing and token usage vary over time. A model setting does not grant API credits; ChatGPT subscriptions and API billing are separate. This README does not claim that per-request dollar cost tracking or durable accounting has been implemented.
 
 ### Event Service URL
 
@@ -422,9 +476,10 @@ If Maven Failsafe is configured in `pom.xml`, integration tests named `*IT` run 
 
 `EventToolsIT` requires the real Event Service running with the expected data; it is not suitable for an isolated CI pipeline until the upstream service and test data are provisioned as part of the test setup.
 
-### Tool Calling and Event Service tests
+### Tool Calling, SSE and Event Service tests
 
-- **`SpringAiAdapterTest` (mocked `ChatModel`):** supplies a simulated tool-call `ChatResponse` and a subsequent final response. A Mockito spy verifies `EventTools.getAvailableSeats()` was called, and the mocked use case returns `Mono.just(25)`. Captured model prompts confirm the second prompt includes a `ToolResponseMessage` whose `responseData()` is `"25"`. No OpenAI API usage.
+- **`SpringAiAdapterTest` (mocked `ChatModel`):** supplies a simulated tool-call `ChatResponse` and a subsequent final response. A Mockito spy verifies `EventTools.getAvailableSeats()` was called, and the mocked use case returns `Mono.just(25)`. Captured prompts verify that the tool is registered and the second prompt includes a `ToolResponseMessage` with `responseData()` equal to `"25"`. Also verifies that `generateResponse()` maps a mocked OpenAI `RateLimitException` to `AiProviderException`, preserving the cause. For streaming, `StepVerifier` checks multiple text chunks, stream completion, and reactive exception mapping via `Flux.error()`. No OpenAI API usage.
+- **`AiControllerTest` (`@WebFluxTest`, `WebTestClient`, mocked `AskAiUseCase`):** verifies that the synchronous endpoint maps `AiProviderException` to HTTP 503 with a generic error body. SSE tests validate HTTP 200, `text/event-stream`, named `message` events and their payloads; an early provider error produces HTTP 503; a later provider error becomes a named SSE `error` event followed by completion. A `Sinks.Many` test explicitly emits the error after the first received event, avoiding timing-based sleeps. No OpenAI API usage.
 - **`RestEventAvailabilityAdapterTest` (WireMock + `StepVerifier`):** verifies the real `WebClient` path, JSON property `available`, and 200/404/503/connection-failure handling. No real Event Service or OpenAI required.
 - **`EventToolsIT` (live Spring context):** invokes `EventTools` against the locally running Event Service and asserts that returned availability is nonnegative. **This is an environment-dependent smoke/integration test**, not a deterministic repository-only test. It requires an existing UUID in Event Service.
 - **Manual real-model tool-call smoke test (2026-11-16):** logs confirmed invocation of `EventTools` for `0ebbca7e-87bb-4c1d-915c-676b59ffe329` and retrieval of `999990` seats. This manual test consumed OpenAI tokens.
@@ -433,11 +488,9 @@ The reported tests were individually green during development; this README does 
 
 ### Testing still to implement
 
-- WebFlux controller tests with `WebTestClient`
-- Streaming tests with `StepVerifier`
 - Adapter selection tests for Spring Profiles
 - Fake-adapter contract tests
-- Request validation, error handling, and cancellation behavior
+- Request validation, additional provider/downstream error cases, and client cancellation / resource cleanup
 - External-model integration tests with controlled cost and explicit opt-in
 - Deterministic cross-service integration tests (without relying on a specific live event UUID)
 - Tool-level invalid UUID, not-found, empty result and timeout/error behavior tests
@@ -465,11 +518,11 @@ For any future **state-changing tool** (such as canceling a booking), require ex
 | 10 | Booking Service read-only queries | ⬜ |
 | 11 | Structured Output / typed responses | ⬜ |
 | 12 | RAG / vector search exploration | ⬜ |
-| 13 | Adapter tests (WireMock); broader automated tests | 🚧 Partial |
-| 14 | Authentication, authorization, resilience, observability | ⬜ |
+| 13 | Adapter tests (WireMock); WebFlux/SSE/controller error tests | ✅ Core scenarios; more coverage pending |
+| 14 | Authentication, authorization, resilience, observability | 🚧 Provider error handling in place; other work pending |
 | 15 | Review production deployment constraints | ⬜ |
 
-**Next development milestone:** Make the read-only availability tool robust to invalid UUIDs, nonexistent events, service outages and empty responses; verify how Spring AI communicates safe tool errors to the model. Then add further EventHub queries as justified. Business rules remain in the existing services.
+**Next development milestone:** Verify cancellation and resource cleanup when an SSE client disconnects, then harden the availability tool for invalid UUIDs, nonexistent events, upstream outages and empty responses. Review how Spring AI communicates safe tool errors to the model. Later, add further read-only EventHub queries where useful. Business rules remain in the existing services.
 
 ## 📚 Related Documentation
 
