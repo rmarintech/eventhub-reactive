@@ -1,5 +1,6 @@
 package com.rubenmarin.aiassistantservice.infrastructure.adapter.out.ai.tool;
 
+import com.rubenmarin.aiassistantservice.application.exception.EventNotFoundException;
 import com.rubenmarin.aiassistantservice.application.port.in.GetAvailableSeatsUseCase;
 import com.rubenmarin.aiassistantservice.infrastructure.adapter.exception.InvalidToolArgumentException;
 import io.micrometer.observation.Observation;
@@ -54,19 +55,30 @@ public class EventTools {
         /**
          * New custom metric eventhub.ai.get_available_seats
          * */
-
-        return Observation.createNotStarted(
+        Observation observation = Observation.createNotStarted(
                 "eventhub.ai.get_available_seats",
                 observationRegistry
-        ).observe(() -> {
-            // Your existing getAvailableSeats() logic goes here.
-            Integer available = getAvailableSeatsUseCase
-                    .getAvailableSeats(eventIdUUID)
-                    .blockOptional(Duration.ofSeconds(10))
-                    .orElseThrow(() -> new IllegalStateException("No availability data returned for event: " + eventId));
+        );
 
-            log.info("Event {} has {} places available: ", eventId, available);
-            return available;
+        return observation.observe(() -> {
+            try {
+                // Your existing getAvailableSeats() logic goes here.
+                Integer available = getAvailableSeatsUseCase
+                        .getAvailableSeats(eventIdUUID)
+                        .blockOptional(Duration.ofSeconds(10))
+                        .orElseThrow(() -> new IllegalStateException("No availability data returned for event: " + eventId));
+
+                observation.lowCardinalityKeyValue("outcome", "success");
+
+                log.info("Event {} has {} places available: ", eventId, available);
+                return available;
+            } catch (EventNotFoundException e) {
+                observation.lowCardinalityKeyValue("outcome", "not_found");
+                throw e;
+            } catch (Exception e) {
+                observation.lowCardinalityKeyValue("outcome", "error");
+                throw e;
+            }
         });
 
     }
