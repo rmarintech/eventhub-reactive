@@ -4,6 +4,7 @@ import com.openai.errors.RateLimitException;
 import com.rubenmarin.aiassistantservice.application.port.in.GetAvailableSeatsUseCase;
 import com.rubenmarin.aiassistantservice.infrastructure.adapter.out.ai.exception.AiProviderException;
 import com.rubenmarin.aiassistantservice.infrastructure.adapter.out.ai.tool.EventTools;
+import io.micrometer.observation.ObservationRegistry;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -38,6 +39,8 @@ class SpringAiAdapterTest {
     private GetAvailableSeatsUseCase getAvailableSeatsUseCase;
     @Mock
     private EventTools eventTools;
+
+    private ObservationRegistry observationRegistry;
 
     private SpringAiAdapter springAiAdapter;
 
@@ -107,7 +110,7 @@ class SpringAiAdapterTest {
         // Creamos un spy de EventTools para ejecutar sus métodos reales
         // y poder verificar posteriormente que han sido invocados.
         // GetAvailableSeatsUseCase es un mock, por lo que no accedemos a EventHub.
-        EventTools spyEventTools = Mockito.spy(new EventTools(getAvailableSeatsUseCase));
+        EventTools spyEventTools = Mockito.spy(new EventTools(getAvailableSeatsUseCase, observationRegistry));
 
         // Construimos el adaptador real con el ChatModel simulado
         // y las herramientas que queremos probar.

@@ -8,6 +8,7 @@ import com.rubenmarin.aiassistantservice.infrastructure.adapter.out.ai.FakeAiAda
 import com.rubenmarin.aiassistantservice.infrastructure.adapter.out.ai.SpringAiAdapter;
 import com.rubenmarin.aiassistantservice.infrastructure.adapter.out.ai.tool.EventToolExceptionProcessor;
 import com.rubenmarin.aiassistantservice.infrastructure.adapter.out.ai.tool.EventTools;
+import io.micrometer.observation.ObservationRegistry;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.tool.execution.ToolExecutionExceptionProcessor;
 import org.springframework.context.annotation.Bean;
@@ -40,8 +41,11 @@ public class AiConfiguration {
     }
 
     @Bean
-    public EventTools eventTools(GetAvailableSeatsUseCase getAvailableSeatsUseCase) {
-        return new EventTools(getAvailableSeatsUseCase);
+    public EventTools eventTools(
+            GetAvailableSeatsUseCase getAvailableSeatsUseCase,
+            ObservationRegistry observationRegistry
+    ) {
+        return new EventTools(getAvailableSeatsUseCase, observationRegistry);
     }
 
     @Bean

@@ -2,6 +2,8 @@ package com.rubenmarin.aiassistantservice.infrastructure.adapter.out.ai.tool;
 
 import com.rubenmarin.aiassistantservice.application.port.in.GetAvailableSeatsUseCase;
 import com.rubenmarin.aiassistantservice.infrastructure.adapter.exception.InvalidToolArgumentException;
+import io.micrometer.observation.Observation;
+import io.micrometer.observation.ObservationRegistry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.tool.annotation.Tool;
@@ -22,9 +24,14 @@ public class EventTools {
      *
      */
     private final GetAvailableSeatsUseCase getAvailableSeatsUseCase;
+    private final ObservationRegistry observationRegistry;
 
-    public EventTools(GetAvailableSeatsUseCase getAvailableSeatsUseCase) {
+    public EventTools(
+            GetAvailableSeatsUseCase getAvailableSeatsUseCase,
+            ObservationRegistry observationRegistry
+    ) {
         this.getAvailableSeatsUseCase = getAvailableSeatsUseCase;
+        this.observationRegistry = observationRegistry;
     }
 
     //Spring AI discovers the methods annotated with @Tool
@@ -44,14 +51,24 @@ public class EventTools {
             throw new InvalidToolArgumentException(eventId);
         }
 
-        Integer available = getAvailableSeatsUseCase
-                .getAvailableSeats(eventIdUUID)
-                .blockOptional(Duration.ofSeconds(10))
-                .orElseThrow(()-> new IllegalStateException("No availability data returned for event: " + eventId));
+        /**
+         * New custom metric eventhub.ai.get_available_seats
+         * */
 
-        log.info("Event {} has {} places available: ", eventId, available);
+        return Observation.createNotStarted(
+                "eventhub.ai.get_available_seats",
+                observationRegistry
+        ).observe(() -> {
+            // Your existing getAvailableSeats() logic goes here.
+            Integer available = getAvailableSeatsUseCase
+                    .getAvailableSeats(eventIdUUID)
+                    .blockOptional(Duration.ofSeconds(10))
+                    .orElseThrow(() -> new IllegalStateException("No availability data returned for event: " + eventId));
 
-        return available;
+            log.info("Event {} has {} places available: ", eventId, available);
+            return available;
+        });
+
     }
 
 }

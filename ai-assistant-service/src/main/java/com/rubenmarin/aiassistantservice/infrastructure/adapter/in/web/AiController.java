@@ -22,11 +22,8 @@ public class AiController {
     private static final Logger log = LoggerFactory.getLogger(AiController.class);
     private final AskAiUseCase askAiUseCase;
 
-    private final Tracer tracer;
-
-    public AiController(AskAiUseCase askAiUseCase, Tracer tracer) {
+    public AiController(AskAiUseCase askAiUseCase) {
         this.askAiUseCase = askAiUseCase;
-        this.tracer = tracer;
     }
 
     /*public AiController(AskAiUseCase askAiUseCase) {
