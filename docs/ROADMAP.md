@@ -414,22 +414,24 @@ architecture tests remain pending
 
 # 19. Observability
 
--   [ ] Spring Boot Actuator
--   [ ] Micrometer
--   [ ] Application metrics
--   [ ] Business metrics
--   [ ] Prometheus
--   [ ] PromQL
--   [ ] Grafana
--   [ ] Dashboards
--   [ ] Structured logging
--   [ ] Distributed tracing
--   [ ] OpenTelemetry
--   [ ] Trace/log correlation
--   [ ] Reactive pipeline observability
+-   [x] Spring Boot Actuator (AI Assistant)
+-   [x] Micrometer (AI Assistant)
+-   [x] Application metrics (HTTP/JVM and custom availability observation)
+-   [x] Business-oriented availability metrics with `outcome=success|not_found|error`
+-   [x] Prometheus local scrape of AI Assistant
+-   [x] PromQL fundamentals and query exploration
+-   [x] Grafana connected to Prometheus and Tempo
+-   [ ] Complete, version-controlled Grafana dashboards (request rate panel explored)
+-   [ ] Structured logging across services
+-   [x] Distributed HTTP tracing between AI Assistant and Event Service
+-   [x] OpenTelemetry (OTLP trace export to Tempo)
+-   [x] Trace/log correlation IDs demonstrated in AI Assistant logs
+-   [ ] Broader reactive pipeline and asynchronous message-flow observability
 -   [ ] SLIs / SLOs
 -   [ ] Alerts
--   [ ] Observability documentation
+-   [x] Observability documentation (`docs/OBSERVABILITY.md`)
+
+**Verified scope:** AI Assistant's custom `eventhub.ai.get_available_seats` observation produces Micrometer timer metrics and a Tempo span. Successful availability, event-not-found (404), and downstream failure (503) were inspected manually. Unit tests verify the `outcome` and `error` tags and invalid UUID behavior. Tempo showed a correlated four-span HTTP trace across AI Assistant and Event Service. Prometheus target was `UP`, and Grafana successfully queried Prometheus. This is local development verification, not production-ready monitoring.
 
 ------------------------------------------------------------------------
 

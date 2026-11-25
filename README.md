@@ -6,7 +6,7 @@ EventHub is a backend portfolio project for **event management, bookings, paymen
 
 EventHub is a hands-on **Senior Java backend portfolio** that explores how to design, implement, test, and evolve a distributed event and booking platform. The emphasis is on **domain modeling, clean boundaries, concurrency, consistency, service communication, and failure recovery**, not simply making endpoints work.
 
-The project intentionally uses **reactive** and **imperative** Spring applications side by side to demonstrate their trade-offs. The planned frontend (React / TypeScript), extended deployment automation, and further observability are tracked separately in the roadmap; they are **not presented as completed**.
+The project intentionally uses **reactive** and **imperative** Spring applications side by side to demonstrate their trade-offs. The planned frontend (React / TypeScript), extended deployment automation, and remaining observability work are tracked separately in the roadmap; they are **not presented as completed**.
 
 ## 🚀 Tech Stack
 
@@ -22,6 +22,7 @@ The project intentionally uses **reactive** and **imperative** Spring applicatio
 | Reliability | Transactional Outbox, persistent Inbox, optimistic locking, synchronous compensation, Resilience4j |
 | Testing | JUnit 5/6, Mockito, Testcontainers, WebTestClient, MockMvc, Karate (API E2E) |
 | Local infrastructure | Docker Compose |
+| Observability | Spring Boot Actuator, Micrometer, OpenTelemetry, Prometheus, Grafana Tempo and Grafana (local, partially implemented) |
 
 Additional technologies and planned work are tracked in the [roadmap](docs/ROADMAP.md).
 
@@ -345,6 +346,17 @@ Get-Content.\ibmmq\init.mqsc | docker exec -i eventhub-ibmmq runmqsc QM1
 
 Use local environment variables for credentials; do not commit real secrets. **Do not routinely rerun `DEFINE... REPLACE` against queues containing messages.** See [IBM MQ documentation](docs/IBMMQ.md) for setup, privileges and verification.
 
+### Observability — metrics and distributed traces
+
+A separate local stack in `observability/` runs **Prometheus, Grafana Tempo and Grafana**. Spring Boot Actuator / Micrometer expose custom availability metrics, while OpenTelemetry propagates traces from AI Assistant to Event Service. Verified traces include the custom `eventhub.ai.get_available_seats` span nested above the outgoing `WebClient` call and Event Service's server span. The `outcome` label distinguishes `success`, `not_found` and `error`; all three cases were verified in metrics and Tempo, with focused observation unit tests. Prometheus scraping and Grafana querying are working; complete dashboards, alerts, and wider service coverage remain planned.
+
+```powershell
+cd observability
+docker compose up -d
+```
+
+See the [Observability guide](docs/OBSERVABILITY.md) for setup, endpoints, queries, troubleshooting, and limitations.
+
 ## 📚 Technical Documentation
 
 | Topic | Document |
@@ -363,6 +375,7 @@ Use local environment variables for credentials; do not commit real secrets. **D
 | Payment domain, Saga design and integration boundaries | [Payment Architecture](payment-service/docs/ARCHITECTURE.md) |
 | Payment implementation milestones | [Payment Roadmap](payment-service/docs/ROADMAP.md) |
 | AI assistant implementation | [AI Assistant README](ai-assistant-service/README.md) |
+| Local metrics and tracing | [Observability](docs/OBSERVABILITY.md) |
 
 ## 🗺️ Roadmap
 
