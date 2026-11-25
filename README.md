@@ -77,7 +77,7 @@ AskAiUseCase → AiService             application layer
 - **Synchronous endpoint:** `POST /api/v1/ai/ask` accepts `{"question":"..."}`. Its blocking application call is wrapped with `Mono.fromCallable(...).subscribeOn(Schedulers.boundedElastic())`, keeping that call off WebFlux event-loop threads.
 - **Streaming endpoint:** `POST /api/v1/ai/ask/stream` accepts the same JSON body and responds with `text/event-stream` using `Flux<String>`. Local testing of the fake adapter returned HTTP 200 with SSE-formatted chunks; the PowerShell client buffered the displayed response, so this alone does not measure live chunk arrival times.
 - **Fake model:** a no-cost `FakeAiAdapter` uses fixed text and `Flux.just(...).delayElements(...)` to simulate streaming. In the `prod` profile, `SpringAiAdapter` uses Spring AI's `.call()` and `.stream()` APIs to invoke a configured OpenAI model.
-- **Tool Calling:** `EventTools.getAvailableSeats(String eventId)` uses `@Tool` and `@ToolParam` descriptions, validates the event UUID and returns availability provided by Event Service. `RestEventAvailabilityAdapter` maps upstream 404/503 and connection errors to application-specific failures. The tool uses a bounded blocking wait for the reactive lookup.
+- **Tool Calling:** `EventTools.getAvailableSeats(String eventId)` uses `@Tool` and `@ToolParam` descriptions, validates the event UUID and returns availability provided by Event Service. `RestEventAvailabilityAdapter` maps upstream 404/503 and connection errors to application-specific failures. The tool uses a bounded blocking wait for the reactive lookup. The complete LLM → tool execution → LLM response sequence is illustrated in [the Spring AI technical guide](docs/SPRING_AI.md#5-spring-ai-tool-calling-available-seats).
 - **Tests:** `AiServiceTest` uses Mockito for application delegation. `SpringAiAdapterTest` verifies mocked model tool invocation and the returned tool value in the follow-up prompt; `RestEventAvailabilityAdapterTest` uses WireMock and `StepVerifier` for HTTP success/failure scenarios. `EventToolsIT` passed against a running Event Service. A live OpenAI request was observed invoking the tool and returning 999990 seats (2026-11-16). The live test is environment-dependent; comprehensive automated end-to-end testing, controller tests and streaming edge-case tests remain pending.
 - **Security:** real keys must not be committed. Use the `OPENAI_API_KEY` placeholder and a locally ignored `.env`, environment variable, or deployment secrets. `.env.example` may document the required variable without a real value.
 
@@ -375,6 +375,7 @@ See the [Observability guide](docs/OBSERVABILITY.md) for setup, endpoints, queri
 | Payment domain, Saga design and integration boundaries | [Payment Architecture](payment-service/docs/ARCHITECTURE.md) |
 | Payment implementation milestones | [Payment Roadmap](payment-service/docs/ROADMAP.md) |
 | AI assistant implementation | [AI Assistant README](ai-assistant-service/README.md) |
+| Spring AI architecture, Tool Calling and illustrated request flow | [Spring AI](docs/SPRING_AI.md) |
 | Local metrics and tracing | [Observability](docs/OBSERVABILITY.md) |
 
 ## 🗺️ Roadmap
